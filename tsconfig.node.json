@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "vite.config.ts",
+    "electron/**/*.ts",
+    "src/domain/schema.ts",
+    "src/domain/animation.ts",
+    "src/domain/ai-contract.ts",
+    "src/domain/versioning.ts"
+  ]
+}

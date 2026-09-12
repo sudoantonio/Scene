@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Abaco Animatic
+Comment=Editor locale per bozze 3D assistite da Astra e Blender
+Exec=/home/antoniodeluca/Scaricati/Abaco-Animatic/squashfs-root/AppRun
+Icon=/home/antoniodeluca/Scaricati/Abaco-Animatic/squashfs-root/abaco-animatic.png
+Terminal=false
+Categories=Graphics;
+StartupWMClass=Abaco Animatic
