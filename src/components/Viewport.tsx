@@ -91,9 +91,15 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
     });
     return clone;
   }, [gltf.scene]);
-  const center = object.asset.boundsCenter;
+  // L'exporter glTF converte le coordinate Blender (x, y, z) in (x, z, -y).
+  // Convertiamo allo stesso modo il centro; la rotazione del gruppo rimette
+  // dritte e frontali le tavole 2D create sul piano XY in Blender.
+  const [centerX, centerY, centerZ] = object.asset.boundsCenter;
+  const center: Vec3 = [centerX, centerZ, -centerY];
   return <group scale={object.asset.previewScale}>
-    <primitive object={model} position={[-center[0], -center[1], -center[2]]} />
+    <group rotation={[Math.PI, 0, 0]}>
+      <primitive object={model} position={[-center[0], -center[1], -center[2]]} />
+    </group>
   </group>;
 }
 
@@ -182,8 +188,10 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
     pointerId: number; moved: boolean; x: number; y: number;
     position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3;
     right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number;
-    windowFinish?: (event: PointerEvent) => void;
+    cleanup?: () => void;
   } | undefined>(undefined);
+  const gizmoDragging = useRef(false);
+  const gizmoCleanup = useRef<(() => void) | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
   const currentFrame = useEditor((state) => state.currentFrame);
   const selectedId = useEditor((state) => state.selectedId);
@@ -216,7 +224,7 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
   const finishDrag = () => {
     const drag = directDrag.current;
     if (!drag) return;
-    if (drag.windowFinish) window.removeEventListener('pointerup', drag.windowFinish);
+    drag.cleanup?.();
     if (drag.moved) commit();
     directDrag.current = undefined;
     setDragging(false);
@@ -225,7 +233,12 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
   const startDirectDrag = (event: ThreeEvent<PointerEvent>) => {
     // Shift riserva sempre il gesto alla vista, anche sopra un oggetto.
     // I gesti touch vengono lasciati a OrbitControls, che riconosce le due dita.
-    if (event.button !== 0 || event.nativeEvent.shiftKey || event.nativeEvent.pointerType === 'touch' || !ref.current) return;
+    if (event.button !== 0 || event.nativeEvent.shiftKey || event.nativeEvent.pointerType === 'touch' || !ref.current || gizmoDragging.current) return;
+    // Se il gizmo e l'oggetto sono sovrapposti, soltanto l'intersezione piu'
+    // vicina deve gestire il gesto. In caso contrario i due controlli scrivono
+    // contemporaneamente la stessa trasformazione e la rotazione sembra fermarsi.
+    const nearest = event.intersections[0]?.object;
+    if (nearest && nearest !== ref.current && !ref.current.getObjectById(nearest.id)) return;
     event.stopPropagation(); select(object.id); setPlaying(false);
     event.camera.updateMatrixWorld();
     const forward = event.camera.getWorldDirection(new THREE.Vector3()).normalize();
@@ -243,8 +256,17 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
       right, up, worldPerPixel,
     };
     const windowFinish = (pointer: PointerEvent) => { if (pointer.pointerId === dragState.pointerId) finishDrag(); };
-    directDrag.current = { ...dragState, windowFinish };
-    window.addEventListener('pointerup', windowFinish, { once: true });
+    const windowCancel = (pointer: PointerEvent) => { if (pointer.pointerId === dragState.pointerId) finishDrag(); };
+    const windowBlur = () => finishDrag();
+    const cleanup = () => {
+      window.removeEventListener('pointerup', windowFinish);
+      window.removeEventListener('pointercancel', windowCancel);
+      window.removeEventListener('blur', windowBlur);
+    };
+    directDrag.current = { ...dragState, cleanup };
+    window.addEventListener('pointerup', windowFinish);
+    window.addEventListener('pointercancel', windowCancel);
+    window.addEventListener('blur', windowBlur);
     const pointerTarget = event.nativeEvent.target;
     if (pointerTarget instanceof Element) pointerTarget.setPointerCapture?.(event.pointerId);
     setDragging(true); onDragChange(true); setCursor(event, 'grabbing');
@@ -281,9 +303,36 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
     finishDrag(); setCursor(event, 'grab');
   };
 
+  const finishGizmoDrag = () => {
+    if (!gizmoDragging.current) return;
+    gizmoDragging.current = false;
+    gizmoCleanup.current?.();
+    gizmoCleanup.current = undefined;
+    commit();
+    setDragging(false);
+    onDragChange(false);
+  };
+  const startGizmoDrag = () => {
+    if (gizmoDragging.current) return;
+    setPlaying(false);
+    gizmoDragging.current = true;
+    setDragging(true);
+    onDragChange(true);
+    const finish = () => finishGizmoDrag();
+    const cleanup = () => {
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      window.removeEventListener('blur', finish);
+    };
+    gizmoCleanup.current = cleanup;
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    window.addEventListener('blur', finish);
+  };
+
   useEffect(() => () => {
-    const listener = directDrag.current?.windowFinish;
-    if (listener) window.removeEventListener('pointerup', listener);
+    directDrag.current?.cleanup?.();
+    gizmoCleanup.current?.();
   }, []);
 
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
@@ -294,8 +343,8 @@ function SceneItem({ object, cameraView, onDragChange }: { object: SceneObject; 
 
   if (selectedId !== object.id || !visible || cameraView || (helperOnly && object.kind !== 'camera')) return visual;
   return <>{visual}<TransformControls object={ref as unknown as RefObject<THREE.Object3D>} mode={mode} space={mode === 'rotate' ? 'local' : 'world'} size={0.62} enabled
-    onMouseDown={() => { setPlaying(false); setDragging(true); onDragChange(true); }}
-    onMouseUp={() => { commit(); setDragging(false); onDragChange(false); }} /></>;
+    onMouseDown={startGizmoDrag}
+    onMouseUp={finishGizmoDrag} /></>;
 }
 
 function CameraViewControls({ frame, syncKey, target, disabled, controls, onCommit }: {
@@ -311,7 +360,7 @@ function CameraViewControls({ frame, syncKey, target, disabled, controls, onComm
     camera.up.set(0, 0, 1);
     controls.current.target.set(...target);
     controls.current.update();
-  }, [camera, frame, syncKey, target]);
+  }, [camera, frame, syncKey]);
 
   return <OrbitControls ref={controls} makeDefault enabled={!disabled} enableDamping={false} enableZoom={false} screenSpacePanning rotateSpeed={.22} panSpeed={.24}
     mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}

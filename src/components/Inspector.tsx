@@ -1,4 +1,4 @@
-import { Box, ChevronRight, Palette, PanelRightClose, PanelRightOpen, SlidersHorizontal, Sun, Trash2 } from 'lucide-react';
+import { Box, ChevronRight, KeyRound, Palette, PanelRightClose, PanelRightOpen, SlidersHorizontal, Sun, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import type { Transform, Vec3 } from '../domain/schema';
@@ -27,8 +27,8 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const updateObject = useEditor((state) => state.updateObject);
   const setTransform = useEditor((state) => state.setTransform);
   const selectedMotion = useEditor((state) => state.selectedMotion);
-  const selectMotion = useEditor((state) => state.selectMotion);
   const startMotion = useEditor((state) => state.startMotion);
+  const keyPose = useEditor((state) => state.keyPose);
   const setTransitionMode = useEditor((state) => state.setTransitionMode);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
   const resetFraming = useEditor((state) => state.resetFraming);
@@ -46,13 +46,19 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= activeScene.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0]?.interpolation ?? 'constant'
     : 'constant';
   const motionActive = Boolean(motionObject && activeScene && selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === activeScene.id);
-  const toggleMotion = () => {
+  const createMotionHere = () => {
     if (!motionObject || !activeScene) return;
-    if (motionActive) selectMotion(undefined);
-    else startMotion(motionObject.id, activeScene.id);
+    if (!motionActive) startMotion(motionObject.id, activeScene.id);
+    keyPose(motionObject.id);
   };
 
   const changeTransform = (property: keyof Transform, value: Vec3) => object && transform && setTransform(object.id, { ...transform, [property]: value });
+  const changeTransformAxis = (property: 'position' | 'rotation', axis: 0 | 1 | 2, value: number) => {
+    if (!transform) return;
+    const next = [...transform[property]] as Vec3;
+    next[axis] = value;
+    changeTransform(property, next);
+  };
   const moveCameraAxis = (axis: 0 | 1 | 2, value: number) => {
     if (!activeScene || !cameraTransform) return;
     const delta = value - cameraTransform.position[axis];
@@ -90,7 +96,18 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
           <div className="size-control"><div><span>Dimensione</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Dimensione elemento" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
         </div>
 
-        {motionObject && activeScene && <div className="motion-controls"><div className="motion-controls-heading"><span>Movimento</span><button className={`motion-toggle ${motionActive ? 'active' : ''}`} onClick={toggleMotion}>{motionActive ? 'Attivo' : 'Attiva'}</button></div><small className="motion-subject">{object ? object.name : 'Camera'} · {activeScene.name ?? 'Scena'}</small><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label={`Tipo movimento ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}
+        <div className="camera-sliders object-transform-sliders">
+          <div className="transform-slider-title">Posizione</div>
+          {([
+            ['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20],
+          ] as const).map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{label}</span><strong>{transform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} elemento`} type="range" min={min} max={max} step="0.1" value={transform.position[axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
+          <div className="transform-slider-title rotation-title">Rotazione</div>
+          {([
+            ['Inclina X', 0], ['Inclina Y', 1], ['Gira', 2],
+          ] as const).map(([label, axis]) => <label key={`rotation-${axis}`}><span>{label}</span><strong>{transform.rotation[axis].toFixed(0)}°</strong><input aria-label={`${label} elemento`} type="range" min="-180" max="180" step="1" value={transform.rotation[axis]} onChange={(event) => changeTransformAxis('rotation', axis, Number(event.target.value))} /></label>)}
+        </div>
+
+        {motionObject && activeScene && <div className="motion-controls"><div className="motion-controls-heading"><span>Movimento</span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div><small className="motion-subject">{object ? object.name : 'Camera'} · {activeScene.name ?? 'Scena'}</small><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label={`Tipo movimento ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}
 
         <details className="advanced-panel"><summary><ChevronRight size={14} /> Precisione</summary><div>
           <VectorFields label="Posizione" value={transform.position} onChange={(value) => changeTransform('position', value)} />
@@ -99,7 +116,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div></details>
       </section> : <div className="empty-panel compact-empty camera-edit-panel"><div className="camera-edit-heading"><div><strong>Camera</strong><small>{activeScene?.name ?? 'Scena'}</small></div><button className="subtle camera-reset" onClick={resetFraming}>Ripristina</button></div>{activeScene && cameraTransform && <div className="camera-sliders"><label><span>Zoom</span><strong>{activeScene.framing.distance.toFixed(1)} m</strong><input aria-label="Zoom camera" type="range" min="0.5" max="30" step="0.1" value={Math.min(30, activeScene.framing.distance)} onChange={(event) => setCameraZoom(Number(event.target.value))} /></label>{([
         ['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20],
-      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={min} max={max} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div>}{motionObject && activeScene && <div className="motion-controls camera-motion-controls"><div className="motion-controls-heading"><span>Movimento camera</span><button className={`motion-toggle ${motionActive ? 'active' : ''}`} onClick={toggleMotion}>{motionActive ? 'Attivo' : 'Attiva'}</button></div><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label="Tipo movimento camera" value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}</div>}
+      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={min} max={max} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div>}{motionObject && activeScene && <div className="motion-controls camera-motion-controls"><div className="motion-controls-heading"><span>Movimento camera</span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label="Tipo movimento camera" value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}</div>}
 
     </>}
   </aside>;

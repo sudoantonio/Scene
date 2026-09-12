@@ -191,6 +191,16 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
+      const activeCut = next.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= state.currentFrame);
+      const camera = next.objects.find((item) => item.id === activeCut?.cameraId && item.kind === 'camera');
+      if (camera) {
+        const cameraPosition = evaluateTransform(camera, state.currentFrame).position;
+        const deltaX = cameraPosition[0] - object.transform.position[0];
+        const deltaY = cameraPosition[1] - object.transform.position[1];
+        // Gli asset Blender sono considerati frontali lungo -Y. Li ruotiamo
+        // attorno all'asse verticale per presentarli subito verso la camera.
+        if (Math.hypot(deltaX, deltaY) > .0001) object.transform.rotation[2] = Number(THREE.MathUtils.radToDeg(Math.atan2(deltaX, -deltaY)).toFixed(3));
+      }
       object.visible = sceneFrame === next.settings.frameStart;
       putKey(object, sceneFrame, 'position', object.transform.position);
       putKey(object, sceneFrame, 'rotation', object.transform.rotation);

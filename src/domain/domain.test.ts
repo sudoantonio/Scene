@@ -188,6 +188,7 @@ describe('scene indipendenti', () => {
     const asset = useEditor.getState().project.objects.find((object) => object.kind === 'blend_asset')!;
     expect(asset.name).toBe('Personaggio');
     expect(asset.keyframes.map((key) => key.property)).toEqual(['position', 'rotation', 'scale', 'visibility']);
+    expect(evaluateTransform(asset, 1).rotation[2]).toBeCloseTo(45, 3);
   });
   it('salva localmente anche la posizione di un progetto senza file', () => {
     vi.useFakeTimers();

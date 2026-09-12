@@ -523,10 +523,15 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .camera-sliders input[type='range']::-webkit-slider-runnable-track { height: 2px; background: #a9aaa5; }
 .camera-sliders input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px; background: #62645f; border: 0; border-radius: 50%; }
 .camera-sliders input[type='range']:focus { box-shadow: none !important; }
+.object-transform-sliders { margin: 13px 0 0; padding-top: 12px; border-top: 1px solid #efefec; }
+.transform-slider-title { color: #66645f; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.transform-slider-title.rotation-title { margin-top: 3px; }
 .theme-dark .camera-edit-heading strong { color: #e1e1dc; }
 .theme-dark .camera-sliders label strong { color: #cacac5; }
 .theme-dark .camera-sliders input[type='range']::-webkit-slider-runnable-track { background: #62635f; }
 .theme-dark .camera-sliders input[type='range']::-webkit-slider-thumb { background: #c7c8c2; }
+.theme-dark .object-transform-sliders { border-color: #383838; }
+.theme-dark .transform-slider-title { color: #b7b7b2; }
 
 /* I bordi servono solo a separare le aree principali, non a decorare i controlli. */
 .app-shell button,
@@ -785,9 +790,10 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .motion-mode-field { margin-top: 8px; display: grid; grid-template-columns: 34px minmax(0,1fr); align-items: center; gap: 7px; color: #8b8983; font-size: 9px; }
 .motion-mode-field select { width: 100%; min-height: 28px; padding: 3px 25px 3px 8px; font-size: 10px; }
 .motion-subject { display: block; margin-top: 3px; overflow: hidden; color: #999791; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.motion-toggle { min-height: 24px; padding: 0 9px; color: #77756f; background: #f0f0ed; border: 1px solid #d6d6d1; border-radius: 12px; font-size: 9px; }
+.motion-toggle, .motion-create { min-height: 24px; padding: 0 9px; color: #77756f; background: #f0f0ed; border: 1px solid #d6d6d1; border-radius: 12px; font-size: 9px; }
+.motion-create { display: inline-flex; align-items: center; gap: 5px; }
 .motion-toggle.active { color: white; background: #9b4141; border-color: #9b4141; }
-.theme-dark .motion-toggle { color: #bbb; background: #343434; border-color: #505050; }
+.theme-dark .motion-toggle, .theme-dark .motion-create { color: #bbb; background: #343434; border-color: #505050; }
 .theme-dark .motion-toggle.active { color: white; background: #a84c4c; border-color: #c76a6a; }
 .identity-group { margin-top: 0; padding-top: 0; border-top: 0; }
 .identity-group .field { margin-top: 12px; }

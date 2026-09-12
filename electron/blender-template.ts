@@ -144,7 +144,19 @@ def create_blend_asset(data):
     center = asset.get("boundsCenter", [0, 0, 0])
     factor = max(0.000001, float(asset.get("previewScale", 1)))
     normalization.scale = (factor, factor, factor)
-    normalization.location = tuple(-factor * float(value) for value in center)
+    bounds = [obj.matrix_world @ Vector(corner) for obj in imported if hasattr(obj, "bound_box") for corner in obj.bound_box]
+    planar_xy = False
+    if bounds:
+        minimum = Vector((min(point.x for point in bounds), min(point.y for point in bounds), min(point.z for point in bounds)))
+        maximum = Vector((max(point.x for point in bounds), max(point.y for point in bounds), max(point.z for point in bounds)))
+        size = maximum - minimum
+        planar_xy = size.z <= max(0.001, max(size.x, size.y) * 0.08)
+    # I personaggi 2D di Abaco sono disegnati sul piano XY: li mettiamo in
+    # piedi sul piano XZ, con il fronte rivolto verso -Y.
+    if planar_xy:
+        normalization.rotation_euler[0] = math.radians(90)
+    offset = Vector(tuple(-factor * float(value) for value in center))
+    normalization.location = normalization.rotation_euler.to_matrix() @ offset
     imported_set = set(imported)
     for obj in imported:
         if obj.parent not in imported_set:
