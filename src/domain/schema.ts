@@ -30,6 +30,7 @@ export const KeyframeSchema = z.object({
   value: KeyframeValueSchema,
   interpolation: InterpolationSchema,
   source: z.enum(['user', 'ai']).default('user'),
+  purpose: z.enum(['snapshot', 'motion']).optional(),
   commentIds: z.array(z.string().uuid()).default([]),
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
@@ -96,7 +97,7 @@ export const CameraFramingSchema = z.object({
   distance: z.number().finite().min(0.5).max(100),
 });
 export type CameraFraming = z.infer<typeof CameraFramingSchema>;
-export const defaultCameraFraming = (): CameraFraming => ({ target: [0, 0, 0], distance: Math.sqrt(123) });
+export const defaultCameraFraming = (): CameraFraming => ({ target: [0, 0, 1], distance: Math.sqrt(114) });
 
 export const CameraCutSchema = z.object({
   id: z.string().uuid(),
@@ -184,9 +185,11 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     camera: 'Camera', area_light: 'Luce area', point_light: 'Luce punto', sun_light: 'Sole',
   };
   const transform = emptyTransform();
+  if (['cube', 'sphere', 'cylinder', 'cone', 'text'].includes(kind)) transform.position = [0, 0, 1];
+  if (kind === 'plane') transform.position = [0, 0, 0.01];
   if (kind === 'camera') {
     transform.position = [7, -7, 5];
-    transform.rotation = [54.462, 39.136, 24.268];
+    transform.rotation = [60.255, 40.966, 20.538];
   }
   if (kind.includes('light')) transform.position = [4, -4, 6];
   return {

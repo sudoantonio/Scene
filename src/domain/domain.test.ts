@@ -24,7 +24,7 @@ describe('AbacoSceneV1', () => {
     delete legacy.cameraCuts[0].background;
     delete legacy.cameraCuts[0].framing;
     expect(ProjectSchema.parse(legacy).cameraCuts[0].background.kind).toBe('none');
-    expect(ProjectSchema.parse(legacy).cameraCuts[0].framing.target).toEqual([0, 0, 0]);
+    expect(ProjectSchema.parse(legacy).cameraCuts[0].framing.target).toEqual([0, 0, 1]);
   });
 
   it('mantiene un asset Blender come singolo oggetto validato', () => {
@@ -100,6 +100,88 @@ describe('gesture viewport', () => {
 });
 
 describe('scene indipendenti', () => {
+  it('crea punti di movimento soltanto dopo l’attivazione esplicita', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [2, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    expect(useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.some((key) => key.purpose === 'motion')).toBe(false);
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const positions = cube.keyframes.filter((key) => key.property === 'position').sort((a, b) => a.frame - b.frame);
+    expect(positions.map((key) => [key.frame, key.purpose])).toEqual([[1, 'motion'], [25, 'motion']]);
+    expect(evaluateTransform(cube, 13).position).toEqual([4, 0, 1]);
+  });
+
+  it('permette di spostare un punto esistente del percorso', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const point = useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.find((key) => key.property === 'position' && key.frame === 25)!;
+    useEditor.getState().updateMotionPoint(cubeId, point.id, [4, 2, 1]);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateTransform(cube, 25).position).toEqual([4, 2, 1]);
+  });
+
+  it('elimina soltanto il blocco movimento della scena', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().deleteMotionFromScene(cubeId, sceneId);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(cube.keyframes.some((key) => key.purpose === 'motion' && ['position', 'rotation', 'scale'].includes(key.property))).toBe(false);
+    expect(evaluateTransform(cube, 25).position).toEqual([0, 0, 1]);
+    expect(evaluateProperty(cube, 'visibility', 25)).toBe(true);
+  });
+
+  it('sposta ed elimina un punto di movimento dalla timeline', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 20], scale: [1.2, 1.2, 1.2] });
+    const point = useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.find((key) => key.property === 'position' && key.frame === 25)!;
+    useEditor.getState().moveMotionPoint(cubeId, point.id, 37);
+    let cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(cube.keyframes.filter((key) => ['position', 'rotation', 'scale'].includes(key.property) && key.frame === 37)).toHaveLength(3);
+    expect(cube.keyframes.some((key) => key.frame === 25 && ['position', 'rotation', 'scale'].includes(key.property))).toBe(false);
+    useEditor.getState().deleteMotionPoint(cubeId, point.id);
+    cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(cube.keyframes.some((key) => key.frame === 37 && ['position', 'rotation', 'scale'].includes(key.property))).toBe(false);
+  });
+
+  it('allunga una scena oltre i tre secondi', () => {
+    const project = createProject();
+    const sceneId = project.cameraCuts[0].id;
+    useEditor.setState({ project, currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().resizeScene(sceneId, 120);
+    expect(useEditor.getState().project.settings.frameEnd).toBe(120);
+  });
+
+  it('spostando la camera mantiene coerente la direzione dell’inquadratura', () => {
+    const project = createProject();
+    const cameraId = project.objects[0].id;
+    useEditor.setState({ project, currentFrame: 25, selectedId: cameraId, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().setTransform(cameraId, { position: [8, -7, 5], rotation: [60.255, 40.966, 20.538], scale: [1, 1, 1] });
+    const target = useEditor.getState().project.cameraCuts[0].framing.target;
+    expect(target[0]).toBeCloseTo(1, 3);
+    expect(target[1]).toBeCloseTo(0, 3);
+    expect(target[2]).toBeCloseTo(1, 3);
+  });
+
   it('aggiunge un asset Blender con snapshot indipendenti', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addBlendAsset({ sourcePath: '/tmp/personaggio.blend', proxyPath: '/tmp/personaggio.glb', collectionName: 'Character', name: 'Personaggio', boundsCenter: [0, 0, 1], previewScale: .8 });
@@ -114,6 +196,7 @@ describe('scene indipendenti', () => {
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
     useEditor.getState().setTransform(cubeId, { position: [2.5, -1, 3], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cubeId)!, 1).position).toEqual([2.5, -1, 3]);
     vi.advanceTimersByTime(400);
     const saved = ProjectSchema.parse(JSON.parse(localStorage.getItem('abaco-animatic-project-v1')!));
     const cube = saved.objects.find((object) => object.id === cubeId)!;
@@ -239,7 +322,7 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(camera, scenes[0].frame).position).toEqual(firstPosition);
     expect(evaluateTransform(camera, scenes[1].frame).position).toEqual([2, -5, 3]);
     expect(project.cameraCuts.find((scene) => scene.id === scenes[1].id)?.framing.target).toEqual([1, 1, 0]);
-    expect(project.cameraCuts.find((scene) => scene.id === scenes[0].id)?.framing.target).toEqual([0, 0, 0]);
+    expect(project.cameraCuts.find((scene) => scene.id === scenes[0].id)?.framing.target).toEqual([0, 0, 1]);
   });
 
   it('divide una clip al cursore creando una nuova scena', () => {
@@ -350,14 +433,16 @@ describe('scene indipendenti', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
-    useEditor.getState().addShot();
-    useEditor.getState().setTransform(cubeId, { position: [6, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
     const firstScene = useEditor.getState().project.cameraCuts.find((scene) => scene.frame === 1)!;
+    useEditor.getState().startMotion(cubeId, firstScene.id);
+    useEditor.getState().addShot();
+    useEditor.getState().setFrame(useEditor.getState().currentFrame - 1);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
     useEditor.getState().setTransitionMode(cubeId, firstScene.id, 'constant');
     let cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
-    expect(evaluateTransform(cube, 37).position).toEqual([0, 0, 0]);
+    expect(evaluateTransform(cube, 37).position).toEqual([0, 0, 1]);
     useEditor.getState().setTransitionMode(cubeId, firstScene.id, 'linear');
     cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
-    expect(evaluateTransform(cube, 37).position).toEqual([3, 0, 0]);
+    expect(evaluateTransform(cube, 37).position[0]).toBeCloseTo(3.04, 2);
   });
 });

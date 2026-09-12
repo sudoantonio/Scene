@@ -79,7 +79,7 @@ export function applyPlan(project: AbacoProject, plan: BlenderPlan): AbacoProjec
     const existing = object.keyframes.find((key) => key.frame === operation.frame && key.property === operation.property);
     const keyframe: Keyframe = {
       id: existing?.id ?? crypto.randomUUID(), frame: operation.frame, property: operation.property as AnimProperty,
-      value: planValue(operation), interpolation: operation.interpolation, source: 'ai', commentIds: operation.commentIds,
+      value: planValue(operation), interpolation: operation.interpolation, source: 'ai', purpose: 'motion', commentIds: operation.commentIds,
     };
     if (existing) Object.assign(existing, keyframe); else object.keyframes.push(keyframe);
   }

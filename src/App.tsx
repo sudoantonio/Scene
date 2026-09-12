@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Plus, SlidersHorizontal, Sun } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -159,6 +159,12 @@ export default function App() {
     document.title = `${project.name}${dirty ? ' •' : ''} — Abaco Animatic`;
   }, [dirty, project.name]);
 
+  useEffect(() => {
+    const openMotionEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
+    window.addEventListener('abaco:edit-motion', openMotionEditor);
+    return () => window.removeEventListener('abaco:edit-motion', openMotionEditor);
+  }, []);
+
   useEffect(() => window.abaco?.onMenuCommand((command) => {
     if (command === 'new') createNew();
     else if (command === 'open') open();
@@ -187,15 +193,13 @@ export default function App() {
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 43 : layout.timeline;
   return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
-    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div><nav className="header-inspector-tabs" aria-label="Pannello destro">{([
-      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scena'], ['light', Sun, 'Luce'],
-    ] as const).map(([id, Icon, label]) => <button key={id} className={inspectorPanel === id ? 'active' : ''} title={label} aria-label={label} onClick={() => { setInspectorPanel(id); if (collapsed.right) setCollapsed((value) => ({ ...value, right: false })); }}><Icon size={14} />{inspectorPanel === id && <span>{label}</span>}</button>)}</nav></div>
+    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(300px,1fr) 5px ${rightWidth}px` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
       <Viewport dark={theme === 'dark'} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
-      <Inspector panel={inspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
+      <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
