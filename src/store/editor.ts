@@ -25,6 +25,7 @@ type EditorState = {
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number }): void;
   addShot(): void;
   splitScene(): void;
+  deleteScene(id: string): void;
   resizeScene(id: string, durationFrames: number): void;
   setTransitionMode(objectId: string, sceneId: string, mode: Interpolation): void;
   removeSelected(): void;
@@ -37,6 +38,7 @@ type EditorState = {
   setCameraFraming(sceneId: string, position: Vec3, rotation: Vec3, target: Vec3): void;
   reorderObjects(sourceId: string, targetId: string): void;
   deleteObject(id: string): void;
+  deleteObjectFromScene(objectId: string, sceneId: string): void;
   setTransform(id: string, transform: Transform): void;
   keyPose(id: string): void;
   keyProperty(id: string, property: 'visibility' | 'text'): void;
@@ -230,6 +232,40 @@ export const useEditor = create<EditorState>((set, get) => {
       syncScopedCommentRanges(next);
       commit(next);
     },
+    deleteScene: (id) => {
+      const state = get();
+      const next = snapshot(state.project);
+      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+      if (scenes.length <= 1) return;
+      const index = scenes.findIndex((scene) => scene.id === id);
+      if (index < 0) return;
+      ensureSceneSnapshots(next);
+      const scene = scenes[index];
+      const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
+      const duration = sceneEnd - scene.frame;
+      next.cameraCuts = next.cameraCuts.filter((cut) => cut.id !== id);
+      for (const cut of next.cameraCuts) if (cut.frame >= sceneEnd) cut.frame -= duration;
+      for (const object of next.objects) {
+        object.keyframes = object.keyframes
+          .filter((key) => key.frame < scene.frame || key.frame >= sceneEnd)
+          .map((key) => key.frame >= sceneEnd ? { ...key, frame: key.frame - duration } : key);
+        object.sceneNotes = object.sceneNotes
+          .filter((note) => note.frame < scene.frame || note.frame >= sceneEnd)
+          .map((note) => note.frame >= sceneEnd ? { ...note, frame: note.frame - duration } : note);
+      }
+      next.comments = next.comments
+        .filter((comment) => comment.sceneId !== id && comment.fromSceneId !== id && comment.toSceneId !== id)
+        .map((comment) => comment.startFrame >= sceneEnd
+          ? { ...comment, startFrame: comment.startFrame - duration, endFrame: comment.endFrame - duration }
+          : comment.endFrame >= scene.frame
+            ? { ...comment, endFrame: Math.max(comment.startFrame, comment.endFrame - duration) }
+            : comment);
+      next.settings.frameEnd = Math.max(next.settings.frameStart + 5, next.settings.frameEnd - duration);
+      renameScenes(next);
+      syncScopedCommentRanges(next);
+      commit(next);
+      set({ selectedId: undefined, currentFrame: Math.max(next.settings.frameStart, Math.min(next.settings.frameEnd, scene.frame)) });
+    },
     resizeScene: (id, requestedDuration) => {
       const state = get();
       const next = snapshot(state.project);
@@ -362,6 +398,21 @@ export const useEditor = create<EditorState>((set, get) => {
       });
       commit(next);
       if (state.selectedId === id) set({ selectedId: undefined });
+    },
+    deleteObjectFromScene: (objectId, sceneId) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
+      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+      const index = scenes.findIndex((scene) => scene.id === sceneId);
+      const scene = scenes[index];
+      if (!object || !scene) return;
+      ensureSceneSnapshots(next);
+      const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
+      object.keyframes = object.keyframes.filter((key) => key.frame < scene.frame || key.frame >= sceneEnd);
+      object.sceneNotes = object.sceneNotes.filter((note) => note.frame < scene.frame || note.frame >= sceneEnd);
+      putKey(object, scene.frame, 'visibility', false, 'constant');
+      next.comments = next.comments.filter((comment) => !(comment.sceneId === sceneId && comment.targetIds.includes(objectId)));
+      commit(next);
     },
     resetFraming: () => {
       const state = get();

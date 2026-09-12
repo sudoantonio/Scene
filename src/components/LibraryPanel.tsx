@@ -37,7 +37,7 @@ export default function LibraryPanel({ collapsed, onToggleCollapse }: { collapse
     <div className="slides-list">{scenes.map((scene, index) => {
       const end = scenes[index + 1]?.frame ?? project.settings.frameEnd + 1;
       const active = frame >= scene.frame && frame < end;
-      return <button key={scene.id} aria-label={`Scena ${index + 1}`} title={`Scena ${index + 1}`} className={`slide-button ${active ? 'active' : ''}`} onClick={() => { setFrame(scene.frame); select(scene.cameraId); }}><ScenePreview frame={scene.frame} number={index + 1} thumbnail={thumbnails[scene.id]} /></button>;
+      return <button key={scene.id} aria-label={`Scena ${index + 1}`} title={`Scena ${index + 1}`} className={`slide-button ${active ? 'active' : ''}`} onClick={() => { setFrame(scene.frame); select(undefined); window.dispatchEvent(new CustomEvent('abaco:select-scene', { detail: { sceneId: scene.id } })); }}><ScenePreview frame={scene.frame} number={index + 1} thumbnail={thumbnails[scene.id]} /></button>;
     })}</div>
     <button className="add-slide" aria-label="Nuova scena" title="Nuova scena" onClick={addShot}><Plus size={17} /></button>
   </aside>;

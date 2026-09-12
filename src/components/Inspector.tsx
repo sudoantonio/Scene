@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ChevronRight, KeyRound, Palette, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import type { Transform, Vec3 } from '../domain/schema';
@@ -17,8 +16,7 @@ function VectorFields({ label, value, onChange }: { label: string; value: Vec3; 
 
 const styleColors = ['#2f3437', '#9cabb8', '#d97373', '#dfab01', '#448361', '#337ea9', '#9065b0'];
 
-export default function Inspector({ collapsed, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?(): void }) {
-  const [panel, setPanel] = useState<'edit' | 'scene' | 'light'>('edit');
+export default function Inspector({ panel, collapsed, onToggleCollapse }: { panel: 'edit' | 'scene' | 'light'; collapsed?: boolean; onToggleCollapse?(): void }) {
   const project = useEditor((state) => state.project);
   const selectedId = useEditor((state) => state.selectedId);
   const frame = useEditor((state) => state.currentFrame);
@@ -35,7 +33,6 @@ export default function Inspector({ collapsed, onToggleCollapse }: { collapsed?:
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className="inspector simple-inspector">
     <button className="panel-collapse panel-collapse-right" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>
-    <div className="right-tabs"><button className={panel === 'edit' ? 'active' : ''} onClick={() => setPanel('edit')}>Modifica</button><button className={panel === 'scene' ? 'active' : ''} onClick={() => setPanel('scene')}>Scena</button><button className={panel === 'light' ? 'active' : ''} onClick={() => setPanel('light')}>Luce</button></div>
     {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <><BackgroundPanel /><ElementsPanel mode="scene" /></> : <>
       {object && transform ? <section className="object-section edit-stack">
         <div className="edit-group identity-group">

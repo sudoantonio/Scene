@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Box, Plus, SlidersHorizontal, Sun } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -37,6 +37,7 @@ export default function App() {
   const [plan, setPlan] = useState<BlenderPlan>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ left: false, right: false, timeline: false });
@@ -112,7 +113,7 @@ export default function App() {
     };
     const move = (pointer: PointerEvent) => {
       finalValue = valueFromPointer(pointer);
-      if (part === 'timeline' && shellRef.current) shellRef.current.style.gridTemplateRows = `34px minmax(0,1fr) 5px ${finalValue}px`;
+      if (part === 'timeline' && shellRef.current) shellRef.current.style.gridTemplateRows = `40px minmax(0,1fr) 5px ${finalValue}px`;
       else if (workspaceRef.current) workspaceRef.current.style.gridTemplateColumns = `${part === 'left' ? finalValue : layout.left}px 5px minmax(300px,1fr) 5px ${part === 'right' ? finalValue : layout.right}px`;
     };
     const finish = () => {
@@ -185,14 +186,16 @@ export default function App() {
   const leftWidth = collapsed.left ? 32 : layout.left;
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 43 : layout.timeline;
-  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 5px ${timelineHeight}px` }}>
-    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
+  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
+    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div><nav className="header-inspector-tabs" aria-label="Pannello destro">{([
+      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scena'], ['light', Sun, 'Luce'],
+    ] as const).map(([id, Icon, label]) => <button key={id} className={inspectorPanel === id ? 'active' : ''} title={label} aria-label={label} onClick={() => { setInspectorPanel(id); if (collapsed.right) setCollapsed((value) => ({ ...value, right: false })); }}><Icon size={14} />{inspectorPanel === id && <span>{label}</span>}</button>)}</nav></div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(300px,1fr) 5px ${rightWidth}px` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
       <Viewport dark={theme === 'dark'} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
-      <Inspector collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
+      <Inspector panel={inspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />

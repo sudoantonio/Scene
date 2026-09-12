@@ -236,6 +236,38 @@ describe('scene indipendenti', () => {
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 
+  it('elimina una scena richiudendo la timeline senza cambiare quella successiva', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    useEditor.getState().addShot();
+    useEditor.getState().setTransform(cubeId, { position: [9, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().deleteScene(scenes[1].id);
+    const project = useEditor.getState().project;
+    const cube = project.objects.find((object) => object.id === cubeId)!;
+    expect(project.cameraCuts.map((scene) => scene.frame).sort((a, b) => a - b)).toEqual([1, 73]);
+    expect(evaluateTransform(cube, 73).position).toEqual([9, 0, 0]);
+    expect(project.settings.frameEnd).toBe(144);
+    expect(() => ProjectSchema.parse(project)).not.toThrow();
+  });
+
+  it('elimina un blocco elemento soltanto dalla scena selezionata', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().deleteObjectFromScene(cubeId, scenes[0].id);
+    const project = useEditor.getState().project;
+    const cube = project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateProperty(cube, 'visibility', scenes[0].frame)).toBe(false);
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(true);
+    expect(project.objects.some((object) => object.id === cubeId)).toBe(true);
+    expect(() => ProjectSchema.parse(project)).not.toThrow();
+  });
+
   it('ridimensiona una clip spostando le scene successive senza cambiarle', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     const cameraId = useEditor.getState().project.objects[0].id;
