@@ -123,6 +123,51 @@ async function blenderCommand(extraFlatpakPermissions: string[] = []) {
   return { command: 'blender', prefix: [] as string[] };
 }
 
+type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; meshCount?: number };
+const blendProxyJobs = new Map<string, Promise<BlendProxyMetadata>>();
+
+async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false): Promise<BlendProxyMetadata> {
+  const resolvedSource = path.resolve(sourcePath);
+  const resolvedProxy = path.resolve(proxyPath);
+  const markerPath = `${resolvedProxy}.v2.json`;
+  const sourceStats = await fs.stat(resolvedSource);
+  if (!force) {
+    try {
+      const cached = JSON.parse(await fs.readFile(markerPath, 'utf8')) as BlendProxyMetadata & { sourcePath: string; sourceMtimeMs: number };
+      const proxyStats = await fs.stat(resolvedProxy);
+      if (cached.sourcePath === resolvedSource && cached.sourceMtimeMs === sourceStats.mtimeMs && proxyStats.size > 1024 && (cached.meshCount ?? 0) > 0) return cached;
+    } catch { /* proxy precedente o incompleto: viene rigenerato */ }
+  }
+  const existing = blendProxyJobs.get(resolvedProxy);
+  if (existing) return existing;
+  const job = (async () => {
+    const cacheDir = path.dirname(resolvedProxy);
+    const scriptPath = path.join(cacheDir, `${path.basename(resolvedProxy, '.glb')}.proxy-v2.py`);
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(scriptPath, BLEND_ASSET_PROXY_SCRIPT, 'utf8');
+    const invocation = await blenderCommand([`${path.dirname(resolvedSource)}:ro`, cacheDir]);
+    try {
+      const output = await runProcess(invocation.command, [...invocation.prefix, resolvedSource, '--background', '--python', scriptPath, '--', resolvedProxy], cacheDir);
+      const marker = output.split(/\r?\n/).find((line) => line.startsWith('ABACO_BLEND_ASSET='));
+      if (!marker) throw new Error(`Blender non ha creato l’anteprima dell’asset.\n${output}`);
+      const metadata = JSON.parse(marker.slice('ABACO_BLEND_ASSET='.length)) as BlendProxyMetadata;
+      if (!metadata.meshCount) throw new Error('Il file Blender non ha prodotto geometria visibile per l’anteprima.');
+      await atomicWrite(markerPath, JSON.stringify({ ...metadata, sourcePath: resolvedSource, sourceMtimeMs: sourceStats.mtimeMs }));
+      return metadata;
+    } catch (error) {
+      await fs.rm(resolvedProxy, { force: true }).catch(() => undefined);
+      await fs.rm(markerPath, { force: true }).catch(() => undefined);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('Blender non trovato. Configuralo in File → Impostazioni.');
+      throw error;
+    } finally {
+      await fs.rm(scriptPath, { force: true }).catch(() => undefined);
+    }
+  })();
+  blendProxyJobs.set(resolvedProxy, job);
+  try { return await job; }
+  finally { blendProxyJobs.delete(resolvedProxy); }
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1500, height: 960, minWidth: 1100, minHeight: 720, backgroundColor: '#101319',
@@ -212,27 +257,17 @@ ipcMain.handle('blendAsset:choose', async () => {
   const cacheDir = path.join(app.getPath('userData'), 'asset-cache');
   const assetId = crypto.randomUUID();
   const proxyPath = path.join(cacheDir, `${assetId}.glb`);
-  const scriptPath = path.join(cacheDir, `${assetId}.py`);
-  await fs.mkdir(cacheDir, { recursive: true });
-  await fs.writeFile(scriptPath, BLEND_ASSET_PROXY_SCRIPT, 'utf8');
-  const invocation = await blenderCommand([`${path.dirname(sourcePath)}:ro`, cacheDir]);
-  try {
-    const output = await runProcess(invocation.command, [...invocation.prefix, sourcePath, '--background', '--python', scriptPath, '--', proxyPath], cacheDir);
-    const marker = output.split(/\r?\n/).find((line) => line.startsWith('ABACO_BLEND_ASSET='));
-    if (!marker) throw new Error(`Blender non ha creato l’anteprima dell’asset.\n${output}`);
-    const metadata = JSON.parse(marker.slice('ABACO_BLEND_ASSET='.length)) as { boundsCenter: [number, number, number]; previewScale: number };
-    return {
-      sourcePath, proxyPath, collectionName: 'Scena Blender',
-      name: path.basename(sourcePath, path.extname(sourcePath)),
-      boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale,
-    };
-  } catch (error) {
-    await fs.rm(proxyPath, { force: true }).catch(() => undefined);
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('Blender non trovato. Configuralo in File → Impostazioni.');
-    throw error;
-  } finally {
-    await fs.rm(scriptPath, { force: true }).catch(() => undefined);
-  }
+  const metadata = await buildBlendAssetProxy(sourcePath, proxyPath, true);
+  return {
+    sourcePath, proxyPath, collectionName: 'Scena Blender',
+    name: path.basename(sourcePath, path.extname(sourcePath)),
+    boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale,
+  };
+});
+
+ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string }) => {
+  if (!asset.sourcePath || !asset.proxyPath) throw new Error('Percorso dell’asset Blender non valido.');
+  return buildBlendAssetProxy(asset.sourcePath, asset.proxyPath);
 });
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {

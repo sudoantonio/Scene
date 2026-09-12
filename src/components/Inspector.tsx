@@ -36,7 +36,7 @@ export default function Inspector({ collapsed, onToggleCollapse }: { collapsed?:
   return <aside className="inspector simple-inspector">
     <button className="panel-collapse panel-collapse-right" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>
     <div className="right-tabs"><button className={panel === 'edit' ? 'active' : ''} onClick={() => setPanel('edit')}>Modifica</button><button className={panel === 'scene' ? 'active' : ''} onClick={() => setPanel('scene')}>Scena</button><button className={panel === 'light' ? 'active' : ''} onClick={() => setPanel('light')}>Luce</button></div>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <><ElementsPanel mode="scene" /><BackgroundPanel /></> : <>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <><BackgroundPanel /><ElementsPanel mode="scene" /></> : <>
       {object && transform ? <section className="object-section edit-stack">
         <div className="edit-group identity-group">
           <div className="name-row"><input aria-label="Nome elemento" className="object-name" value={object.name} onChange={(event) => updateObject(object.id, { name: event.target.value || object.name })} /><button className="icon danger" title="Elimina" onClick={removeSelected}><Trash2 size={14} /></button></div>

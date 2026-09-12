@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('abaco', {
   chooseBackground: (kind: 'image' | 'model') => ipcRenderer.invoke('background:choose', kind),
   loadAsset: (path: string) => ipcRenderer.invoke('asset:load', path),
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
+  ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),
   buildBlender: (project: AbacoProject, plan: BlenderPlan, projectPath: string) => ipcRenderer.invoke('blender:build', { project, plan, projectPath }),
   onMenuCommand: (callback: (command: string) => void) => {

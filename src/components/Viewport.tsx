@@ -99,12 +99,24 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
 
 function BlendAssetVisual({ object }: { object: SceneObject }) {
   const [source, setSource] = useState<string>();
+  const updateObject = useEditor((state) => state.updateObject);
   useEffect(() => {
     let active = true;
     setSource(undefined);
-    if (object.asset.proxyPath) window.abaco?.loadAsset(object.asset.proxyPath).then((value) => { if (active) setSource(value); }).catch(() => undefined);
+    const load = async () => {
+      if (!object.asset.proxyPath || !window.abaco) return;
+      const metadata = object.asset.sourcePath
+        ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath })
+        : undefined;
+      if (metadata && (metadata.previewScale !== object.asset.previewScale || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index]))) {
+        updateObject(object.id, { asset: { ...object.asset, ...metadata } });
+      }
+      const value = await window.abaco.loadAsset(object.asset.proxyPath);
+      if (active) setSource(value);
+    };
+    load().catch(() => undefined);
     return () => { active = false; };
-  }, [object.asset.proxyPath]);
+  }, [object.asset.proxyPath, object.asset.sourcePath]);
   if (!source) return <AssetPlaceholder />;
   return <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<AssetPlaceholder />}>
     <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} /></Suspense>
