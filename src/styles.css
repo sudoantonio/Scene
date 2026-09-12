@@ -1376,3 +1376,11 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .timeline .scene-clip .clip-resize-handle { top: 0; bottom: 0; }
 .timeline .scene-hierarchy { height: 100%; margin: 0; }
 .timeline .scene-label::after { bottom: 28px; }
+
+/* Cambi scena leggibili: il comando commento vive soltanto nella riga Scene. */
+.timeline .scene-track .transition-marker { color: #777871; opacity: .58; }
+.timeline .scene-track .transition-marker:hover, .timeline .scene-track .transition-marker.has-note { opacity: 1; }
+
+/* Il pannello resta un fondale distinto dalle diapositive. */
+.theme-light .left-panel.slides-only { background: #d9d9d4; }
+.theme-dark .left-panel.slides-only { background: #181818; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, GripVertical, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, PanelBottomClose, PanelBottomOpen, Pause, Play, Scissors, Trash2, Video, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, GripVertical, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Trash2, Video, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import type { Interpolation, SceneComment, SceneObject, TimelineCommentScope, Transform } from '../domain/schema';
@@ -184,7 +184,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       setCommentDraft(undefined);
       setMotionDraft(undefined);
       setTransitionDraft({ fromId: from.id, toId: scene.id, label: `${from.name ?? `Scena ${index + 1}`} → ${scene.name ?? `Scena ${index + 2}`}`, text: note?.text ?? '' });
-    }}><MessageSquare size={11} /></button>;
+    }}>{note ? <MessageSquare size={10} /> : <Plus size={11} />}</button>;
   });
   useEffect(() => {
     const selectScene = (event: Event) => {
@@ -280,10 +280,11 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
             const clipEnd = next?.frame ?? end + 1;
             const mode = object.keyframes.find((key) => key.frame === scene.frame && key.property === 'position')?.interpolation ?? 'constant';
             const width = ((clipEnd - scene.frame) / Math.max(1, end - start + 1)) * 100;
+            const insetLeft = index > 0 ? 6 : 0, insetRight = index < scenes.length - 1 ? 6 : 1;
             const changed = next ? objectChanged(object, scene.frame, next.frame) : false;
             const visible = evaluateProperty(object, 'visibility', scene.frame) as boolean;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`}` };
-            return <button key={`${object.id}-${scene.id}`} className={`motion-segment ${mode} ${changed ? 'changed' : 'idle'} ${next ? '' : 'static'} ${visible ? '' : 'hidden'} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }} title={next ? `${displayName}: ${modeNames[mode]} fra ${scene.name ?? `Scena ${index + 1}`} e ${next.name ?? `Scena ${index + 2}`}` : `${displayName} in ${scene.name ?? `Scena ${index + 1}`}`} onClick={(event) => {
+            return <button key={`${object.id}-${scene.id}`} className={`motion-segment ${mode} ${changed ? 'changed' : 'idle'} ${next ? '' : 'static'} ${visible ? '' : 'hidden'} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }} title={next ? `${displayName}: ${modeNames[mode]} fra ${scene.name ?? `Scena ${index + 1}`} e ${next.name ?? `Scena ${index + 2}`}` : `${displayName} in ${scene.name ?? `Scena ${index + 1}`}`} onClick={(event) => {
               event.stopPropagation(); select(object.id); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
               if (next) setMotionDraft({ objectId: object.id, sceneId: scene.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`} → ${next.name ?? `Scena ${index + 2}`}`, mode });
             }}><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">{next ? modeNames[mode] : 'Presente'}</span>{noteBadge(selection, 'segment-comment')}</button>;

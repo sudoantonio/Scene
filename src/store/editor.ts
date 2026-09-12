@@ -180,12 +180,12 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
-      const sourceFrame = activeSceneStart(next, state.currentFrame);
       const cuts = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-      const sourceCut = cuts.filter((cut) => cut.frame <= sourceFrame).at(-1) ?? cuts[0];
+      const sourceCut = cuts.at(-1);
       if (!sourceCut) return;
-      const nextFrame = (cuts.at(-1)?.frame ?? next.settings.frameStart) + next.settings.fps * 3;
-      next.settings.frameEnd = Math.max(next.settings.frameEnd, nextFrame + next.settings.fps * 3 - 1);
+      const sourceFrame = next.settings.frameEnd;
+      const nextFrame = sourceFrame + 1;
+      next.settings.frameEnd = nextFrame + next.settings.fps * 3 - 1;
       for (const object of next.objects) {
         const transform = evaluateTransform(object, sourceFrame);
         putKey(object, nextFrame, 'position', transform.position);

@@ -149,6 +149,21 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(edited, secondFrame).scale).toEqual([2, 2, 2]);
   });
 
+  it('una nuova scena continua dalla posa finale della scena precedente', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    useEditor.getState().setTransform(cubeId, { position: [4, -2, 1], rotation: [10, 20, 30], scale: [1.5, 1.5, 1.5] });
+    useEditor.getState().setFrame(1);
+    useEditor.getState().addShot();
+    const project = useEditor.getState().project;
+    const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    const cube = project.objects.find((object) => object.id === cubeId)!;
+    expect(scenes.map((scene) => scene.frame)).toEqual([1, 73, 145]);
+    expect(evaluateTransform(cube, scenes[2].frame)).toEqual({ position: [4, -2, 1], rotation: [10, 20, 30], scale: [1.5, 1.5, 1.5] });
+  });
+
   it('zoom e nota appartengono solo alla scena selezionata', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     const cameraId = useEditor.getState().project.objects[0].id;
