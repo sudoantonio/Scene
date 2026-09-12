@@ -1364,7 +1364,15 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .timeline .scene-image { border-bottom: 1px solid #aaa99f; }
 .timeline .scene-framing { min-height: 28px; border-top: 0; }
 .timeline .scene-framing .framing-icon { flex: none; opacity: .72; }
-.timeline .scene-hierarchy { width: 100%; height: 100%; display: grid; grid-template-rows: minmax(0,1fr) 28px; gap: 0; }
+.timeline .scene-hierarchy { width: 100%; height: calc(100% - 12px); margin: 6px 0; display: grid; grid-template-rows: minmax(0,1fr) 28px; gap: 0; }
 .timeline .scene-hierarchy b, .timeline .scene-hierarchy small { display: flex; align-items: center; }
-.timeline .scene-hierarchy small { border-top: 1px solid #aaa99f; }
-.theme-dark .timeline .scene-image, .theme-dark .timeline .scene-hierarchy small { border-color: #5a5a5a; }
+.timeline .scene-hierarchy small { border-top: 0; }
+.timeline .scene-label::after { content: ''; position: absolute; z-index: 1; left: 0; right: 0; bottom: 34px; height: 1px; background: #aaa99f; pointer-events: none; }
+.theme-dark .timeline .scene-image { border-color: #5a5a5a; }
+.theme-dark .timeline .scene-label::after { background: #5a5a5a; }
+
+/* Le clip riempiono la riga; il bordo della traccia è l'unico spazio fra righe. */
+.timeline .scene-clip, .timeline .motion-segment { top: 0; bottom: 0; }
+.timeline .scene-clip .clip-resize-handle { top: 0; bottom: 0; }
+.timeline .scene-hierarchy { height: 100%; margin: 0; }
+.timeline .scene-label::after { bottom: 28px; }
