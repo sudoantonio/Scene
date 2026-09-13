@@ -470,7 +470,7 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark }: { p
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
   const revision = `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}`).join('|')}`;
   return <div className="thumbnail-renderer"><Canvas frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
-    <color attach="background" args={[dark ? '#242624' : '#f1f1ef']} />
+    <color attach="background" args={[dark ? '#2b2b2b' : '#f1f1ef']} />
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
     <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
     <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
@@ -489,7 +489,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen }: { s
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
   return <button className="live-camera-preview" style={{ width: aspect < 1 ? 'clamp(92px, 14%, 128px)' : undefined }} onClick={onOpen} title="Apri la vista camera" aria-label="Apri l'anteprima della camera">
     <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}><Canvas frameloop="demand" dpr={1} gl={{ antialias: true }}>
-      <color attach="background" args={[dark ? '#242624' : '#f1f1ef']} />
+      <color attach="background" args={[dark ? '#2b2b2b' : '#f1f1ef']} />
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
       <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
@@ -962,11 +962,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
-      <color attach="background" args={[dark ? '#242624' : '#f1f1ef']} />
+      <color attach="background" args={[dark ? '#2b2b2b' : '#f1f1ef']} />
       <SceneBackground kind={activeCut?.background?.kind ?? 'none'} path={activeCut?.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
       <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow />
-      <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#3a3d3a' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#555955' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
+      <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#3d3d3d' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#545454' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
       {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}

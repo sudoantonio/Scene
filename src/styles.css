@@ -1631,3 +1631,6 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .live-camera-preview { border-width: 1px !important; border-color: #74746f !important; }
 .live-camera-preview:hover { border-color: #d1a12a !important; }
 .theme-dark .live-camera-preview { border-color: #85857f !important; }
+
+/* Grigio neutro della viewport Blender: piano e spazio non hanno più due tonalità. */
+.theme-dark .viewport, .theme-dark .canvas-stage { background: #2b2b2b; }
