@@ -1716,3 +1716,18 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .app-shell :is(.play, .transition-marker, .screen-rotate-handle, .timeline-record:not(.active)) { border-radius: 50% !important; }
 .app-shell .timeline-record.active { border-radius: var(--radius-control) !important; }
 .preview-monitor-frame { border-radius: var(--radius-panel); }
+
+/* Geometria editoriale: il frame resta preciso, le clip appena smussate. */
+.app-shell :is(.viewport, .canvas-stage, .camera-frame-guide, .live-camera-preview, .slide-preview) {
+  border-radius: 0 !important;
+}
+.preview-monitor-frame { border-radius: 0 !important; }
+.app-shell :is(.scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment) {
+  border-radius: 3px !important;
+}
+
+/* I pannelli strutturali sinistro e timeline non hanno cornici esterne. */
+.app-shell :is(.left-panel, .timeline) {
+  border: 0 !important;
+  box-shadow: none !important;
+}
