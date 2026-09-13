@@ -489,7 +489,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen }: { s
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
   return <button className="live-camera-preview" style={{ width: aspect < 1 ? 'clamp(92px, 14%, 128px)' : undefined }} onClick={onOpen} title="Apri la vista camera" aria-label="Apri l'anteprima della camera">
     <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}><Canvas frameloop="demand" dpr={1} gl={{ antialias: true }}>
-      <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
+      <color attach="background" args={[dark ? '#353535' : '#f1f1ef']} />
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
       <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
