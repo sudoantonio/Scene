@@ -827,6 +827,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const motionActive = state.recordingMotion?.objectId === camera.id && state.recordingMotion.sceneId === scene.id;
       const session = state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
       const sessionActive = Boolean(session);
+      const editingSelectedMotion = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id;
       const range = sceneRange(next, scene.id);
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       let nextSession = session;
@@ -834,7 +835,7 @@ export const useEditor = create<EditorState>((set, get) => {
         nextSession = recordTransformSample(camera, sceneFrame, recordFrame, {
           position, rotation, scale: evaluateTransform(camera, state.currentFrame).scale,
         }, state.interpolation, session);
-      } else if (motionActive) {
+      } else if (motionActive || editingSelectedMotion) {
         putMotionKey(camera, sceneFrame, recordFrame, 'position', position, state.interpolation);
         putMotionKey(camera, sceneFrame, recordFrame, 'rotation', rotation, state.interpolation);
       } else {
@@ -847,7 +848,12 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       makeCameraShotIndependent(next, camera, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       if (nextSession) commitRecording(next, nextSession); else commit(next);
-      if (previousCameraId && camera.id !== previousCameraId && state.selectedId === previousCameraId) set({ selectedId: camera.id });
+      if (previousCameraId && camera.id !== previousCameraId) set({
+        ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
+        ...(state.selectedMotion?.objectId === previousCameraId && state.selectedMotion.sceneId === scene.id
+          ? { selectedMotion: { objectId: camera.id, sceneId: scene.id } }
+          : {}),
+      });
     },
     setTransform: (id, transform) => {
       const state = get();

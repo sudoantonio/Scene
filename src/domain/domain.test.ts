@@ -203,6 +203,20 @@ describe('scene indipendenti', () => {
     expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: secondScene.id });
   });
 
+  it('scrive la visuale nel movimento camera selezionato al frame corrente', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const cameraId = scene.cameraId;
+    useEditor.getState().selectMotion({ objectId: cameraId, sceneId: scene.id });
+    useEditor.getState().setFrame(scene.frame + 20);
+    useEditor.getState().setCameraFraming(scene.id, [8, -5, 6], [70, 0, 28], [0, 0, 1]);
+    const state = useEditor.getState();
+    const camera = state.project.objects.find((object) => object.id === cameraId)!;
+    const positionKey = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 20);
+    expect(positionKey?.purpose).toBe('motion');
+    expect(positionKey?.value).toEqual([8, -5, 6]);
+  });
+
   it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');

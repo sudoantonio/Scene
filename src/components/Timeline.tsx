@@ -301,6 +301,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       const width = Math.max(0.2, ((motionEnd - motionStart) / Math.max(1, end - start + 1)) * 100);
       return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${preview ? 'resizing' : ''} ${active ? 'selected-block' : ''}`} style={{ left: left(motionStart), width: `${width}%` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · trascina i bordi per cambiare velocità`} onClick={(event) => {
         event.stopPropagation();
+        if (frame < scene.frame || frame >= sceneEnd) setFrame(firstFrame);
         select(motionObject.id);
         selectMotion({ objectId: motionObject.id, sceneId: scene.id });
         window.dispatchEvent(new CustomEvent('abaco:edit-motion'));
