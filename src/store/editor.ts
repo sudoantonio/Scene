@@ -27,6 +27,7 @@ type EditorState = {
   setInterpolation(value: Interpolation): void;
   setGizmoMode(value: 'translate' | 'rotate' | 'scale'): void;
   addObject(kind: ObjectKind): void;
+  addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number }): void;
   addShot(): void;
   splitScene(): void;
@@ -208,6 +209,23 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       putKey(object, sceneFrame, 'visibility', true, 'constant');
       if (kind === 'text') putKey(object, sceneFrame, 'text', object.text, 'constant');
+      next.objects.push(object);
+      commit(next);
+      set({ selectedId: object.id });
+    },
+    addScreenImage: (asset) => {
+      const state = get();
+      const object = createSceneObject('plane', state.project.objects.filter((item) => item.screenSpace && item.kind === 'plane').length + 1);
+      object.name = asset.name;
+      object.screenSpace = true;
+      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.dataUrl, collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1 };
+      object.transform.scale = [1, 1, 1];
+      const next = snapshot(state.project);
+      const sceneFrame = activeSceneStart(next, state.currentFrame);
+      putKey(object, sceneFrame, 'position', object.transform.position);
+      putKey(object, sceneFrame, 'rotation', object.transform.rotation);
+      putKey(object, sceneFrame, 'scale', object.transform.scale);
+      putKey(object, sceneFrame, 'visibility', true, 'constant');
       next.objects.push(object);
       commit(next);
       set({ selectedId: object.id });

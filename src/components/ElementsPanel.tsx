@@ -1,4 +1,4 @@
-import { Box, Check, Circle, Cone, Cylinder, FileBox, MessageSquare, MessageSquarePlus, SquareDashed, TextCursorInput, Trash2, X } from 'lucide-react';
+import { Box, Check, Circle, Cone, Cylinder, FileBox, Image, MessageSquare, MessageSquarePlus, SquareDashed, TextCursorInput, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import type { ObjectKind, SceneComment, TimelineCommentScope } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -15,6 +15,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   const frame = useEditor((state) => state.currentFrame);
   const addObject = useEditor((state) => state.addObject);
   const addBlendAsset = useEditor((state) => state.addBlendAsset);
+  const addScreenImage = useEditor((state) => state.addScreenImage);
   const select = useEditor((state) => state.select);
   const setTimelineComment = useEditor((state) => state.setTimelineComment);
   const [commentEditor, setCommentEditor] = useState<{ scope: TimelineCommentScope; objectId?: string; text: string }>();
@@ -55,6 +56,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
       <h2 className="spaced-title">Inserisci</h2>
       <div className="quick-add">
         <button onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Testo</span></button>
+        <button onClick={async () => { try { if (!window.abaco) throw new Error('L’importazione immagini è disponibile nell’app desktop.'); const image = await window.abaco.chooseBackground('image'); if (image) addScreenImage({ sourcePath: image.path, dataUrl: await window.abaco.loadAsset(image.path), name: image.name }); } catch (error) { window.alert(error instanceof Error ? error.message : 'Importazione immagine non riuscita.'); } }}><Image size={15} /><span>Immagine</span></button>
         <button onClick={async () => {
           try {
             if (!window.abaco) throw new Error('L’importazione .blend è disponibile nell’app desktop.');

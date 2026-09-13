@@ -43,7 +43,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const activeSceneEnd = scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1;
   const camera = project.objects.find((item) => item.id === activeScene?.cameraId && item.kind === 'camera');
   const cameraTransform = camera ? evaluateTransform(camera, frame) : undefined;
-  const positionValues = transform && cameraView && cameraTransform ? toCameraSpace(transform.position, cameraTransform) : transform?.position;
+  const positionValues = transform && cameraView && cameraTransform && !object?.screenSpace ? toCameraSpace(transform.position, cameraTransform) : transform?.position;
+  const positionControls: Array<[string, 0 | 1 | 2, number, number]> = object?.screenSpace
+    ? [['Orizzontale', 0, -1, 1], ['Verticale', 2, -1, 1]]
+    : [['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20]];
   const motionObject = object ?? camera;
   const motionMode = motionObject && activeScene
     ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= activeScene.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0]?.interpolation ?? 'constant'
@@ -60,7 +63,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     if (!transform) return;
     const next = [...(property === 'position' ? positionValues! : transform[property])] as Vec3;
     next[axis] = value;
-    changeTransform(property, property === 'position' && cameraView && cameraTransform ? fromCameraSpace(next, cameraTransform) : next);
+    changeTransform(property, property === 'position' && cameraView && cameraTransform && !object?.screenSpace ? fromCameraSpace(next, cameraTransform) : next);
   };
   const moveCameraAxis = (axis: 0 | 1 | 2, value: number) => {
     if (!activeScene || !cameraTransform) return;
@@ -100,14 +103,13 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div>
 
         <div className="camera-sliders object-transform-sliders">
-          <div className="transform-slider-title">{cameraView ? 'Posizione nella vista camera' : 'Posizione'}</div>
-          {([
-            ['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20],
-          ] as const).map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Verticale' : label}</span><strong>{positionValues![axis].toFixed(1)} m</strong><input aria-label={`${label} elemento`} title={cameraView && axis === 1 ? 'Aumenta per allontanare il personaggio dalla camera' : undefined} type="range" min={cameraView && axis === 1 ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step="0.1" value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
+          <div className="transform-slider-title">{object.screenSpace ? 'Posizione nel frame' : cameraView ? 'Posizione nella vista camera' : 'Posizione'}</div>
+          {positionControls.map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Verticale' : label}</span><strong>{object.screenSpace ? `${Math.round(positionValues![axis] * 100)}%` : `${positionValues![axis].toFixed(1)} m`}</strong><input aria-label={`${label} elemento`} title={cameraView && axis === 1 ? 'Aumenta per allontanare il personaggio dalla camera' : undefined} type="range" min={cameraView && axis === 1 && !object.screenSpace ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step={object.screenSpace ? '.01' : '0.1'} value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
           <div className="transform-slider-title rotation-title">Rotazione</div>
           {([
             ['Inclina X', 0], ['Inclina Y', 1], ['Gira', 2],
           ] as const).map(([label, axis]) => <label key={`rotation-${axis}`}><span>{label}</span><strong>{transform.rotation[axis].toFixed(0)}°</strong><input aria-label={`${label} elemento`} type="range" min="-180" max="180" step="1" value={transform.rotation[axis]} onChange={(event) => changeTransformAxis('rotation', axis, Number(event.target.value))} /></label>)}
+          {object.screenSpace && <><div className="transform-slider-title rotation-title">Ritaglio</div>{(['Alto', 'Destra', 'Basso', 'Sinistra'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Ritaglio ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</>}
         </div>
 
         {motionObject && activeScene && <div className="motion-controls"><div className="motion-controls-heading"><span>Movimento</span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div><small className="motion-subject">{object ? object.name : 'Camera'} · {activeScene.name ?? 'Scena'}</small><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label={`Tipo movimento ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}

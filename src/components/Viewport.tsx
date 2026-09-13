@@ -1,7 +1,7 @@
 import { Canvas, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { Box, Focus, LayoutTemplate, Move3d, Plus, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
@@ -500,6 +500,33 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen }: { s
   </button>;
 }
 
+function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneObject[]; frame: number; width: number; height: number }) {
+  const select = useEditor((state) => state.select);
+  const selectedId = useEditor((state) => state.selectedId);
+  const setTransform = useEditor((state) => state.setTransform);
+  const [dragging, setDragging] = useState<string>();
+  const visible = objects.filter((object) => object.screenSpace && evaluateProperty(object, 'visibility', frame));
+  return <div className="screen-space-layers" style={{ width, height }} onPointerMove={(event) => {
+    if (!dragging) return;
+    const object = visible.find((item) => item.id === dragging);
+    if (!object) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const transform = evaluateTransform(object, frame);
+    const x = Math.max(-1, Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1));
+    const z = Math.max(-1, Math.min(1, 1 - ((event.clientY - rect.top) / rect.height) * 2));
+    setTransform(object.id, { ...transform, position: [x, transform.position[1], z] });
+  }} onPointerUp={(event) => { if (dragging) event.currentTarget.releasePointerCapture(event.pointerId); setDragging(undefined); }}>
+    {visible.map((object) => {
+      const transform = evaluateTransform(object, frame);
+      const crop = object.screenCrop;
+      const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])), clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` } as CSSProperties;
+      return <div key={object.id} className={`screen-space-layer ${selectedId === object.id ? 'selected' : ''}`} style={style} onPointerDown={(event) => { event.stopPropagation(); select(object.id); setDragging(object.id); event.currentTarget.parentElement?.setPointerCapture(event.pointerId); }}>
+        {object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <img src={object.asset.proxyPath} alt={object.name} draggable={false} />}
+      </div>;
+    })}
+  </div>;
+}
+
 function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChange }: { objectId: string; keyframe: Keyframe; selected: boolean; onSelect(): void; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number; start: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number; moved: boolean } | undefined>(undefined);
@@ -957,7 +984,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
   }, [cameraView]);
 
-  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} data-testid="viewport">
+  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
@@ -969,7 +996,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
       <Line name="abaco-x-axis" points={[[-20, 0, .012], [20, 0, .012]]} color="#c64d4d" lineWidth={1.2} transparent opacity={.94} />
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
-      {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
       {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} />}
@@ -978,6 +1005,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </Canvas>
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
+    {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>
     <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => setCameraView(!cameraView)}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>

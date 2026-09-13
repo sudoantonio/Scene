@@ -1634,3 +1634,24 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 
 /* Grigio medio della viewport Blender: piano e spazio non hanno più due tonalità. */
 .theme-dark .viewport, .theme-dark .canvas-stage { background: #3d3d3d; }
+
+/* Livelli 2D: testo e immagini vivono nel frame, indipendenti dalla scena 3D. */
+.screen-space-layers { position: absolute; z-index: 3; left: 50%; top: 50%; overflow: hidden; transform: translate(-50%,-50%); pointer-events: auto; }
+.screen-space-layer { position: absolute; z-index: 1; width: max-content; max-width: 88%; cursor: move; touch-action: none; user-select: none; transform-origin: center; }
+.screen-space-layer > span { display: block; padding: 2px 5px; font-size: calc(34px * var(--layer-scale)); font-weight: 650; line-height: 1.08; white-space: pre-wrap; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.screen-space-layer > img { width: calc(30% * var(--layer-scale)); min-width: 72px; max-width: 52vw; display: block; object-fit: contain; pointer-events: none; }
+.screen-space-layer.selected { outline: 1px solid #72a7d9; outline-offset: 3px; }
+
+/* Controlli della vista camera ancorati appena dentro il frame. */
+.camera-mode .view-toggle { left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
+.camera-mode .viewport-top-right { right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
+.camera-mode .viewport-bottom-left { left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
+.camera-mode .camera-drone-hint { right: 8px; bottom: 8px; }
+
+/* Palette clip ispirata a Premiere: camera blu, presenza verde, movimento rosso. */
+.theme-dark .timeline .scene-clip { color: #d4d7da; background: #465766; border-color: #6b8698 !important; }
+.theme-dark .timeline .scene-framing { color: #d0ddec; background: #344756; border-color: #627e92; }
+.theme-dark .presence-segment { color: #c6dfce; background: #355443; border-color: #568368; }
+.theme-dark .movement-label, .theme-dark .movement-track { color: #efa5a5; background: #36262a; border-color: #5a3940; }
+.theme-dark .recorded-motion-segment { color: #ffd5d1; background: #80484b; border-color: #bd6b6e; }
+.theme-dark .camera-movement-label, .theme-dark .camera-movement-track { color: #b9d5ef; background: #253d54; border-color: #3e617f; }

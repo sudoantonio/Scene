@@ -52,6 +52,8 @@ export const SceneObjectSchema = z.object({
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }),
+  screenSpace: z.boolean().default(false),
+  screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
   sceneNotes: z.array(z.object({ frame: z.number().int().positive(), text: z.string() })).default([]),
   keyframes: z.array(KeyframeSchema).default([]),
 });
@@ -185,7 +187,8 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     camera: 'Camera', area_light: 'Luce area', point_light: 'Luce punto', sun_light: 'Sole',
   };
   const transform = emptyTransform();
-  if (['cube', 'sphere', 'cylinder', 'cone', 'text'].includes(kind)) transform.position = [0, 0, 1];
+  if (['cube', 'sphere', 'cylinder', 'cone'].includes(kind)) transform.position = [0, 0, 1];
+  if (kind === 'text') transform.scale = [1, 1, 1];
   if (kind === 'plane') transform.position = [0, 0, 0.01];
   if (kind === 'camera') {
     transform.position = [7, -7, 5];
@@ -199,7 +202,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
-    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, sceneNotes: [], keyframes: [],
+    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, screenSpace: kind === 'text', screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }
 
