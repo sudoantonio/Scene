@@ -512,9 +512,11 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
     if (!interaction) return;
     const move = (event: PointerEvent) => {
       const start = interaction.transform;
+      const dx = event.clientX - interaction.x, dy = event.clientY - interaction.y;
+      if (Math.hypot(dx, dy) < 4) return;
       if (interaction.mode === 'move') {
-        const x = THREE.MathUtils.clamp(start.position[0] + ((event.clientX - interaction.x) * 2) / width, -1.6, 1.6);
-        const z = THREE.MathUtils.clamp(start.position[2] - ((event.clientY - interaction.y) * 2) / height, -1.6, 1.6);
+        const x = THREE.MathUtils.clamp(start.position[0] + (dx * 2) / width, -1.6, 1.6);
+        const z = THREE.MathUtils.clamp(start.position[2] - (dy * 2) / height, -1.6, 1.6);
         setTransform(interaction.id, { ...start, position: [x, start.position[1], z] });
       } else if (interaction.mode === 'resize') {
         const distance = Math.max(8, Math.hypot(event.clientX - interaction.centerX, event.clientY - interaction.centerY));
