@@ -1,6 +1,7 @@
 import { Box, ChevronRight, KeyRound, Palette, PanelRightClose, PanelRightOpen, SlidersHorizontal, Sun, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
+import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import type { Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import ElementsPanel from './ElementsPanel';
@@ -24,6 +25,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const project = useEditor((state) => state.project);
   const selectedId = useEditor((state) => state.selectedId);
   const frame = useEditor((state) => state.currentFrame);
+  const cameraView = useEditor((state) => state.cameraView);
   const updateObject = useEditor((state) => state.updateObject);
   const setTransform = useEditor((state) => state.setTransform);
   const selectedMotion = useEditor((state) => state.selectedMotion);
@@ -39,8 +41,9 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const sceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1));
   const activeScene = scenes[sceneIndex] ?? scenes[0];
   const activeSceneEnd = scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1;
-  const camera = project.objects.find((item) => item.kind === 'camera');
+  const camera = project.objects.find((item) => item.id === activeScene?.cameraId && item.kind === 'camera');
   const cameraTransform = camera ? evaluateTransform(camera, frame) : undefined;
+  const positionValues = transform && cameraView && cameraTransform ? toCameraSpace(transform.position, cameraTransform) : transform?.position;
   const motionObject = object ?? camera;
   const motionMode = motionObject && activeScene
     ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= activeScene.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0]?.interpolation ?? 'constant'
@@ -55,26 +58,26 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const changeTransform = (property: keyof Transform, value: Vec3) => object && transform && setTransform(object.id, { ...transform, [property]: value });
   const changeTransformAxis = (property: 'position' | 'rotation', axis: 0 | 1 | 2, value: number) => {
     if (!transform) return;
-    const next = [...transform[property]] as Vec3;
+    const next = [...(property === 'position' ? positionValues! : transform[property])] as Vec3;
     next[axis] = value;
-    changeTransform(property, next);
+    changeTransform(property, property === 'position' && cameraView && cameraTransform ? fromCameraSpace(next, cameraTransform) : next);
   };
   const moveCameraAxis = (axis: 0 | 1 | 2, value: number) => {
     if (!activeScene || !cameraTransform) return;
     const delta = value - cameraTransform.position[axis];
     const position = [...cameraTransform.position] as Vec3;
-    const target = [...activeScene.framing.target] as Vec3;
+    const target = cameraTarget(cameraTransform, activeScene.framing.distance);
     position[axis] = value;
     target[axis] += delta;
     setCameraFraming(activeScene.id, position, cameraTransform.rotation, target);
   };
   const setCameraZoom = (distance: number) => {
     if (!activeScene || !cameraTransform) return;
-    const target = new THREE.Vector3(...activeScene.framing.target);
+    const target = new THREE.Vector3(...cameraTarget(cameraTransform, activeScene.framing.distance));
     const direction = new THREE.Vector3(...cameraTransform.position).sub(target);
     if (direction.lengthSq() < .0001) direction.set(1, -1, .5);
     const position = target.clone().add(direction.normalize().multiplyScalar(distance)).toArray() as Vec3;
-    setCameraFraming(activeScene.id, position, cameraTransform.rotation, activeScene.framing.target);
+    setCameraFraming(activeScene.id, position, cameraTransform.rotation, target.toArray() as Vec3);
   };
 
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
@@ -97,10 +100,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div>
 
         <div className="camera-sliders object-transform-sliders">
-          <div className="transform-slider-title">Posizione</div>
+          <div className="transform-slider-title">{cameraView ? 'Posizione nella vista camera' : 'Posizione'}</div>
           {([
             ['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20],
-          ] as const).map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{label}</span><strong>{transform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} elemento`} type="range" min={min} max={max} step="0.1" value={transform.position[axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
+          ] as const).map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Verticale' : label}</span><strong>{positionValues![axis].toFixed(1)} m</strong><input aria-label={`${label} elemento`} title={cameraView && axis === 1 ? 'Aumenta per allontanare il personaggio dalla camera' : undefined} type="range" min={cameraView && axis === 1 ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step="0.1" value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
           <div className="transform-slider-title rotation-title">Rotazione</div>
           {([
             ['Inclina X', 0], ['Inclina Y', 1], ['Gira', 2],

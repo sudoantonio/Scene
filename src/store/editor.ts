@@ -9,6 +9,8 @@ type EditorState = {
   selectedId?: string;
   currentFrame: number;
   isPlaying: boolean;
+  cameraView: boolean;
+  setCameraView(value: boolean): void;
   selectedMotion?: { objectId: string; sceneId: string };
   interpolation: Interpolation;
   gizmoMode: 'translate' | 'rotate' | 'scale';
@@ -144,7 +146,7 @@ export const useEditor = create<EditorState>((set, get) => {
     past: [...state.past.slice(-49), snapshot(state.project)], future: [], dirty: true,
   }));
   return {
-    project: initialProject(), currentFrame: 1, isPlaying: false, interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
+    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => set({ cameraView }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
     newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, currentFrame: 1, past: [], future: [], dirty: false }),
     loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, currentFrame: project.settings.frameStart, past: [], future: [], dirty: false }),
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
@@ -348,6 +350,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const animatedProperties: AnimProperty[] = ['position', 'rotation', 'scale', ...(object.kind === 'camera' ? ['lens' as const] : [])];
       for (const key of object.keyframes) if (key.frame >= scene.frame && key.frame < nextSceneFrame && animatedProperties.includes(key.property)) key.interpolation = mode;
       commit(next);
+      set({ interpolation: mode });
     },
     startMotion: (objectId, sceneId) => {
       const state = get();
@@ -517,6 +520,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const camera = next.objects.find((object) => object.id === scene?.cameraId && object.kind === 'camera');
       if (!scene || !camera || ![...position, ...rotation, ...target].every(Number.isFinite)) return;
       const sceneFrame = activeSceneStart(next, state.currentFrame);
+      if (sceneFrame !== scene.frame) return;
       const motionActive = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id;
       if (motionActive) {
         putMotionKey(camera, sceneFrame, state.currentFrame, 'position', position, state.interpolation);

@@ -605,6 +605,15 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 
 .viewport-top-right { position: absolute; z-index: 4; top: 12px; right: 12px; display: flex; align-items: center; gap: 7px; }
 .viewport-top-right .shot-label { position: static; min-height: 29px; }
+.camera-tool-switch { position: absolute; z-index: 5; top: 12px; left: 50%; transform: translateX(-50%); height: 32px; padding: 2px; display: flex; align-items: center; gap: 2px; background: rgba(255,255,255,.94); border: 1px solid #d2d2cd; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.11); }
+.camera-tool-switch button { min-height: 26px; padding: 0 9px; display: flex; align-items: center; gap: 5px; color: #77756f; background: transparent; border: 0; border-radius: 4px; font-size: 9px; }
+.camera-tool-switch button:hover { color: #363530; background: #f0f0ed; }
+.camera-tool-switch button.active { color: #fff; background: #55534e; }
+.live-camera-preview { position: absolute; z-index: 5; right: 12px; bottom: 12px; width: clamp(150px, 24%, 236px); padding: 0; overflow: hidden; color: #eee; background: #171817; border: 1px solid #777973; border-radius: 7px; box-shadow: 0 8px 24px rgba(0,0,0,.28); text-align: left; }
+.live-camera-preview:hover { border-color: #a9aaa5; transform: translateY(-1px); }
+.live-camera-preview-canvas { display: block; width: 100%; aspect-ratio: var(--project-aspect, 16 / 9); background: #202220; pointer-events: none; }
+.live-camera-preview-canvas > div, .live-camera-preview-canvas canvas { width: 100% !important; height: 100% !important; display: block; pointer-events: none !important; }
+.live-camera-preview-label { height: 25px; padding: 0 8px; display: flex; align-items: center; gap: 5px; color: #cacbc7; background: #262725; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .viewport-tools { height: 30px; padding: 2px; display: flex; align-items: center; gap: 1px; background: rgba(255,255,255,.9); }
 .viewport-tools button { height: 26px; padding: 0 8px; color: #8b8983; background: transparent; font-size: 9px; }
 .viewport-tools button:hover { color: #37352f; background: #f2f2ef; }
@@ -1336,6 +1345,12 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .viewport { background: #181818; }
 .theme-dark .camera-mode { background: #101010; }
 .theme-dark .view-toggle, .theme-dark .center-shot, .theme-dark .viewport-tools { color: #c8c8c8; background: rgba(43,43,43,.94); border-color: #484848; }
+.theme-dark .camera-tool-switch { background: rgba(43,43,43,.96); border-color: #484848; }
+.theme-dark .camera-tool-switch button { color: #aaa; }
+.theme-dark .camera-tool-switch button:hover { color: #eee; background: #383838; }
+.theme-dark .camera-tool-switch button.active { color: #fff; background: #4b4b70; }
+.theme-dark .live-camera-preview { border-color: #5b5b5b; }
+.theme-dark .live-camera-preview:hover { border-color: var(--premiere-accent); }
 .theme-dark .viewport-tools button { color: #aaa; }
 .theme-dark .viewport-tools button:hover { background: #383838; }
 .theme-dark .viewport-tools button.active { color: #fff; background: #4b4b70; }
