@@ -801,9 +801,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const distance = Math.max(.5, camera.position.distanceTo(controls.target));
     const direction = camera.getWorldDirection(new THREE.Vector3()).normalize();
     const worldUp = new THREE.Vector3(0, 0, 1);
-    direction.applyAxisAngle(worldUp, -deltaX * TRACKPAD_ROTATE_SENSITIVITY);
+    direction.applyAxisAngle(worldUp, deltaX * TRACKPAD_ROTATE_SENSITIVITY);
     const right = new THREE.Vector3().crossVectors(direction, worldUp).normalize();
-    const tilted = direction.clone().applyAxisAngle(right, -deltaY * TRACKPAD_ROTATE_SENSITIVITY);
+    const tilted = direction.clone().applyAxisAngle(right, deltaY * TRACKPAD_ROTATE_SENSITIVITY);
     if (Math.abs(tilted.dot(worldUp)) < .985) direction.copy(tilted);
     controls.target.copy(camera.position).addScaledVector(direction, distance);
     camera.lookAt(controls.target);

@@ -55,7 +55,7 @@ h2 { margin: 0 0 11px; font-size: 11px; text-transform: uppercase; letter-spacin
 .outliner-item.selected { background: #2c251b; border-color: #624923; color: #fff0d4; }
 .kind-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--orange); }
 .kind-dot.camera { background: var(--blue); }.kind-dot.area_light,.kind-dot.point_light,.kind-dot.sun_light { background: #ffe284; border-radius: 50%; }
-.viewport { min-width: 0; position: relative; background: #151a22; }
+.viewport { min-width: 0; position: relative; overflow: hidden; background: #151a22; }
 .viewport canvas { display: block; }
 .viewport-badge { position: absolute; left: 13px; bottom: 12px; padding: 5px 8px; border: 1px solid #323c4b; border-radius: 5px; color: #9faaba; background: rgba(13,16,22,.78); font-size: 10px; pointer-events: none; }
 .field { display: block; margin-top: 12px; }
