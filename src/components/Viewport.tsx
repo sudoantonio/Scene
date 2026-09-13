@@ -184,8 +184,6 @@ function MeshVisual({ object }: { object: SceneObject }) {
   }
 }
 
-type CameraTool = 'frame' | 'object' | 'orbit';
-
 function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange }: { object: SceneObject; cameraView: boolean; interactionEnabled?: boolean; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const translationProxy = useRef<THREE.Group>(null);
@@ -407,14 +405,12 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
     onMouseUp={finishGizmoDrag} /></>;
 }
 
-function CameraViewControls({ frame, syncKey, target, disabled, mode, controls, onCommit }: {
-  frame: number; syncKey: string; disabled: boolean; mode: CameraTool;
+function CameraViewControls({ frame, syncKey, target, controls }: {
+  frame: number; syncKey: string;
   target: Transform['position'];
   controls: React.RefObject<OrbitControlsImpl | null>;
-  onCommit(position: Transform['position'], rotation: Transform['rotation'], target: Transform['position']): void;
 }) {
   const camera = useThree((state) => state.camera);
-  const interacting = useRef(false);
 
   useEffect(() => {
     if (!controls.current) return;
@@ -423,15 +419,9 @@ function CameraViewControls({ frame, syncKey, target, disabled, mode, controls, 
     controls.current.update();
   }, [camera, frame, syncKey]);
 
-  return <OrbitControls ref={controls} makeDefault enabled={!disabled && mode !== 'object'} enableDamping={false} enableZoom={false} enableRotate={mode === 'orbit'} enablePan={mode !== 'object'} screenSpacePanning rotateSpeed={.22} panSpeed={.55}
-    mouseButtons={{ LEFT: mode === 'orbit' ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
-    touches={{ ONE: mode === 'orbit' ? THREE.TOUCH.ROTATE : THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
-    onStart={() => { interacting.current = true; useEditor.getState().setPlaying(false); }}
-    onEnd={() => { if (!interacting.current || disabled || !controls.current) return; interacting.current = false; onCommit(
-      camera.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
-      [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
-      controls.current!.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
-    ); }} />;
+  // The camera is driven by trackpad and keyboard so pointer events remain free
+  // for selecting and transforming objects directly in camera view.
+  return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
 function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
@@ -601,7 +591,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const cameraView = useEditor((state) => state.cameraView);
   const setCameraView = useEditor((state) => state.setCameraView);
-  const [cameraTool, setCameraTool] = useState<CameraTool>('frame');
   const [cameraHintVisible, setCameraHintVisible] = useState(true);
   const [draggingObject, setDraggingObject] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
@@ -844,15 +833,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     // flag dell'evento manteniamo lo stato reale della tastiera.
     if (!event.shiftKey && !shiftPressed.current) {
       event.preventDefault(); event.stopPropagation();
-      if (cameraView && cameraTool !== 'object') {
+      if (cameraView) {
         const buffer = cameraRotateBuffer.current;
         buffer.x += delta.x; buffer.y += delta.y;
         if (!buffer.timer) buffer.timer = window.setTimeout(() => {
           const pending = cameraRotateBuffer.current;
           const x = pending.x, y = pending.y;
           pending.x = 0; pending.y = 0; pending.timer = undefined;
-          if (cameraTool === 'orbit') rotateViewFromTrackpad(x, y);
-          else tiltShotCameraFromTrackpad(x, y);
+          tiltShotCameraFromTrackpad(x, y);
         }, 24);
       } else if (!cameraView) rotateViewFromTrackpad(delta.x, delta.y);
       return;
@@ -902,7 +890,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const keyDown = (event: KeyboardEvent) => {
       if (editableTarget(event.target) || event.metaKey || event.ctrlKey) return;
       if (movementCodes.has(event.code)) {
-        if (cameraView && cameraTool === 'object') return;
         event.preventDefault();
         held.add(event.code);
         useEditor.getState().setPlaying(false);
@@ -918,7 +905,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         const editor = useEditor.getState();
         const currentScene = editor.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((scene) => scene.frame <= editor.currentFrame);
         const cameraObject = editor.project.objects.find((object) => object.id === currentScene?.cameraId && object.kind === 'camera');
-        if (currentScene && cameraObject && (!cameraView || cameraTool !== 'object')) {
+        if (currentScene && cameraObject) {
           const controls = cameraView ? shotOrbitRef.current : undefined;
           const transform = evaluateTransform(cameraObject, editor.currentFrame);
           const camera = controls?.object ?? new THREE.PerspectiveCamera();
@@ -968,7 +955,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       window.removeEventListener('keyup', keyUp);
       window.removeEventListener('blur', clearKeys);
     };
-  }, [cameraTool, cameraView]);
+  }, [cameraView]);
 
   return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
@@ -980,23 +967,18 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
       <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow />
       <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#3a3d3a' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#555955' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
-      {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} interactionEnabled={!cameraView || cameraTool === 'object'} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {motionObject && motionPathPoints.length > 1 && (!cameraView || cameraTool === 'object') && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
+      {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
       {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} />}
-      {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} frame={frame} target={activeCameraTarget} syncKey={`${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} disabled={draggingObject} mode={cameraTool} onCommit={(position, rotation, target) => useEditor.getState().setCameraFraming(activeCut.id, position, rotation, target)} />}
+      {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} frame={frame} target={activeCameraTarget} syncKey={`${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>
-    <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => { const next = !cameraView; setCameraView(next); if (next) setCameraTool('frame'); }}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
-    {cameraView && <div className="camera-tool-switch" style={{ left: viewportSize.left }} aria-label="Modalità controllo camera">
-      <button className={cameraTool === 'frame' ? 'active' : ''} onClick={() => setCameraTool('frame')} title="Trascina per spostare l'inquadratura"><Focus size={14} /><span>Inquadratura</span></button>
-      <button className={cameraTool === 'object' ? 'active' : ''} onClick={() => setCameraTool('object')} title="Seleziona e sposta gli oggetti"><Move3d size={14} /><span>Oggetti</span></button>
-      <button className={cameraTool === 'orbit' ? 'active' : ''} onClick={() => { centerFramingOnSubject(); setCameraTool('orbit'); }} title="Ruota la camera attorno al soggetto"><Rotate3d size={14} /><span>Ruota attorno</span></button>
-    </div>}
-    {cameraHintVisible && (!cameraView || cameraTool !== 'object') && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
+    <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => setCameraView(!cameraView)}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
+    {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
         <button className="camera-hint-close" title="Nascondi istruzioni" aria-label="Nascondi istruzioni" onClick={() => setCameraHintVisible(false)}>×</button>
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
@@ -1015,13 +997,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         controls.update();
         select(activeCamera!.id);
       }}>Trova camera</button>}
-      {selectedTransformable && (!cameraView || cameraTool === 'object') && <div className="viewport-tools" aria-label="Strumento trasformazione">{([
+      {selectedTransformable && <div className="viewport-tools" aria-label="Strumento trasformazione">{([
         ['translate', 'Sposta', Move3d],
         ['rotate', 'Ruota', Rotate3d],
         ['scale', 'Scala', Scaling],
       ] as const).map(([mode, label, Icon]) => <button key={mode} title={label} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
     </div>
-    {!cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => { setCameraTool('frame'); setCameraView(true); }} />}
+    {!cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => setCameraView(true)} />}
     {!hasContent && !cameraView && <div className="start-card">
       <div className="start-icon"><Box size={26} /></div>
       <strong>Crea la prima scena</strong>
@@ -1030,7 +1012,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
     <div className="viewport-help">{cameraView
-      ? cameraTool === 'frame' ? '2 dita: inclina · Shift + 2 dita: sposta · pizzica: zoom · WASD/frecce: vola' : cameraTool === 'object' ? `Oggetto: ${actionName} · Aggancio magnetico agli altri elementi` : '2 dita: ruota attorno al soggetto · WASD/frecce: vola'
+      ? '2 dita: inclina · Shift + 2 dita: sposta · pizzica: zoom · WASD/frecce: vola · gli oggetti restano modificabili'
       : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName} con aggancio`}</div>
   </div>;
 }
