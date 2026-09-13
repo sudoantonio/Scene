@@ -1568,6 +1568,22 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .timeline .scene-clip { color: #c8c3b7; background: #33322e; border-color: #4b4942 !important; }
 .theme-dark .timeline .scene-clip.active { color: #fff0c7; background: #4a3e20; border-color: #d1a12a !important; box-shadow: inset 0 0 0 1px #d1a12a; }
 
+/* Header integrato: wordmark Abaco e strumenti incavati nella sua superficie. */
+.abaco-scene-brand { position: absolute; left: 15px; top: 0; bottom: 0; display: flex; align-items: center; gap: 7px; color: #292a27; letter-spacing: -.03em; }
+.abaco-mark { font-size: 15px; line-height: 1; }
+.abaco-scene-brand strong { font-size: 14px; font-weight: 650; }
+.abaco-scene-brand i { width: .5px; height: 16px; margin: 0 3px; background: currentColor; opacity: .32; }
+.abaco-scene-brand b { color: #777873; font-size: 9px; font-weight: 700; letter-spacing: .14em; }
+.camera-tool-switch { top: 0; height: 40px; padding: 0 4px; gap: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+.camera-tool-switch button { min-height: 40px; padding: 0 13px; border: 0; border-left: .5px solid rgba(80,80,76,.13); border-radius: 0; }
+.camera-tool-switch button:last-child { border-right: .5px solid rgba(80,80,76,.13); }
+.camera-tool-switch button.active { box-shadow: inset 0 2px 0 rgba(255,255,255,.22), inset 0 -2px 0 rgba(67,50,8,.6); }
+.theme-dark .abaco-scene-brand { color: #eee; }
+.theme-dark .abaco-scene-brand b { color: #9e9e9a; }
+.theme-dark .camera-tool-switch { background: #1b1b1b; }
+.theme-dark .camera-tool-switch button { border-color: rgba(255,255,255,.08); }
+.theme-dark .camera-tool-switch button.active { box-shadow: inset 0 2px 0 rgba(255,247,215,.34), inset 0 -2px 0 rgba(62,45,4,.75); }
+
 /* Hairline sottili: separano le aree senza disegnare una griglia pesante. */
 .theme-dark { --line: #333; }
 .theme-light { --line: #deded9; }

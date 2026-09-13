@@ -193,7 +193,10 @@ export default function App() {
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 43 : layout.timeline;
   return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
-    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
+    <div className="slim-headbar">
+      <div className="abaco-scene-brand" aria-label="Abaco Scene"><span className="abaco-mark" aria-hidden="true">■</span><strong>abaco</strong><i aria-hidden="true" /><b>SCENE</b></div>
+      <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+    </div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(300px,1fr) 5px ${rightWidth}px` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
