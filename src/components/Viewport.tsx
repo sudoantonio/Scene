@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { Box, Focus, LayoutTemplate, Move3d, Plus, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
+import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
@@ -429,9 +429,8 @@ function CameraViewControls({ syncKey, target, controls }: {
   return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
-export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, lockTransform = false }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; lockTransform?: boolean }) {
-  const currentFrame = useEditor((state) => state.currentFrame);
-  const frame = frameOverride ?? currentFrame;
+export const ShotCamera = memo(function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, lockTransform = false }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; lockTransform?: boolean }) {
+  const frame = useEditor((state) => frameOverride ?? state.currentFrame);
   const transform = evaluateTransform(object, frame);
   const lockedTransform = useRef(transform);
   if (!lockTransform) lockedTransform.current = transform;
@@ -445,7 +444,7 @@ export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRa
   const safeFrameHeightRatio = THREE.MathUtils.clamp(frameHeightRatio, .1, 1);
   const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(frameFov / 2) / safeFrameHeightRatio));
   return <PerspectiveCamera makeDefault position={cameraTransform.position} rotation={cameraTransform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
-}
+});
 
 const loadThumbnailImage = (source: string) => new Promise<HTMLImageElement | undefined>((resolve) => {
   if (!source) return resolve(undefined);
@@ -1181,7 +1180,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionHandleKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
-      {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
+      {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>

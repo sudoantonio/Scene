@@ -291,6 +291,25 @@ describe('scene indipendenti', () => {
     expect(after.some((key) => key.property === 'position' && key.frame === 24 && key.purpose === 'motion' && JSON.stringify(key.value) === JSON.stringify([3, 2, 1]))).toBe(true);
   });
 
+  it('REC avviato direttamente da una scena successiva crea i keyframe in quella scena', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const secondScene = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame)[1];
+    useEditor.getState().setFrame(secondScene.frame);
+    useEditor.getState().select(cubeId);
+    useEditor.getState().startRecording(secondScene.id);
+    expect(useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.some((key) => key.property === 'position' && key.purpose === 'motion' && key.frame === secondScene.frame)).toBe(true);
+    useEditor.getState().setFrame(secondScene.frame + 16);
+    useEditor.getState().setPlaying(false);
+    useEditor.getState().setTransform(cubeId, { position: [5, 2, 1], rotation: [0, 0, 18], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const frames = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame >= secondScene.frame).map((key) => key.frame).sort((a, b) => a - b);
+    expect(frames).toEqual([secondScene.frame, secondScene.frame + 16]);
+  });
+
   it('permette di spostare un punto esistente del percorso', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');

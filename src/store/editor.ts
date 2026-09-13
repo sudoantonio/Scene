@@ -608,14 +608,30 @@ export const useEditor = create<EditorState>((set, get) => {
       const range = sceneRange(state.project, sceneId);
       if (!range) return;
       const startFrame = Math.max(range.scene.frame, Math.min(range.end - 2, state.currentFrame));
+      const next = snapshot(state.project);
+      const selected = next.objects.find((object) => object.id === state.selectedId
+        && object.kind !== 'camera'
+        && !object.kind.includes('light')
+        && evaluateProperty(object, 'visibility', startFrame));
+      const touchedObjectIds: string[] = [];
+      const lastFixedFrames: Record<string, number> = {};
+      let lastMotion: RecordingSession['lastMotion'];
+      if (selected) {
+        const transform = evaluateTransform(selected, startFrame);
+        for (const property of recordingProperties) appendRecordingKey(selected, startFrame, property, transform[property], state.interpolation);
+        touchedObjectIds.push(selected.id);
+        lastFixedFrames[selected.id] = startFrame;
+        lastMotion = { objectId: selected.id, sceneId };
+      }
       set({
+        project: selected ? { ...next, updatedAt: new Date().toISOString() } : state.project,
         currentFrame: startFrame,
         recordingMotion: undefined,
         recordingSession: {
-          sceneId, startFrame, touchedObjectIds: [], changed: false, beforeProject: snapshot(state.project),
-          lastFixedFrames: {}, endpointFrames: {}, endpointKeyIds: {},
+          sceneId, startFrame, touchedObjectIds, changed: Boolean(selected), beforeProject: snapshot(state.project), lastMotion,
+          lastFixedFrames, endpointFrames: {}, endpointKeyIds: {},
         },
-        isPlaying: true,
+        isPlaying: true, dirty: selected ? true : state.dirty,
       });
     },
     stopRecording: () => {
