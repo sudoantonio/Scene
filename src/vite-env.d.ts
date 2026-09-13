@@ -2,6 +2,8 @@
 
 import type { AbacoProject, BlenderPlan } from './domain/schema';
 
+type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
+
 declare global {
   interface Window {
     abaco?: {
@@ -16,6 +18,11 @@ declare global {
       ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number }>;
       generatePlan(project: AbacoProject, contactSheet?: string): Promise<BlenderPlan>;
       buildBlender(project: AbacoProject, plan: BlenderPlan, projectPath: string): Promise<{ version: string; directory: string; blendPath: string }>;
+      syncPreviewProject(state: PreviewState): void;
+      syncPreviewFrame(frame: number): void;
+      getPreviewState(): Promise<PreviewState | null>;
+      onPreviewState(callback: (state: PreviewState) => void): () => void;
+      onPreviewFrame(callback: (frame: number) => void): () => void;
       onMenuCommand(callback: (command: 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings' | 'toggle-theme') => void): () => void;
       onShiftChange(callback: (pressed: boolean) => void): () => void;
     };

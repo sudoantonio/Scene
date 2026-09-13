@@ -1489,10 +1489,10 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .motion-key-tick { pointer-events: auto; cursor: ew-resize; }
 .motion-key-tick.selected { width: 7px; height: 7px; background: white; border-color: #b63838; }
 .theme-dark .motion-key-tick { background: #ff7777; border-color: #ffd0d0; }
-.timeline-record { min-width: 48px; height: 25px; padding: 0 7px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #a5a5a0; background: transparent; border: 1px solid #585854; font-size: 8px; font-weight: 750; letter-spacing: .08em; }
-.timeline-record > i { width: 7px; height: 7px; flex: none; background: #d95050; border-radius: 50%; }
-.timeline-record.active { color: #fff; background: #8e2727; border-color: #ff6868; animation: rec-pulse 1.05s ease-in-out infinite; }
-.timeline-record.active > i { background: #fff; }
+.timeline-record { width: 25px; min-width: 25px; height: 25px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #a5a5a0; background: transparent; border: 1px solid #585854; border-radius: 50%; }
+.timeline-record > i { width: 9px; height: 9px; flex: none; background: #e15050; border-radius: 50%; }
+.timeline-record.active { width: 36px; min-width: 36px; background: #8e2727; border-color: #ff6868; border-radius: 4px; animation: rec-pulse 1.05s ease-in-out infinite; }
+.timeline-record.active > i { width: 8px; height: 8px; background: #fff; border-radius: 1px; }
 @keyframes rec-pulse { 50% { box-shadow: 0 0 0 2px rgba(255,72,72,.24); } }
 .timeline-object-label .row-action { height: 25px; }
 
@@ -1693,5 +1693,16 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   .timeline-toolbar { grid-template-columns: 72px minmax(0,1fr) 64px; gap: 3px; padding: 0 4px; }
   .timeline-transport { gap: 0; }
   .timeline-transport .icon { width: 23px; }
-  .timeline-record { min-width: 42px; padding: 0 4px; }
+  .timeline-record { width: 25px; min-width: 25px; padding: 0; }
+  .timeline-record.active { width: 36px; min-width: 36px; }
 }
+
+/* Finestra monitor: solo il frame camera, sincronizzato con l'editor principale. */
+.preview-monitor { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; background: #090909; -webkit-app-region: drag; user-select: none; }
+.preview-monitor-frame { position: relative; width: min(100vw, calc(100vh * var(--preview-aspect))); max-height: 100vh; aspect-ratio: var(--preview-aspect); overflow: hidden; background: #3d3d3d; }
+.preview-monitor-frame canvas { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.preview-screen-layers { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
+.preview-screen-layer { position: absolute; width: max-content; max-width: none; transform-origin: center; }
+.preview-screen-layer .screen-layer-content > span { display: block; padding: 2px 5px; font-size: calc(34px * var(--layer-scale)); font-weight: 650; line-height: 1.08; white-space: pre-wrap; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.preview-screen-layer .screen-layer-content > img { width: calc(260px * var(--layer-scale)); min-width: 36px; max-width: none; display: block; object-fit: contain; }
+.preview-empty { color: #aaa; font-size: 12px; letter-spacing: .02em; }

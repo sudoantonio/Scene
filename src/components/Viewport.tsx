@@ -130,7 +130,7 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
   </BackgroundAssetBoundary>;
 }
 
-function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model'; path: string }) {
+export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model'; path: string }) {
   const [source, setSource] = useState<string>();
   useEffect(() => {
     let active = true;
@@ -424,7 +424,7 @@ function CameraViewControls({ frame, syncKey, target, controls }: {
   return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
-function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
+export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
   const currentFrame = useEditor((state) => state.currentFrame);
   const frame = frameOverride ?? currentFrame;
   const transform = evaluateTransform(object, frame);
@@ -457,7 +457,7 @@ function ThumbnailEmitter({ projectId, sceneId, revision }: { projectId: string;
   return null;
 }
 
-function ThumbnailItem({ object, frame }: { object: SceneObject; frame: number }) {
+export function ThumbnailItem({ object, frame }: { object: SceneObject; frame: number }) {
   const transform = evaluateTransform(object, frame);
   const shown = { ...object, text: evaluateProperty(object, 'text', frame) as string };
   if (!evaluateProperty(object, 'visibility', frame)) return null;

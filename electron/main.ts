@@ -13,6 +13,9 @@ import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
 type Settings = { apiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
 const defaults: Settings = { reasoning: 'medium' };
 let mainWindow: BrowserWindow | null = null;
+let previewWindow: BrowserWindow | null = null;
+type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
+let latestPreviewState: PreviewState | null = null;
 type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings' | 'toggle-theme';
 
 function sendMenuCommand(command: MenuCommand) {
@@ -45,6 +48,8 @@ function installApplicationMenu() {
       { role: 'selectAll', label: 'Seleziona tutto' },
     ] },
     { label: 'Vista', submenu: [
+      { label: 'Apri finestra inquadratura', accelerator: 'CmdOrCtrl+Shift+P', click: () => openPreviewWindow() },
+      { type: 'separator' },
       { label: 'Cambia tema chiaro/scuro', click: () => sendMenuCommand('toggle-theme') },
       { type: 'separator' },
       { role: 'togglefullscreen', label: 'Schermo intero' },
@@ -58,6 +63,28 @@ function installApplicationMenu() {
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+async function openPreviewWindow() {
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    if (previewWindow.isMinimized()) previewWindow.restore();
+    previewWindow.show();
+    previewWindow.focus();
+    return;
+  }
+  previewWindow = new BrowserWindow({
+    width: 1100, height: 700, minWidth: 480, minHeight: 320,
+    backgroundColor: '#090909', title: 'Inquadratura — Abaco Animatic',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
+  });
+  previewWindow.on('closed', () => { previewWindow = null; });
+  previewWindow.webContents.on('did-finish-load', () => {
+    if (latestPreviewState) previewWindow?.webContents.send('preview:state', latestPreviewState);
+  });
+  if (app.isPackaged) await previewWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query: { preview: '1' } });
+  else await previewWindow.loadURL('http://localhost:5173/?preview=1');
 }
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
@@ -190,6 +217,10 @@ async function createWindow() {
     autoHideMenuBar: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
   });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
+  });
   let shiftDown = false;
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     const next = Boolean(input.shift);
@@ -203,7 +234,22 @@ async function createWindow() {
 
 app.whenReady().then(() => { installApplicationMenu(); return createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+app.on('activate', () => { if (!mainWindow) createWindow(); });
+
+ipcMain.on('preview:project', (_event, payload: PreviewState) => {
+  const project = ProjectSchema.parse(payload.project);
+  const frame = Math.max(project.settings.frameStart, Math.min(project.settings.frameEnd, Math.round(Number(payload.frame) || project.settings.frameStart)));
+  latestPreviewState = { project, frame, theme: payload.theme === 'light' ? 'light' : 'dark' };
+  if (previewWindow && !previewWindow.isDestroyed()) previewWindow.webContents.send('preview:state', latestPreviewState);
+});
+ipcMain.on('preview:frame', (_event, incomingFrame: number) => {
+  if (!latestPreviewState) return;
+  const { frameStart, frameEnd } = latestPreviewState.project.settings;
+  const frame = Math.max(frameStart, Math.min(frameEnd, Math.round(Number(incomingFrame) || frameStart)));
+  latestPreviewState = { ...latestPreviewState, frame };
+  if (previewWindow && !previewWindow.isDestroyed()) previewWindow.webContents.send('preview:frame', frame);
+});
+ipcMain.handle('preview:get', () => latestPreviewState);
 
 ipcMain.handle('project:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Abaco Animatic', extensions: ['json'] }] });

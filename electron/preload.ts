@@ -13,6 +13,19 @@ contextBridge.exposeInMainWorld('abaco', {
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),
   buildBlender: (project: AbacoProject, plan: BlenderPlan, projectPath: string) => ipcRenderer.invoke('blender:build', { project, plan, projectPath }),
+  syncPreviewProject: (state: { project: AbacoProject; frame: number; theme: 'light' | 'dark' }) => ipcRenderer.send('preview:project', state),
+  syncPreviewFrame: (frame: number) => ipcRenderer.send('preview:frame', frame),
+  getPreviewState: () => ipcRenderer.invoke('preview:get'),
+  onPreviewState: (callback: (state: { project: AbacoProject; frame: number; theme: 'light' | 'dark' }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: { project: AbacoProject; frame: number; theme: 'light' | 'dark' }) => callback(state);
+    ipcRenderer.on('preview:state', listener);
+    return () => ipcRenderer.removeListener('preview:state', listener);
+  },
+  onPreviewFrame: (callback: (frame: number) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, frame: number) => callback(frame);
+    ipcRenderer.on('preview:frame', listener);
+    return () => ipcRenderer.removeListener('preview:frame', listener);
+  },
   onMenuCommand: (callback: (command: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, command: string) => callback(command);
     ipcRenderer.on('menu:command', listener);

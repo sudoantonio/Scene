@@ -23,6 +23,7 @@ const initialTheme = (): 'light' | 'dark' => localStorage.getItem('abaco-theme')
 export default function App() {
   const project = useEditor((state) => state.project);
   const projectPath = useEditor((state) => state.projectPath);
+  const currentFrame = useEditor((state) => state.currentFrame);
   const playing = useEditor((state) => state.isPlaying);
   const dirty = useEditor((state) => state.dirty);
   const newProject = useEditor((state) => state.newProject);
@@ -154,6 +155,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('abaco-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.abaco?.syncPreviewProject({ project, frame: currentFrame, theme });
+  }, [project, theme]);
+
+  useEffect(() => {
+    window.abaco?.syncPreviewFrame(currentFrame);
+  }, [currentFrame]);
 
   useEffect(() => {
     if (!viewportFullscreen) return;
