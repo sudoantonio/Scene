@@ -12,6 +12,7 @@ type EditorState = {
   cameraView: boolean;
   setCameraView(value: boolean): void;
   selectedMotion?: { objectId: string; sceneId: string };
+  recordingMotion?: { objectId: string; sceneId: string; startFrame: number };
   interpolation: Interpolation;
   gizmoMode: 'translate' | 'rotate' | 'scale';
   past: AbacoProject[];
@@ -35,6 +36,7 @@ type EditorState = {
   resizeScene(id: string, durationFrames: number): void;
   setTransitionMode(objectId: string, sceneId: string, mode: Interpolation): void;
   startMotion(objectId: string, sceneId: string): void;
+  stopMotion(): void;
   removeSelected(): void;
   updateObject(id: string, patch: Record<string, unknown>): void;
   setSceneNote(id: string, text: string): void;
@@ -177,8 +179,8 @@ export const useEditor = create<EditorState>((set, get) => {
   }));
   return {
     project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
-    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, currentFrame: 1, past: [], future: [], dirty: false }),
-    loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, currentFrame: project.settings.frameStart, past: [], future: [], dirty: false }),
+    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, currentFrame: 1, past: [], future: [], dirty: false }),
+    loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, currentFrame: project.settings.frameStart, past: [], future: [], dirty: false }),
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
     select: (selectedId) => set((state) => ({
       selectedId,
@@ -414,8 +416,9 @@ export const useEditor = create<EditorState>((set, get) => {
       const transform = evaluateTransform(object, scene.frame);
       for (const property of ['position', 'rotation', 'scale'] as const) putKey(object, scene.frame, property, transform[property], state.interpolation, false, 'motion');
       commit(next);
-      set({ selectedMotion: { objectId: object.id, sceneId }, selectedId: object.id });
+      set({ selectedMotion: { objectId: object.id, sceneId }, recordingMotion: { objectId: object.id, sceneId, startFrame: scene.frame }, selectedId: object.id });
     },
+    stopMotion: () => set({ recordingMotion: undefined }),
     removeSelected: () => {
       const state = get();
       if (!state.selectedId) return;
@@ -504,6 +507,8 @@ export const useEditor = create<EditorState>((set, get) => {
       });
       commit(next);
       if (state.selectedId === id) set({ selectedId: undefined });
+      if (state.selectedMotion?.objectId === id) set({ selectedMotion: undefined });
+      if (state.recordingMotion?.objectId === id) set({ recordingMotion: undefined });
     },
     deleteObjectFromScene: (objectId, sceneId) => {
       const next = snapshot(get().project);
@@ -546,6 +551,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       commit(next);
       if (state.selectedMotion?.objectId === objectId && state.selectedMotion.sceneId === sceneId) set({ selectedMotion: undefined });
+      if (state.recordingMotion?.objectId === objectId && state.recordingMotion.sceneId === sceneId) set({ recordingMotion: undefined });
     },
     resetFraming: () => {
       const state = get();
@@ -573,7 +579,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (!scene || !camera || ![...position, ...rotation, ...target].every(Number.isFinite)) return;
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       if (sceneFrame !== scene.frame) return;
-      const motionActive = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id;
+      const motionActive = state.recordingMotion?.objectId === camera.id && state.recordingMotion.sceneId === scene.id;
       if (motionActive) {
         putMotionKey(camera, sceneFrame, state.currentFrame, 'position', position, state.interpolation);
         putMotionKey(camera, sceneFrame, state.currentFrame, 'rotation', rotation, state.interpolation);
@@ -598,7 +604,7 @@ export const useEditor = create<EditorState>((set, get) => {
       let object = next.objects.find((item) => item.id === id);
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object) return;
-      const motionActive = state.selectedMotion?.objectId === id && state.selectedMotion.sceneId === scene?.id;
+      const motionActive = state.recordingMotion?.objectId === id && state.recordingMotion.sceneId === scene?.id;
       for (const property of ['position', 'rotation', 'scale'] as const) {
         if (motionActive) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
         else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
@@ -615,7 +621,11 @@ export const useEditor = create<EditorState>((set, get) => {
         makeCameraShotIndependent(next, object, sceneFrame, state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       commit(next);
-      if (object.id !== id) set({ selectedId: object.id, selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined });
+      if (object.id !== id) set({
+        selectedId: object.id,
+        selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
+        recordingMotion: motionActive ? { objectId: object.id, sceneId: scene!.id, startFrame: state.recordingMotion!.startFrame } : state.recordingMotion,
+      });
     },
     keyPose: (id) => {
       const state = get();
@@ -756,12 +766,12 @@ export const useEditor = create<EditorState>((set, get) => {
     undo: () => set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;
-      return { project: previous, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], dirty: true };
+      return { project: previous, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, dirty: true };
     }),
     redo: () => set((state) => {
       const next = state.future[0];
       if (!next) return state;
-      return { project: next, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), dirty: true };
+      return { project: next, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, dirty: true };
     }),
   };
 });

@@ -30,6 +30,7 @@ export default function App() {
   const markSaved = useEditor((state) => state.markSaved);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
+  const setCameraView = useEditor((state) => state.setCameraView);
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const undo = useEditor((state) => state.undo);
   const redo = useEditor((state) => state.redo);
@@ -41,6 +42,7 @@ export default function App() {
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ left: false, right: false, timeline: false });
+  const [viewportFullscreen, setViewportFullscreen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(initialTheme);
   const shellRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
@@ -154,6 +156,13 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    if (!viewportFullscreen) return;
+    const exit = (event: KeyboardEvent) => { if (event.key === 'Escape') setViewportFullscreen(false); };
+    window.addEventListener('keydown', exit);
+    return () => window.removeEventListener('keydown', exit);
+  }, [viewportFullscreen]);
+
+  useEffect(() => {
     if (!addOpen) return;
     const close = (event: PointerEvent) => { if (!addMenuRef.current?.contains(event.target as Node)) setAddOpen(false); };
     window.addEventListener('pointerdown', close);
@@ -197,7 +206,13 @@ export default function App() {
   const leftWidth = collapsed.left ? 32 : layout.left;
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 43 : layout.timeline;
-  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
+  const toggleViewportFullscreen = () => {
+    setViewportFullscreen((value) => {
+      if (!value) setCameraView(true);
+      return !value;
+    });
+  };
+  return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
     <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(300px,1fr) 5px ${rightWidth}px` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
@@ -207,7 +222,7 @@ export default function App() {
       <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
-    <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
+    <Timeline collapsed={collapsed.timeline} viewportFullscreen={viewportFullscreen} onToggleViewportFullscreen={toggleViewportFullscreen} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
     {message && <div className={`toast ${message.type}`}>{message.type === 'error' ? 'Errore' : message.type === 'ok' ? 'Completato' : 'In corso'}<span>{message.text}</span></div>}
     {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     {plan && <PlanReview plan={plan} busy={busy} onClose={() => setPlan(undefined)} onApprove={approve} />}

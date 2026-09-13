@@ -17,16 +17,20 @@ function ElementThumbnail({ object, compact = false }: { object: SceneObject; co
   const label = object.kind === 'text' ? 'T' : object.kind === 'blend_asset' ? 'B' : '';
   return <span className={`element-thumbnail ${object.kind} ${compact ? 'compact' : ''}`} style={{ '--element-color': object.color } as React.CSSProperties}>{label}</span>;
 }
-export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?(): void }) {
+export default function Timeline({ collapsed, viewportFullscreen, onToggleCollapse, onToggleViewportFullscreen }: { collapsed?: boolean; viewportFullscreen?: boolean; onToggleCollapse?(): void; onToggleViewportFullscreen?(): void }) {
   const project = useEditor((state) => state.project);
   const frame = useEditor((state) => state.currentFrame);
   const playing = useEditor((state) => state.isPlaying);
   const selectedId = useEditor((state) => state.selectedId);
   const selectedMotion = useEditor((state) => state.selectedMotion);
+  const recordingMotion = useEditor((state) => state.recordingMotion);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const select = useEditor((state) => state.select);
   const selectMotion = useEditor((state) => state.selectMotion);
+  const startMotion = useEditor((state) => state.startMotion);
+  const stopMotion = useEditor((state) => state.stopMotion);
+  const keyPose = useEditor((state) => state.keyPose);
   const moveMotionPoint = useEditor((state) => state.moveMotionPoint);
   const deleteMotionPoint = useEditor((state) => state.deleteMotionPoint);
   const splitScene = useEditor((state) => state.splitScene);
@@ -40,7 +44,6 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const deleteObjectFromScene = useEditor((state) => state.deleteObjectFromScene);
   const deleteMotionFromScene = useEditor((state) => state.deleteMotionFromScene);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
-  const [fullscreen, setFullscreen] = useState(false);
   const [transitionDraft, setTransitionDraft] = useState<{ fromId: string; toId: string; label: string; text: string }>();
   const [selectedTrack, setSelectedTrack] = useState<TrackSelection>();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
@@ -64,6 +67,29 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const activeScene = scenes[activeSceneIndex] ?? scenes[0];
   const framingCamera = project.objects.find((object) => object.id === activeScene?.cameraId && object.kind === 'camera');
   const activeSceneEnd = scenes[activeSceneIndex + 1]?.frame ?? end + 1;
+  const selectedRecordObject = project.objects.find((object) => object.id === selectedId && !object.kind.includes('light'));
+  const recordTarget = selectedRecordObject ?? framingCamera;
+  const toggleRecording = () => {
+    setPlaying(false);
+    if (recordingMotion) {
+      const recordingSceneIndex = scenes.findIndex((scene) => scene.id === recordingMotion.sceneId);
+      const recordingScene = scenes[recordingSceneIndex];
+      const recordingEnd = scenes[recordingSceneIndex + 1]?.frame ?? end + 1;
+      if (recordingScene && (frame < recordingScene.frame || frame >= recordingEnd)) setFrame(recordingEnd - 1);
+      window.dispatchEvent(new Event('abaco:flush-camera-edit'));
+      keyPose(recordingMotion.objectId);
+      stopMotion();
+      return;
+    }
+    if (!activeScene || !recordTarget) return;
+    setFrame(activeScene.frame);
+    startMotion(recordTarget.id, activeScene.id);
+    const recording = useEditor.getState().recordingMotion;
+    if (!recording) return;
+    select(recording.objectId);
+    selectMotion({ objectId: recording.objectId, sceneId: recording.sceneId });
+    setFrame(Math.max(activeScene.frame + 1, activeSceneEnd - 1));
+  };
   const canSplit = activeSceneIndex >= 0 && frame > scenes[activeSceneIndex].frame + 1 && frame < activeSceneEnd - 1;
   const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;
   const subjectTransform = framingSubject ? evaluateTransform(framingSubject, frame) : undefined;
@@ -183,32 +209,34 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
   };
-  const renderMotionTrack = (object: SceneObject, camera = false) => {
+  const renderMotionTrack = (object: SceneObject | undefined, camera = false) => {
     const clips = scenes.flatMap((scene, index) => {
+      const motionObject = camera ? project.objects.find((item) => item.id === scene.cameraId && item.kind === 'camera') : object;
+      if (!motionObject) return [];
       const sceneEnd = scenes[index + 1]?.frame ?? end + 1;
-      const keys = object.keyframes.filter((key) => key.property === 'position' && key.frame >= scene.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const keys = motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= scene.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
       const realPoints = keys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== scene.frame));
       if (!realPoints.length) return [];
       const firstFrame = keys[0].frame;
       const lastMotionFrame = Math.max(...realPoints.map((key) => key.frame));
       const motionEnd = Math.min(sceneEnd, Math.max(scene.frame + 1, lastMotionFrame + 1));
-      const active = selectedMotion?.objectId === object.id && selectedMotion.sceneId === scene.id;
+      const active = selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === scene.id;
       const width = Math.max(0.2, ((motionEnd - scene.frame) / Math.max(1, end - start + 1)) * 100);
       const insetLeft = index > 0 ? 6 : 0;
-      return [<button key={`${object.id}-${scene.id}-movement`} className={`recorded-motion-segment ${active ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft}px)` }} title={`Movimento ${camera ? 'camera' : object.name} · ${scene.name ?? 'Scena'} · ${realPoints.length} punti`} onClick={(event) => {
+      return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${active ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft}px)` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · ${realPoints.length} punti`} onClick={(event) => {
         event.stopPropagation();
         setFrame(firstFrame);
-        select(object.id);
-        selectMotion({ objectId: object.id, sceneId: scene.id });
+        select(motionObject.id);
+        selectMotion({ objectId: motionObject.id, sceneId: scene.id });
         window.dispatchEvent(new CustomEvent('abaco:edit-motion'));
-        setSelectedTrack({ scope: camera ? 'framing' : 'object', sceneId: scene.id, objectId: camera ? undefined : object.id, label: `Movimento ${camera ? 'camera' : object.name}` });
-        setDeleteTarget({ kind: 'motion', objectId: object.id, sceneId: scene.id });
+        setSelectedTrack({ scope: camera ? 'framing' : 'object', sceneId: scene.id, objectId: camera ? undefined : motionObject.id, label: `Movimento ${camera ? 'camera' : motionObject.name}` });
+        setDeleteTarget({ kind: 'motion', objectId: motionObject.id, sceneId: scene.id });
         setCommentDraft(undefined);
         setTransitionDraft(undefined);
-      }}><span className="motion-line-swatch" /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - scene.frame) / Math.max(1, motionEnd - scene.frame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(object, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span></button>];
+      }}><span className="motion-line-swatch" /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - scene.frame) / Math.max(1, motionEnd - scene.frame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span></button>];
     });
     if (!clips.length) return null;
-    return <Fragment key={`${object.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy"><i />Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
+    return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy"><i />Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
   };
   const transitionMarkers = scenes.slice(1).map((scene, index) => {
     const from = scenes[index];
@@ -258,7 +286,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
     window.addEventListener('keydown', remove);
     return () => window.removeEventListener('keydown', remove);
   }, [deleteTarget]);
-  return <section className={`timeline ${fullscreen ? 'fullscreen' : ''} ${collapsed ? 'collapsed' : ''}`}>
+  return <section className={`timeline ${collapsed ? 'collapsed' : ''}`}>
     <header className="timeline-toolbar">
       <div className="timeline-context">
         <strong className="timecode">{timecode}</strong>
@@ -268,12 +296,13 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
         <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
         <button className="icon" title="Frame precedente" aria-label="Frame precedente" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
         <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
+        <button className={`timeline-record ${recordingMotion ? 'active' : ''}`} disabled={!recordingMotion && !recordTarget} title={recordingMotion ? 'Salva il punto finale e termina la registrazione' : `Registra movimento ${recordTarget?.name ?? ''}`} onClick={toggleRecording}><i />{recordingMotion ? 'STOP' : 'REC'}</button>
         <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
         <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
         <button className="timeline-comment-button" disabled={!currentCommentTarget()} title="Aggiungi un commento all’elemento selezionato" onClick={() => { const target = currentCommentTarget(); if (target) openComment(target); }}><MessageSquarePlus size={14} /><span>Commento</span></button>
         <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
       </div>
-      <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={fullscreen ? 'Esci da schermo intero' : 'Timeline a schermo intero'} onClick={() => setFullscreen((value) => !value)}>{fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
+      <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={viewportFullscreen ? 'Ripristina pannelli' : 'Inquadratura a schermo intero'} onClick={onToggleViewportFullscreen}>{viewportFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
     </header>
     {commentDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommentDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Commento ${commentDraft.label}`}>
       <div className="comment-popover-head"><span title={commentDraft.label}>Commento · {commentDraft.label}</span><button className="icon" title="Chiudi" onClick={() => setCommentDraft(undefined)}><X size={14} /></button></div>
@@ -301,7 +330,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
           <span className="clip-resize-handle" onPointerDown={(event) => beginResize(index, event)} />
         </div>;
       })}{transitionMarkers}<i style={{ left: left(frame) }} /></div>
-      {framingCamera && renderMotionTrack(framingCamera, true)}
+      {renderMotionTrack(undefined, true)}
       {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedId === object.id ? 'active' : ''}`}>
         <div className="track-label timeline-object-label" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/abaco-object', object.id); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData('text/abaco-object'); if (sourceId) reorderObjects(sourceId, object.id); }}>
           <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={() => { select(object.id); selectMotion(undefined); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Nascondi' : 'Mostra'} aria-label={objectVisible ? `Nascondi ${displayName}` : `Mostra ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Elimina" aria-label={`Elimina ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>

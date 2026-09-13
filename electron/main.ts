@@ -185,6 +185,8 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1500, height: 960, minWidth: 1100, minHeight: 720, backgroundColor: '#101319',
     title: 'Abaco Animatic',
+    titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
     autoHideMenuBar: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
   });

@@ -642,6 +642,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const settings = useEditor((state) => state.project.settings);
   const frame = useEditor((state) => state.currentFrame);
   const selectedMotion = useEditor((state) => state.selectedMotion);
+  const recordingMotion = useEditor((state) => state.recordingMotion);
   const select = useEditor((state) => state.select);
   const addObject = useEditor((state) => state.addObject);
   const selectedId = useEditor((state) => state.selectedId);
@@ -706,7 +707,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const lightRadius = Math.cos(lightElevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(lightAngle) * lightRadius, -Math.cos(lightAngle) * lightRadius, 1.5 + Math.sin(lightElevation) * 9];
   const aspect = settings.resolutionX / settings.resolutionY;
-  const actionName = gizmoMode === 'translate' ? 'sposta' : gizmoMode === 'rotate' ? 'ruota' : 'ridimensiona';
   const cameraFrame = useMemo(() => {
     if (!cameraView || !viewportSize.width || !viewportSize.height) return undefined;
     const margin = Math.min(48, Math.max(20, Math.min(viewportSize.width, viewportSize.height) * .07));
@@ -1015,7 +1015,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
   }, [cameraView]);
 
-  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
+  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
@@ -1072,8 +1072,5 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <div><button className="primary" onClick={() => addObject('cube')}><Plus size={16} /> Forma</button><button className="secondary" onClick={() => addObject('text')}><TextCursorInput size={16} /> Testo</button></div>
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
-    <div className="viewport-help">{cameraView
-      ? '2 dita: inclina · Shift + 2 dita: sposta · pizzica: zoom · WASD/frecce: vola · gli oggetti restano modificabili'
-      : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName} con aggancio`}</div>
   </div>;
 }
