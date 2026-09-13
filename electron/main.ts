@@ -118,7 +118,20 @@ async function runProcess(command: string, args: string[], cwd: string): Promise
 async function blenderCommand(extraFlatpakPermissions: string[] = []) {
   const settings = await readSettings();
   if (settings.blenderPath) return { command: settings.blenderPath, prefix: [] as string[] };
-  if (process.platform === 'darwin') return { command: '/Applications/Blender.app/Contents/MacOS/Blender', prefix: [] as string[] };
+  if (process.platform === 'darwin') {
+    const candidates = [
+      '/Applications/Blender.app/Contents/MacOS/Blender',
+      path.join(app.getPath('desktop'), 'Blender.app/Contents/MacOS/Blender'),
+      path.join(app.getPath('home'), 'Applications/Blender.app/Contents/MacOS/Blender'),
+    ];
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate);
+        return { command: candidate, prefix: [] as string[] };
+      } catch { /* prova la posizione successiva */ }
+    }
+    return { command: candidates[0], prefix: [] as string[] };
+  }
   if (process.platform === 'linux') return { command: 'flatpak', prefix: ['run', ...extraFlatpakPermissions.map((value) => `--filesystem=${value}`), 'org.blender.Blender'] };
   return { command: 'blender', prefix: [] as string[] };
 }
