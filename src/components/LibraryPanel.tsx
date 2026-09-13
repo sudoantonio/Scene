@@ -3,7 +3,7 @@ import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { useEditor } from '../store/editor';
 
-const THUMBNAIL_CACHE_VERSION = 'v2';
+const THUMBNAIL_CACHE_VERSION = 'v3';
 const thumbnailCacheKey = (projectId: string, sceneId: string) => `abaco-thumb:${THUMBNAIL_CACHE_VERSION}:${projectId}:${sceneId}`;
 
 function ScenePreview({ frame, number, thumbnail, aspect }: { frame: number; number: number; thumbnail?: string; aspect: number }) {

@@ -266,6 +266,32 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(cube, scenes[2].frame)).toEqual({ position: [4, -2, 1], rotation: [10, 20, 30], scale: [1.5, 1.5, 1.5] });
   });
 
+  it('limita un nuovo elemento alla sola scena in cui viene aggiunto', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addShot();
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(scenes[0].frame);
+    useEditor.getState().addObject('cube');
+    const cube = useEditor.getState().project.objects.find((object) => object.id === useEditor.getState().selectedId)!;
+    expect(cube.sceneIds).toEqual([scenes[0].id]);
+    expect(evaluateProperty(cube, 'visibility', scenes[0].frame)).toBe(true);
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(false);
+  });
+
+  it('incolla copie indipendenti soltanto nella scena scelta', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('text');
+    const sourceId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const scene = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame)[1];
+    const [copyId] = useEditor.getState().duplicateObjectsToScene([sourceId], scene.id);
+    const copy = useEditor.getState().project.objects.find((object) => object.id === copyId)!;
+    expect(copy.id).not.toBe(sourceId);
+    expect(copy.sceneIds).toEqual([scene.id]);
+    expect(evaluateProperty(copy, 'visibility', 1)).toBe(false);
+    expect(evaluateProperty(copy, 'visibility', scene.frame)).toBe(true);
+  });
+
   it('zoom e nota appartengono solo alla scena selezionata', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     const cameraId = useEditor.getState().project.objects[0].id;
@@ -379,7 +405,7 @@ describe('scene indipendenti', () => {
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 
-  it('elimina un blocco elemento soltanto dalla scena selezionata', () => {
+  it('elimina la riga quando si cancella l’unico blocco scena di un elemento', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
@@ -387,10 +413,7 @@ describe('scene indipendenti', () => {
     const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
     useEditor.getState().deleteObjectFromScene(cubeId, scenes[0].id);
     const project = useEditor.getState().project;
-    const cube = project.objects.find((object) => object.id === cubeId)!;
-    expect(evaluateProperty(cube, 'visibility', scenes[0].frame)).toBe(false);
-    expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(true);
-    expect(project.objects.some((object) => object.id === cubeId)).toBe(true);
+    expect(project.objects.some((object) => object.id === cubeId)).toBe(false);
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 

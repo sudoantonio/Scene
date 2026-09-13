@@ -1731,3 +1731,25 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   border: 0 !important;
   box-shadow: none !important;
 }
+
+/* Le barre di montaggio sono rettangoli netti; le scene restano separate da un piccolo respiro. */
+.app-shell :is(.scene-clip, .scene-image, .presence-segment, .recorded-motion-segment, .motion-segment) {
+  border-radius: 0 !important;
+}
+.timeline .scene-image {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/* I livelli 2D conservano proporzioni e dimensioni rispetto al frame, anche ridimensionando la finestra. */
+.screen-space-layers, .preview-screen-layers { container-type: size; }
+.screen-space-layer .screen-layer-content > span,
+.preview-screen-layer .screen-layer-content > span {
+  font-size: calc(2.65625cqw * var(--layer-scale));
+}
+.screen-space-layer .screen-layer-content > img,
+.preview-screen-layer .screen-layer-content > img {
+  width: calc(20.3125cqw * var(--layer-scale));
+  min-width: calc(2.8125cqw * var(--layer-scale));
+}

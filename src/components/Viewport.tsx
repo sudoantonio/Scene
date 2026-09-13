@@ -439,21 +439,73 @@ export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRa
   return <PerspectiveCamera makeDefault position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
 }
 
-function ThumbnailEmitter({ projectId, sceneId, revision }: { projectId: string; sceneId: string; revision: string }) {
+const loadThumbnailImage = (source: string) => new Promise<HTMLImageElement | undefined>((resolve) => {
+  if (!source) return resolve(undefined);
+  const image = new window.Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => resolve(undefined);
+  image.src = source;
+});
+
+function ThumbnailEmitter({ projectId, sceneId, revision, objects, frame }: { projectId: string; sceneId: string; revision: string; objects: SceneObject[]; frame: number }) {
   const { gl, invalidate } = useThree();
   useEffect(() => {
+    let cancelled = false;
     invalidate();
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
       invalidate();
       secondFrame = window.requestAnimationFrame(() => {
         invalidate();
-        const url = gl.domElement.toDataURL('image/jpeg', .72);
-        window.dispatchEvent(new CustomEvent('abaco:scene-thumbnail', { detail: { projectId, sceneId, revision, url } }));
+        void (async () => {
+          const source = gl.domElement;
+          const output = document.createElement('canvas');
+          output.width = source.width;
+          output.height = source.height;
+          const context = output.getContext('2d');
+          if (!context) return;
+          context.drawImage(source, 0, 0);
+          const frameScale = output.width / 1280;
+          for (const object of objects.filter((item) => item.screenSpace && evaluateProperty(item, 'visibility', frame))) {
+            const transform = evaluateTransform(object, frame);
+            const scale = Math.max(.1, transform.scale[0]) * frameScale;
+            const x = (transform.position[0] + 1) * output.width / 2;
+            const y = (1 - transform.position[2]) * output.height / 2;
+            context.save();
+            context.translate(x, y);
+            context.rotate(THREE.MathUtils.degToRad(transform.rotation[2]));
+            if (object.kind === 'text') {
+              const lines = String(evaluateProperty(object, 'text', frame)).split('\n');
+              const fontSize = 34 * scale;
+              context.font = `650 ${fontSize}px system-ui, sans-serif`;
+              context.textAlign = 'center';
+              context.textBaseline = 'middle';
+              context.fillStyle = object.color;
+              context.shadowColor = 'rgba(0,0,0,.45)';
+              context.shadowBlur = Math.max(1, 3 * frameScale);
+              lines.forEach((line, index) => context.fillText(line, 0, (index - (lines.length - 1) / 2) * fontSize * 1.08));
+            } else {
+              const image = await loadThumbnailImage(object.asset.proxyPath);
+              if (image) {
+                const width = 260 * scale;
+                const height = width * image.naturalHeight / Math.max(1, image.naturalWidth);
+                const [top, right, bottom, left] = object.screenCrop;
+                const sourceX = image.naturalWidth * left, sourceY = image.naturalHeight * top;
+                const sourceWidth = image.naturalWidth * Math.max(.01, 1 - left - right);
+                const sourceHeight = image.naturalHeight * Math.max(.01, 1 - top - bottom);
+                context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, -width / 2 + width * left, -height / 2 + height * top, width * (1 - left - right), height * (1 - top - bottom));
+              }
+            }
+            context.restore();
+          }
+          if (cancelled) return;
+          const url = output.toDataURL('image/jpeg', .76);
+          window.dispatchEvent(new CustomEvent('abaco:scene-thumbnail', { detail: { projectId, sceneId, revision, url } }));
+        })();
       });
     });
-    return () => { window.cancelAnimationFrame(firstFrame); window.cancelAnimationFrame(secondFrame); };
-  }, [gl, invalidate, projectId, revision, sceneId]);
+    return () => { cancelled = true; window.cancelAnimationFrame(firstFrame); window.cancelAnimationFrame(secondFrame); };
+  }, [frame, gl, invalidate, objects, projectId, revision, sceneId]);
   return null;
 }
 
@@ -473,7 +525,7 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark }: { p
   const elevation = THREE.MathUtils.degToRad(scene.lighting.elevation);
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
-  const revision = `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}`).join('|')}`;
+  const revision = `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${object.screenCrop.join(',')}`).join('|')}`;
   return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><Canvas frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
     <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
@@ -481,7 +533,7 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark }: { p
     <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
     {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
     <ShotCamera object={camera} aspect={aspect} frame={frame} />
-    <ThumbnailEmitter projectId={projectId} sceneId={scene.id} revision={revision} />
+    <ThumbnailEmitter projectId={projectId} sceneId={scene.id} revision={revision} objects={objects} frame={frame} />
   </Canvas></div>;
 }
 

@@ -53,6 +53,7 @@ export const SceneObjectSchema = z.object({
     previewScale: z.number().finite().positive().default(1),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }),
   screenSpace: z.boolean().default(false),
+  sceneIds: z.array(z.string().uuid()).default([]),
   screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
   sceneNotes: z.array(z.object({ frame: z.number().int().positive(), text: z.string() })).default([]),
   keyframes: z.array(KeyframeSchema).default([]),
@@ -202,7 +203,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
-    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, screenSpace: kind === 'text', screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
+    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }
 

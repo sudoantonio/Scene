@@ -47,6 +47,7 @@ type EditorState = {
   setCameraFraming(sceneId: string, position: Vec3, rotation: Vec3, target: Vec3): void;
   reorderObjects(sourceId: string, targetId: string): void;
   deleteObject(id: string): void;
+  duplicateObjectsToScene(objectIds: string[], sceneId: string): string[];
   deleteObjectFromScene(objectId: string, sceneId: string): void;
   deleteMotionFromScene(objectId: string, sceneId: string): void;
   setTransform(id: string, transform: Transform): void;
@@ -80,6 +81,12 @@ const initialProject = () => {
 
 const sceneStarts = (project: AbacoProject) => [...new Set(project.cameraCuts.map((cut) => cut.frame))].sort((a, b) => a - b);
 const activeSceneStart = (project: AbacoProject, frame: number) => sceneStarts(project).filter((start) => start <= frame).at(-1) ?? project.settings.frameStart;
+const sceneRange = (project: AbacoProject, sceneId: string) => {
+  const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+  const index = scenes.findIndex((scene) => scene.id === sceneId);
+  if (index < 0) return undefined;
+  return { scene: scenes[index], end: scenes[index + 1]?.frame ?? project.settings.frameEnd + 1 };
+};
 const putKey = (object: SceneObject, frame: number, property: AnimProperty, value: KeyframeValue, interpolation: Interpolation = 'constant', preserveInterpolation = false, purpose: 'snapshot' | 'motion' = 'snapshot') => {
   const existing = object.keyframes.find((key) => key.frame === frame && key.property === property);
   const data = { value: structuredClone(value), interpolation, source: 'user' as const, purpose, commentIds: [] };
@@ -100,6 +107,15 @@ const closePreviousScene = (object: SceneObject, sceneFrame: number, properties:
     const previous = object.keyframes.filter((key) => key.property === property && key.frame < sceneFrame).sort((a, b) => b.frame - a.frame)[0];
     if (previous) previous.interpolation = 'constant';
   }
+};
+
+const makeObjectLocalToScene = (project: AbacoProject, object: SceneObject, sceneId: string) => {
+  const range = sceneRange(project, sceneId);
+  if (!range) return;
+  object.sceneIds = [sceneId];
+  object.visible = false;
+  putKey(object, range.scene.frame, 'visibility', true, 'constant');
+  if (range.end <= project.settings.frameEnd) putKey(object, range.end, 'visibility', false, 'constant');
 };
 
 const makeCameraShotIndependent = (project: AbacoProject, camera: SceneObject, sceneFrame: number, keepSceneStartConstant = true) => {
@@ -201,15 +217,11 @@ export const useEditor = create<EditorState>((set, get) => {
       const object = createSceneObject(kind, state.project.objects.filter((item) => item.kind === kind).length + 1);
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
-      object.visible = sceneFrame === next.settings.frameStart;
+      const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
       putKey(object, sceneFrame, 'position', object.transform.position);
       putKey(object, sceneFrame, 'rotation', object.transform.rotation);
       putKey(object, sceneFrame, 'scale', object.transform.scale);
-      if (sceneFrame > next.settings.frameStart) {
-        putKey(object, next.settings.frameStart, 'visibility', false, 'constant');
-        putKey(object, sceneFrame - 1, 'visibility', false, 'constant');
-      }
-      putKey(object, sceneFrame, 'visibility', true, 'constant');
+      if (scene) makeObjectLocalToScene(next, object, scene.id);
       if (kind === 'text') putKey(object, sceneFrame, 'text', object.text, 'constant');
       next.objects.push(object);
       commit(next);
@@ -224,10 +236,11 @@ export const useEditor = create<EditorState>((set, get) => {
       object.transform.scale = [1, 1, 1];
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
+      const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
       putKey(object, sceneFrame, 'position', object.transform.position);
       putKey(object, sceneFrame, 'rotation', object.transform.rotation);
       putKey(object, sceneFrame, 'scale', object.transform.scale);
-      putKey(object, sceneFrame, 'visibility', true, 'constant');
+      if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
       set({ selectedId: object.id });
@@ -242,6 +255,7 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
+      const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
       const activeCut = next.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= state.currentFrame);
       const camera = next.objects.find((item) => item.id === activeCut?.cameraId && item.kind === 'camera');
       if (camera) {
@@ -252,15 +266,10 @@ export const useEditor = create<EditorState>((set, get) => {
         // attorno all'asse verticale per presentarli subito verso la camera.
         if (Math.hypot(deltaX, deltaY) > .0001) object.transform.rotation[2] = Number(THREE.MathUtils.radToDeg(Math.atan2(deltaX, -deltaY)).toFixed(3));
       }
-      object.visible = sceneFrame === next.settings.frameStart;
       putKey(object, sceneFrame, 'position', object.transform.position);
       putKey(object, sceneFrame, 'rotation', object.transform.rotation);
       putKey(object, sceneFrame, 'scale', object.transform.scale);
-      if (sceneFrame > next.settings.frameStart) {
-        putKey(object, next.settings.frameStart, 'visibility', false, 'constant');
-        putKey(object, sceneFrame - 1, 'visibility', false, 'constant');
-      }
-      putKey(object, sceneFrame, 'visibility', true, 'constant');
+      if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
       set({ selectedId: object.id });
@@ -288,6 +297,9 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       const newScene: AbacoProject['cameraCuts'][number] = { id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scena ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) };
       next.cameraCuts.push(newScene);
+      for (const object of next.objects) {
+        if (object.sceneIds.length) putKey(object, nextFrame, 'visibility', false, 'constant');
+      }
       makeSceneCameraExclusive(next, newScene);
       syncScopedCommentRanges(next);
       commit(next);
@@ -317,6 +329,9 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       const split = { id: crypto.randomUUID(), cameraId: scene.cameraId, frame: state.currentFrame, source: 'user' as const, commentIds: [], transition: 'auto' as const, lighting: structuredClone(scene.lighting), background: structuredClone(scene.background), framing: structuredClone(scene.framing) };
       next.cameraCuts.push(split);
+      for (const object of next.objects) {
+        if (object.sceneIds.includes(scene.id)) object.sceneIds.push(split.id);
+      }
       makeSceneCameraExclusive(next, split);
       const following = scenes[index + 1];
       if (following) next.comments.forEach((comment) => { if (comment.kind === 'transition' && comment.fromSceneId === scene.id && comment.toSceneId === following.id) comment.fromSceneId = split.id; });
@@ -512,6 +527,35 @@ export const useEditor = create<EditorState>((set, get) => {
       if (state.selectedMotion?.objectId === id) set({ selectedMotion: undefined });
       if (state.recordingMotion?.objectId === id) set({ recordingMotion: undefined });
     },
+    duplicateObjectsToScene: (objectIds, sceneId) => {
+      const state = get();
+      const next = snapshot(state.project);
+      const range = sceneRange(next, sceneId);
+      if (!range) return [];
+      const created: string[] = [];
+      for (const sourceId of [...new Set(objectIds)]) {
+        const source = state.project.objects.find((object) => object.id === sourceId && object.kind !== 'camera' && !object.kind.includes('light'));
+        if (!source) continue;
+        const copy = structuredClone(source);
+        copy.id = crypto.randomUUID();
+        copy.name = `${source.name} copia`;
+        copy.transform = evaluateTransform(source, state.currentFrame);
+        copy.text = evaluateProperty(source, 'text', state.currentFrame) as string;
+        copy.sceneNotes = [];
+        copy.keyframes = [];
+        putKey(copy, range.scene.frame, 'position', copy.transform.position);
+        putKey(copy, range.scene.frame, 'rotation', copy.transform.rotation);
+        putKey(copy, range.scene.frame, 'scale', copy.transform.scale);
+        if (copy.kind === 'text') putKey(copy, range.scene.frame, 'text', copy.text, 'constant');
+        makeObjectLocalToScene(next, copy, sceneId);
+        next.objects.push(copy);
+        created.push(copy.id);
+      }
+      if (!created.length) return [];
+      commit(next);
+      set({ selectedId: created.at(-1) });
+      return created;
+    },
     deleteObjectFromScene: (objectId, sceneId) => {
       const next = snapshot(get().project);
       const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
@@ -521,6 +565,15 @@ export const useEditor = create<EditorState>((set, get) => {
       if (!object || !scene) return;
       ensureSceneSnapshots(next);
       const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
+      if (object.sceneIds.length) {
+        object.sceneIds = object.sceneIds.filter((id) => id !== sceneId);
+        if (!object.sceneIds.length) {
+          next.objects = next.objects.filter((item) => item.id !== objectId);
+          next.comments = next.comments.filter((comment) => !comment.targetIds.includes(objectId));
+          commit(next);
+          return;
+        }
+      }
       object.keyframes = object.keyframes.filter((key) => key.frame < scene.frame || key.frame >= sceneEnd);
       object.sceneNotes = object.sceneNotes.filter((note) => note.frame < scene.frame || note.frame >= sceneEnd);
       putKey(object, scene.frame, 'visibility', false, 'constant');

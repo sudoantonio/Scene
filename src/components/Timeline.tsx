@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, MoveRight, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
@@ -13,6 +13,7 @@ type DeleteTarget =
   | { kind: 'segment'; objectId: string; sceneId: string }
   | { kind: 'motion'; objectId: string; sceneId: string }
   | { kind: 'keyframe'; objectId: string; keyframeId: string };
+let copiedTimelineObjectIds: string[] = [];
 function ElementThumbnail({ object, compact = false }: { object: SceneObject; compact?: boolean }) {
   const size = compact ? 11 : 12;
   const icon = object.kind === 'text' ? <Type size={size} />
@@ -50,6 +51,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const updateObject = useEditor((state) => state.updateObject);
   const reorderObjects = useEditor((state) => state.reorderObjects);
   const deleteObject = useEditor((state) => state.deleteObject);
+  const duplicateObjectsToScene = useEditor((state) => state.duplicateObjectsToScene);
   const deleteObjectFromScene = useEditor((state) => state.deleteObjectFromScene);
   const deleteMotionFromScene = useEditor((state) => state.deleteMotionFromScene);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
@@ -59,6 +61,9 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const [commentDraft, setCommentDraft] = useState<CommentDraft>();
   const [sceneThumbnails, setSceneThumbnails] = useState<Record<string, string>>({});
   const [timelineZoom, setTimelineZoom] = useState(135);
+  const [selectedTimelineObjectIds, setSelectedTimelineObjectIds] = useState<Set<string>>(new Set());
+  const selectedTimelineObjectIdsRef = useRef(selectedTimelineObjectIds);
+  selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
   const start = project.settings.frameStart, end = project.settings.frameEnd;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const selectedSubject = project.objects.find((object) => object.id === selectedId && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
@@ -94,6 +99,16 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     selectMotion({ objectId: recording.objectId, sceneId: recording.sceneId });
   };
   const canSplit = activeSceneIndex >= 0 && frame > scenes[activeSceneIndex].frame + 1 && frame < activeSceneEnd - 1;
+  const selectTimelineObject = (objectId: string, additive = false) => {
+    setSelectedTimelineObjectIds((current) => {
+      if (!additive) return new Set([objectId]);
+      const next = new Set(current);
+      if (next.has(objectId)) next.delete(objectId); else next.add(objectId);
+      return next;
+    });
+    select(objectId);
+    selectMotion(undefined);
+  };
   const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;
   const subjectTransform = framingSubject ? evaluateTransform(framingSubject, frame) : undefined;
   const zoomDistance = cameraTransform && subjectTransform ? Math.max(.5, new THREE.Vector3(...cameraTransform.position).distanceTo(new THREE.Vector3(...subjectTransform.position))) : 8;
@@ -115,7 +130,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   useEffect(() => {
     const loaded: Record<string, string> = {};
     for (const scene of scenes) {
-      const value = localStorage.getItem(`abaco-thumb:v2:${project.id}:${scene.id}`);
+      const value = localStorage.getItem(`abaco-thumb:v3:${project.id}:${scene.id}`);
       if (value) loaded[scene.id] = value;
     }
     setSceneThumbnails(loaded);
@@ -123,7 +138,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       const detail = (event as CustomEvent<{ projectId: string; sceneId: string; url: string }>).detail;
       if (!detail || detail.projectId !== project.id) return;
       setSceneThumbnails((current) => ({ ...current, [detail.sceneId]: detail.url }));
-      try { localStorage.setItem(`abaco-thumb:v2:${detail.projectId}:${detail.sceneId}`, detail.url); } catch { /* cache piena */ }
+      try { localStorage.setItem(`abaco-thumb:v3:${detail.projectId}:${detail.sceneId}`, detail.url); } catch { /* cache piena */ }
     };
     window.addEventListener('abaco:scene-thumbnail', receive);
     return () => window.removeEventListener('abaco:scene-thumbnail', receive);
@@ -225,7 +240,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       const motionEnd = Math.min(sceneEnd, Math.max(scene.frame + 1, lastMotionFrame + 1));
       const active = selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === scene.id;
       const width = Math.max(0.2, ((motionEnd - scene.frame) / Math.max(1, end - start + 1)) * 100);
-      const insetLeft = index > 0 ? 6 : 0;
+      const insetLeft = index > 0 ? 4 : 0;
       return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${active ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft}px)` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · ${realPoints.length} punti`} onClick={(event) => {
         event.stopPropagation();
         setFrame(firstFrame);
@@ -256,6 +271,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       const scene = scenes.find((item) => item.id === sceneId);
       if (!scene) return;
       select(undefined);
+      setSelectedTimelineObjectIds(new Set());
       setFrame(scene.frame);
       setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' });
       setDeleteTarget({ kind: 'scene', sceneId: scene.id });
@@ -278,10 +294,44 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       setSelectedTrack(undefined);
   };
   useEffect(() => {
+    const shortcuts = (event: KeyboardEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      const key = event.key.toLowerCase();
+      if (key === 'a') {
+        event.preventDefault();
+        setSelectedTimelineObjectIds(new Set(timelineObjects.map((object) => object.id)));
+        if (timelineObjects[0]) select(timelineObjects[0].id);
+      } else if (key === 'c') {
+        const ids = selectedTimelineObjectIdsRef.current.size
+          ? [...selectedTimelineObjectIdsRef.current]
+          : selectedId && timelineObjects.some((object) => object.id === selectedId) ? [selectedId] : [];
+        if (!ids.length) return;
+        event.preventDefault();
+        copiedTimelineObjectIds = ids;
+      } else if (key === 'v' && activeScene && copiedTimelineObjectIds.length) {
+        event.preventDefault();
+        const created = duplicateObjectsToScene(copiedTimelineObjectIds, activeScene.id);
+        if (created.length) setSelectedTimelineObjectIds(new Set(created));
+      }
+    };
+    window.addEventListener('keydown', shortcuts);
+    return () => window.removeEventListener('keydown', shortcuts);
+  }, [activeScene?.id, duplicateObjectsToScene, selectedId, timelineObjects.map((object) => object.id).join(':')]);
+  useEffect(() => {
     const remove = (event: KeyboardEvent) => {
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (selectedTimelineObjectIdsRef.current.size > 1) {
+        event.preventDefault();
+        for (const objectId of selectedTimelineObjectIdsRef.current) deleteObject(objectId);
+        setSelectedTimelineObjectIds(new Set());
+        setDeleteTarget(undefined);
+        setSelectedTrack(undefined);
+        return;
+      }
       if (!deleteTarget) return;
       event.preventDefault();
       deleteSelectedBlock();
@@ -321,33 +371,34 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       <div className="ruler-label">Elementi</div>
       <div className="ruler elements-ruler" onClick={seek}><span style={{ left: left(start) }}>{start}</span><span style={{ left: left(Math.round((start + end) / 2)) }}>{Math.round((start + end) / 2)}</span><span style={{ left: left(end) }}>{end}</span><i style={{ left: left(frame) }} /></div>
       <div className="track-label scene-label locked-label"><b><Video size={12} /> Scene</b><LockKeyhole size={12} /></div>
-      <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
+      <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
         const nextFrame = scenes[index + 1]?.frame ?? end + 1;
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
-        const insetLeft = index > 0 ? 6 : 0, insetRight = index < scenes.length - 1 ? 6 : 1;
+        const insetLeft = index > 0 ? 4 : 0, insetRight = index < scenes.length - 1 ? 4 : 1;
         const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scena ${index + 1}` };
         return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }}>
-          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(scene.frame); select(undefined); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
+          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(scene.frame); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
             <span className="clip-title">{scene.name ?? `Scena ${index + 1}`}{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
           </button>
           <span className="clip-resize-handle" onPointerDown={(event) => beginResize(index, event)} />
         </div>;
       })}{transitionMarkers}<i style={{ left: left(frame) }} /></div>
       {renderMotionTrack(undefined, true)}
-      {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedId === object.id ? 'active' : ''}`}>
+      {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedTimelineObjectIds.has(object.id) || selectedId === object.id ? 'active' : ''}`}>
         <div className="track-label timeline-object-label" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/abaco-object', object.id); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData('text/abaco-object'); if (sourceId) reorderObjects(sourceId, object.id); }}>
-          <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={() => { select(object.id); selectMotion(undefined); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Nascondi' : 'Mostra'} aria-label={objectVisible ? `Nascondi ${displayName}` : `Mostra ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Elimina" aria-label={`Elimina ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
+          <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={(event) => { selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Nascondi' : 'Mostra'} aria-label={objectVisible ? `Nascondi ${displayName}` : `Mostra ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Elimina" aria-label={`Elimina ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
         </div>
         <div className="track presence-track" onClick={seek}>
           {scenes.map((scene, index) => {
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
             const width = ((clipEnd - scene.frame) / Math.max(1, end - start + 1)) * 100;
-            const insetLeft = index > 0 ? 6 : 0, insetRight = index < scenes.length - 1 ? 6 : 1;
+            const insetLeft = index > 0 ? 4 : 0, insetRight = index < scenes.length - 1 ? 4 : 1;
             const visible = evaluateProperty(object, 'visibility', scene.frame) as boolean;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`}` };
+            if (!visible || (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id))) return null;
             return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${visible ? '' : 'hidden'} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }} title={`${displayName} · ${scene.name ?? `Scena ${index + 1}`}`} onClick={(event) => {
-              event.stopPropagation(); select(object.id); selectMotion(undefined); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
+              event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
             }}><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}</button>;
           })}
           <i style={{ left: left(frame) }} />
