@@ -392,14 +392,17 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
       <MeshVisual object={shown} />
     </group>;
 
-  if (!interactionEnabled || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
+  // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
+  // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
+  // e salti soprattutto durante la scala.
+  if (!interactionEnabled || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
   return <>{visual}<group ref={translationProxy} /><TransformControls object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={0.8} enabled
     showZ={!viewTranslation}
     onObjectChange={() => {
       if (mode !== 'translate' || !ref.current) return;
       if (viewTranslation && translationProxy.current) ref.current.position.copy(translationProxy.current.position);
-      ref.current.position.copy(snapToOtherObjects(ref.current.position));
-      if (viewTranslation && translationProxy.current) translationProxy.current.position.copy(ref.current.position);
+      // Lo snap viene applicato una sola volta al rilascio. Applicarlo a ogni
+      // pixel tratteneva l'oggetto sulla soglia e dava l'impressione di blocco.
     }}
     onMouseDown={startGizmoDrag}
     onMouseUp={finishGizmoDrag} /></>;
@@ -562,6 +565,8 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
   const selectedId = useEditor((state) => state.selectedId);
   const setTransform = useEditor((state) => state.setTransform);
   const [interaction, setInteraction] = useState<{ id: string; mode: 'move' | 'resize' | 'rotate'; x: number; y: number; centerX: number; centerY: number; distance: number; angle: number; transform: Transform }>();
+  const [preview, setPreview] = useState<{ id: string; transform: Transform }>();
+  const previewRef = useRef<{ id: string; transform: Transform } | undefined>(undefined);
   const visible = objects.filter((object) => object.screenSpace && evaluateProperty(object, 'visibility', frame));
   useEffect(() => {
     if (!interaction) return;
@@ -569,36 +574,50 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       const start = interaction.transform;
       const dx = event.clientX - interaction.x, dy = event.clientY - interaction.y;
       if (Math.hypot(dx, dy) < 4) return;
+      let transform: Transform;
       if (interaction.mode === 'move') {
         const x = THREE.MathUtils.clamp(start.position[0] + (dx * 2) / width, -1.6, 1.6);
         const z = THREE.MathUtils.clamp(start.position[2] - (dy * 2) / height, -1.6, 1.6);
-        setTransform(interaction.id, { ...start, position: [x, start.position[1], z] });
+        transform = { ...start, position: [x, start.position[1], z] };
       } else if (interaction.mode === 'resize') {
         const distance = Math.max(8, Math.hypot(event.clientX - interaction.centerX, event.clientY - interaction.centerY));
         const scale = Math.max(.1, Math.min(8, start.scale[0] * distance / interaction.distance));
-        setTransform(interaction.id, { ...start, scale: [scale, scale, scale] });
+        transform = { ...start, scale: [scale, scale, scale] };
       } else {
         const angle = Math.atan2(event.clientY - interaction.centerY, event.clientX - interaction.centerX);
         const rotation = [...start.rotation] as Vec3;
         rotation[2] = start.rotation[2] + THREE.MathUtils.radToDeg(angle - interaction.angle);
-        setTransform(interaction.id, { ...start, rotation });
+        transform = { ...start, rotation };
       }
+      previewRef.current = { id: interaction.id, transform };
+      setPreview(previewRef.current);
     };
-    const finish = () => setInteraction(undefined);
+    const finish = () => {
+      const result = previewRef.current;
+      if (result?.id === interaction.id) setTransform(result.id, result.transform);
+      previewRef.current = undefined;
+      setPreview(undefined);
+      setInteraction(undefined);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); };
+    window.addEventListener('pointercancel', finish, { once: true });
+    window.addEventListener('blur', finish, { once: true });
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', finish); window.removeEventListener('blur', finish); };
   }, [height, interaction, setTransform, width]);
   const begin = (event: ReactPointerEvent<HTMLElement>, object: SceneObject, mode: 'move' | 'resize' | 'rotate') => {
     event.preventDefault(); event.stopPropagation(); select(object.id);
     const layer = (event.currentTarget.closest('.screen-space-layer') ?? event.currentTarget) as HTMLElement;
     const rect = layer.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
-    setInteraction({ id: object.id, mode, x: event.clientX, y: event.clientY, centerX, centerY, distance: Math.max(8, Math.hypot(event.clientX - centerX, event.clientY - centerY)), angle: Math.atan2(event.clientY - centerY, event.clientX - centerX), transform: evaluateTransform(object, frame) });
+    const transform = evaluateTransform(object, frame);
+    previewRef.current = { id: object.id, transform };
+    setPreview(previewRef.current);
+    setInteraction({ id: object.id, mode, x: event.clientX, y: event.clientY, centerX, centerY, distance: Math.max(8, Math.hypot(event.clientX - centerX, event.clientY - centerY)), angle: Math.atan2(event.clientY - centerY, event.clientX - centerX), transform });
   };
   return <div className="screen-space-layers" style={{ width, height }}>
     {visible.map((object) => {
-      const transform = evaluateTransform(object, frame);
+      const transform = preview?.id === object.id ? preview.transform : evaluateTransform(object, frame);
       const crop = object.screenCrop;
       const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
       const selected = selectedId === object.id;

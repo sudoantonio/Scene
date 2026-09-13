@@ -12,7 +12,7 @@ type EditorState = {
   cameraView: boolean;
   setCameraView(value: boolean): void;
   selectedMotion?: { objectId: string; sceneId: string };
-  recordingMotion?: { objectId: string; sceneId: string; startFrame: number };
+  recordingMotion?: { objectId: string; sceneId: string; startFrame: number; provisionalFrame?: number };
   interpolation: Interpolation;
   gizmoMode: 'translate' | 'rotate' | 'scale';
   past: AbacoProject[];
@@ -299,7 +299,12 @@ export const useEditor = create<EditorState>((set, get) => {
       const newScene: AbacoProject['cameraCuts'][number] = { id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scena ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) };
       next.cameraCuts.push(newScene);
       for (const object of next.objects) {
-        if (object.sceneIds.length) putKey(object, nextFrame, 'visibility', false, 'constant');
+        if (!object.sceneIds.length || object.kind === 'camera' || object.kind.includes('light')) continue;
+        const copiedFromPrevious = object.sceneIds.includes(sourceCut.id) && Boolean(evaluateProperty(object, 'visibility', sourceFrame));
+        if (copiedFromPrevious) {
+          object.sceneIds.push(newScene.id);
+          putKey(object, nextFrame, 'visibility', true, 'constant');
+        } else putKey(object, nextFrame, 'visibility', false, 'constant');
       }
       makeSceneCameraExclusive(next, newScene);
       syncScopedCommentRanges(next);
@@ -432,9 +437,21 @@ export const useEditor = create<EditorState>((set, get) => {
       const sceneEnd = next.cameraCuts.filter((item) => item.frame > scene.frame).sort((a, b) => a.frame - b.frame)[0]?.frame ?? next.settings.frameEnd + 1;
       const motionFrame = Math.max(scene.frame, Math.min(sceneEnd - 1, state.currentFrame));
       const transform = evaluateTransform(object, motionFrame);
-      for (const property of ['position', 'rotation', 'scale'] as const) putMotionKey(object, scene.frame, motionFrame, property, transform[property], state.interpolation);
+      let editFrame = sceneEnd - 1;
+      if (object.kind !== 'camera' && !object.kind.includes('light')) {
+        while (editFrame > motionFrame && !evaluateProperty(object, 'visibility', editFrame)) editFrame -= 1;
+      }
+      for (const property of ['position', 'rotation', 'scale'] as const) {
+        putMotionKey(object, scene.frame, motionFrame, property, transform[property], state.interpolation);
+        if (editFrame > motionFrame) putMotionKey(object, scene.frame, editFrame, property, transform[property], state.interpolation);
+      }
       commit(next);
-      set({ selectedMotion: { objectId: object.id, sceneId }, recordingMotion: { objectId: object.id, sceneId, startFrame: motionFrame }, selectedId: object.id });
+      set({
+        selectedMotion: { objectId: object.id, sceneId },
+        recordingMotion: { objectId: object.id, sceneId, startFrame: motionFrame, provisionalFrame: editFrame > motionFrame ? editFrame : undefined },
+        selectedId: object.id,
+        currentFrame: Math.max(motionFrame, editFrame),
+      });
     },
     stopMotion: () => set({ recordingMotion: undefined }),
     removeSelected: () => {
@@ -676,8 +693,15 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object) return;
       const motionActive = state.recordingMotion?.objectId === id && state.recordingMotion.sceneId === scene?.id;
+      const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
+      if (provisionalFrame !== undefined && provisionalFrame !== state.currentFrame) {
+        object.keyframes = object.keyframes.filter((key) => key.frame !== provisionalFrame || key.purpose !== 'motion' || !['position', 'rotation', 'scale'].includes(key.property));
+      }
       for (const property of ['position', 'rotation', 'scale'] as const) {
-        if (motionActive) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+        const editingExistingPoint = state.selectedMotion?.objectId === id
+          && state.selectedMotion.sceneId === scene?.id
+          && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
+        if (motionActive || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
         else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
       }
       if (object.kind === 'camera') {
@@ -695,7 +719,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (object.id !== id) set({
         selectedId: object.id,
         selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
-        recordingMotion: motionActive ? { objectId: object.id, sceneId: scene!.id, startFrame: state.recordingMotion!.startFrame } : state.recordingMotion,
+        recordingMotion: motionActive ? { ...state.recordingMotion!, objectId: object.id, sceneId: scene!.id } : state.recordingMotion,
       });
     },
     keyPose: (id) => {

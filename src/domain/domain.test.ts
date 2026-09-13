@@ -134,6 +134,22 @@ describe('scene indipendenti', () => {
     expect(cube.keyframes.some((key) => key.purpose === 'motion' && key.frame === 40)).toBe(false);
   });
 
+  it('REC porta al punto finale e produce subito un movimento modificabile', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    expect(useEditor.getState().currentFrame).toBe(72);
+    useEditor.getState().setTransform(cubeId, { position: [5, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().stopMotion();
+    useEditor.getState().setTransform(cubeId, { position: [7, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const positionPoints = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').sort((a, b) => a.frame - b.frame);
+    expect(positionPoints.map((key) => key.frame)).toEqual([1, 72]);
+    expect(evaluateTransform(cube, 72).position).toEqual([7, 0, 1]);
+  });
+
   it('permette di spostare un punto esistente del percorso', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
@@ -278,6 +294,19 @@ describe('scene indipendenti', () => {
     expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(false);
   });
 
+  it('una nuova scena eredita gli elementi visibili della precedente', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const firstSceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().addShot();
+    const project = useEditor.getState().project;
+    const secondScene = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame)[1];
+    const cube = project.objects.find((object) => object.id === cubeId)!;
+    expect(cube.sceneIds).toEqual([firstSceneId, secondScene.id]);
+    expect(evaluateProperty(cube, 'visibility', secondScene.frame)).toBe(true);
+  });
+
   it('ridimensiona la presenza di un elemento dentro la scena al singolo frame', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
@@ -290,6 +319,19 @@ describe('scene indipendenti', () => {
     expect(evaluateProperty(cube, 'visibility', 24)).toBe(true);
     expect(evaluateProperty(cube, 'visibility', 25)).toBe(false);
     expect(() => ProjectSchema.parse(useEditor.getState().project)).not.toThrow();
+  });
+
+  it('REC usa come fine il bordo visibile di un elemento accorciato', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().resizeObjectPresence(cubeId, sceneId, 1, 25);
+    useEditor.getState().startMotion(cubeId, sceneId);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const positionPoints = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').sort((a, b) => a.frame - b.frame);
+    expect(useEditor.getState().currentFrame).toBe(24);
+    expect(positionPoints.map((key) => key.frame)).toEqual([1, 24]);
   });
 
   it('incolla copie indipendenti soltanto nella scena scelta', () => {
@@ -419,7 +461,7 @@ describe('scene indipendenti', () => {
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 
-  it('elimina la riga quando si cancella l’unico blocco scena di un elemento', () => {
+  it('elimina soltanto il blocco scelto quando l’elemento è stato copiato nella scena successiva', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
@@ -427,7 +469,10 @@ describe('scene indipendenti', () => {
     const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
     useEditor.getState().deleteObjectFromScene(cubeId, scenes[0].id);
     const project = useEditor.getState().project;
-    expect(project.objects.some((object) => object.id === cubeId)).toBe(false);
+    const cube = project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateProperty(cube, 'visibility', scenes[0].frame)).toBe(false);
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(true);
+    expect(cube.sceneIds).toEqual([scenes[1].id]);
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 
