@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, GripVertical, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Trash2, X } from 'lucide-react';
+import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, MoveRight, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import type { SceneComment, SceneObject, TimelineCommentScope, Transform } from '../domain/schema';
@@ -14,8 +14,17 @@ type DeleteTarget =
   | { kind: 'motion'; objectId: string; sceneId: string }
   | { kind: 'keyframe'; objectId: string; keyframeId: string };
 function ElementThumbnail({ object, compact = false }: { object: SceneObject; compact?: boolean }) {
-  const label = object.kind === 'text' ? 'T' : object.screenSpace ? 'I' : object.kind === 'blend_asset' ? '3D' : '';
-  return <span className={`element-thumbnail ${object.kind} ${compact ? 'compact' : ''}`} style={{ '--element-color': object.color } as React.CSSProperties}>{label}</span>;
+  const size = compact ? 11 : 12;
+  const icon = object.kind === 'text' ? <Type size={size} />
+    : object.screenSpace ? <Image size={size} />
+      : object.kind === 'blend_asset' || object.kind === 'cube' ? <Box size={size} />
+        : object.kind === 'sphere' ? <Circle size={size} />
+          : object.kind === 'cylinder' ? <Cylinder size={size} />
+            : object.kind === 'cone' ? <Triangle size={size} />
+              : object.kind === 'plane' ? <Square size={size} />
+                : object.kind === 'camera' ? <Video size={size} />
+                  : <Lightbulb size={size} />;
+  return <span className={`element-thumbnail ${object.kind} ${compact ? 'compact' : ''}`} style={{ '--element-color': object.color } as React.CSSProperties} aria-label={object.kind}>{icon}</span>;
 }
 export default function Timeline({ collapsed, viewportFullscreen, onToggleCollapse, onToggleViewportFullscreen }: { collapsed?: boolean; viewportFullscreen?: boolean; onToggleCollapse?(): void; onToggleViewportFullscreen?(): void }) {
   const project = useEditor((state) => state.project);
@@ -227,10 +236,10 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         setDeleteTarget({ kind: 'motion', objectId: motionObject.id, sceneId: scene.id });
         setCommentDraft(undefined);
         setTransitionDraft(undefined);
-      }}><span className="motion-line-swatch" /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - scene.frame) / Math.max(1, motionEnd - scene.frame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span></button>];
+      }}><MoveRight className="timeline-motion-icon" size={13} /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - scene.frame) / Math.max(1, motionEnd - scene.frame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span></button>];
     });
     if (!clips.length) return null;
-    return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy"><i />Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
+    return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy">{camera ? <Video size={13} /> : <MoveRight size={13} />}Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
   };
   const transitionMarkers = scenes.slice(1).map((scene, index) => {
     const from = scenes[index];
@@ -311,7 +320,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     <div className="timeline-scroll" onWheelCapture={zoomTimelineFromWheel} style={{ '--timeline-content-width': `${Math.round(durationSeconds * timelineZoom)}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
       <div className="ruler-label">Elementi</div>
       <div className="ruler elements-ruler" onClick={seek}><span style={{ left: left(start) }}>{start}</span><span style={{ left: left(Math.round((start + end) / 2)) }}>{Math.round((start + end) / 2)}</span><span style={{ left: left(end) }}>{end}</span><i style={{ left: left(frame) }} /></div>
-      <div className="track-label scene-label locked-label"><b>Scene</b><LockKeyhole size={12} /></div>
+      <div className="track-label scene-label locked-label"><b><Video size={12} /> Scene</b><LockKeyhole size={12} /></div>
       <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
         const nextFrame = scenes[index + 1]?.frame ?? end + 1;
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
