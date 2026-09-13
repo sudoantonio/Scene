@@ -424,8 +424,9 @@ function CameraViewControls({ frame, syncKey, target, controls }: {
   return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
-function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
+function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, target }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; target?: Vec3 }) {
   const currentFrame = useEditor((state) => state.currentFrame);
+  const ref = useRef<THREE.PerspectiveCamera>(null);
   const frame = frameOverride ?? currentFrame;
   const transform = evaluateTransform(object, frame);
   const lens = evaluateProperty(object, 'lens', frame) as number;
@@ -436,7 +437,8 @@ function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1
   // same composition as thumbnails and exports.
   const safeFrameHeightRatio = THREE.MathUtils.clamp(frameHeightRatio, .1, 1);
   const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(frameFov / 2) / safeFrameHeightRatio));
-  return <PerspectiveCamera makeDefault position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
+  useLayoutEffect(() => { if (target) ref.current?.lookAt(...target); }, [target?.[0], target?.[1], target?.[2], frame]);
+  return <PerspectiveCamera ref={ref} makeDefault position={transform.position} rotation={target ? undefined : transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
 }
 
 function ThumbnailEmitter({ projectId, sceneId, revision }: { projectId: string; sceneId: string; revision: string }) {
@@ -474,8 +476,8 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark }: { p
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
     <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
     <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
-    {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
-    <ShotCamera object={camera} aspect={aspect} frame={frame} />
+    {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
+    <ShotCamera object={camera} aspect={aspect} frame={frame} target={scene.framing.target} />
     <ThumbnailEmitter projectId={projectId} sceneId={scene.id} revision={revision} />
   </Canvas></div>;
 }
