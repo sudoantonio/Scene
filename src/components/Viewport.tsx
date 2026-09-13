@@ -794,12 +794,29 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     scheduleCameraCommit();
   };
 
+  const tiltShotCameraFromTrackpad = (deltaX: number, deltaY: number) => {
+    const controls = shotOrbitRef.current;
+    if (!controls || !activeCamera) return;
+    const camera = controls.object;
+    const distance = Math.max(.5, camera.position.distanceTo(controls.target));
+    const direction = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    const worldUp = new THREE.Vector3(0, 0, 1);
+    direction.applyAxisAngle(worldUp, -deltaX * TRACKPAD_ROTATE_SENSITIVITY);
+    const right = new THREE.Vector3().crossVectors(direction, worldUp).normalize();
+    const tilted = direction.clone().applyAxisAngle(right, -deltaY * TRACKPAD_ROTATE_SENSITIVITY);
+    if (Math.abs(tilted.dot(worldUp)) < .985) direction.copy(tilted);
+    controls.target.copy(camera.position).addScaledVector(direction, distance);
+    camera.lookAt(controls.target);
+    controls.update();
+    scheduleCameraCommit();
+  };
+
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
     if (draggingObject) { event.preventDefault(); event.stopPropagation(); return; }
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
-    if (event.ctrlKey || (cameraView && !event.shiftKey && !shiftPressed.current)) {
+    if (event.ctrlKey) {
       event.preventDefault();
       event.stopPropagation();
       const factor = Math.exp(delta.y * TRACKPAD_PINCH_SENSITIVITY);
@@ -827,14 +844,15 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     // flag dell'evento manteniamo lo stato reale della tastiera.
     if (!event.shiftKey && !shiftPressed.current) {
       event.preventDefault(); event.stopPropagation();
-      if (cameraView && cameraTool === 'orbit') {
+      if (cameraView && cameraTool !== 'object') {
         const buffer = cameraRotateBuffer.current;
         buffer.x += delta.x; buffer.y += delta.y;
         if (!buffer.timer) buffer.timer = window.setTimeout(() => {
           const pending = cameraRotateBuffer.current;
           const x = pending.x, y = pending.y;
           pending.x = 0; pending.y = 0; pending.timer = undefined;
-          rotateViewFromTrackpad(x, y);
+          if (cameraTool === 'orbit') rotateViewFromTrackpad(x, y);
+          else tiltShotCameraFromTrackpad(x, y);
         }, 24);
       } else if (!cameraView) rotateViewFromTrackpad(delta.x, delta.y);
       return;
@@ -970,10 +988,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>
     </div>
-    {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true">
-      <span>INQUADRATURA · {settings.resolutionX}:{settings.resolutionY}</span>
-      <i className="corner top-left" /><i className="corner top-right" /><i className="corner bottom-left" /><i className="corner bottom-right" />
-    </div>}
+    {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>
     <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => { const next = !cameraView; setCameraView(next); if (next) setCameraTool('frame'); }}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
     {cameraView && <div className="camera-tool-switch" style={{ left: viewportSize.left }} aria-label="Modalità controllo camera">
@@ -987,6 +1002,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
         <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
         <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
+        <small>2 dita inclina · Shift + 2 dita sposta</small>
         <small>Shift veloce · Alt lento</small>
       </div>
     </div>}
@@ -1014,7 +1030,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
     <div className="viewport-help">{cameraView
-      ? cameraTool === 'frame' ? 'Stile Blender: WASD/frecce vola · Q/E giù-su · Shift veloce · Alt lento' : cameraTool === 'object' ? `Oggetto: ${actionName} · Aggancio magnetico agli altri elementi` : 'Trascina: ruota attorno al soggetto · WASD/frecce: vola'
+      ? cameraTool === 'frame' ? '2 dita: inclina · Shift + 2 dita: sposta · pizzica: zoom · WASD/frecce: vola' : cameraTool === 'object' ? `Oggetto: ${actionName} · Aggancio magnetico agli altri elementi` : '2 dita: ruota attorno al soggetto · WASD/frecce: vola'
       : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName} con aggancio`}</div>
   </div>;
 }
