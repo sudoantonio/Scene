@@ -1,7 +1,7 @@
 import { Canvas, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { Box, Focus, LayoutTemplate, Move3d, Plus, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
@@ -506,24 +506,48 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
   const select = useEditor((state) => state.select);
   const selectedId = useEditor((state) => state.selectedId);
   const setTransform = useEditor((state) => state.setTransform);
-  const [dragging, setDragging] = useState<string>();
+  const [interaction, setInteraction] = useState<{ id: string; mode: 'move' | 'resize' | 'rotate'; x: number; y: number; centerX: number; centerY: number; distance: number; angle: number; transform: Transform }>();
   const visible = objects.filter((object) => object.screenSpace && evaluateProperty(object, 'visibility', frame));
-  return <div className="screen-space-layers" style={{ width, height }} onPointerMove={(event) => {
-    if (!dragging) return;
-    const object = visible.find((item) => item.id === dragging);
-    if (!object) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const transform = evaluateTransform(object, frame);
-    const x = Math.max(-1, Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1));
-    const z = Math.max(-1, Math.min(1, 1 - ((event.clientY - rect.top) / rect.height) * 2));
-    setTransform(object.id, { ...transform, position: [x, transform.position[1], z] });
-  }} onPointerUp={(event) => { if (dragging) event.currentTarget.releasePointerCapture(event.pointerId); setDragging(undefined); }}>
+  useEffect(() => {
+    if (!interaction) return;
+    const move = (event: PointerEvent) => {
+      const start = interaction.transform;
+      if (interaction.mode === 'move') {
+        const x = THREE.MathUtils.clamp(start.position[0] + ((event.clientX - interaction.x) * 2) / width, -1.6, 1.6);
+        const z = THREE.MathUtils.clamp(start.position[2] - ((event.clientY - interaction.y) * 2) / height, -1.6, 1.6);
+        setTransform(interaction.id, { ...start, position: [x, start.position[1], z] });
+      } else if (interaction.mode === 'resize') {
+        const distance = Math.max(8, Math.hypot(event.clientX - interaction.centerX, event.clientY - interaction.centerY));
+        const scale = Math.max(.1, Math.min(8, start.scale[0] * distance / interaction.distance));
+        setTransform(interaction.id, { ...start, scale: [scale, scale, scale] });
+      } else {
+        const angle = Math.atan2(event.clientY - interaction.centerY, event.clientX - interaction.centerX);
+        const rotation = [...start.rotation] as Vec3;
+        rotation[2] = start.rotation[2] + THREE.MathUtils.radToDeg(angle - interaction.angle);
+        setTransform(interaction.id, { ...start, rotation });
+      }
+    };
+    const finish = () => setInteraction(undefined);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish, { once: true });
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); };
+  }, [height, interaction, setTransform, width]);
+  const begin = (event: ReactPointerEvent<HTMLElement>, object: SceneObject, mode: 'move' | 'resize' | 'rotate') => {
+    event.preventDefault(); event.stopPropagation(); select(object.id);
+    const layer = (event.currentTarget.closest('.screen-space-layer') ?? event.currentTarget) as HTMLElement;
+    const rect = layer.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
+    setInteraction({ id: object.id, mode, x: event.clientX, y: event.clientY, centerX, centerY, distance: Math.max(8, Math.hypot(event.clientX - centerX, event.clientY - centerY)), angle: Math.atan2(event.clientY - centerY, event.clientX - centerX), transform: evaluateTransform(object, frame) });
+  };
+  return <div className="screen-space-layers" style={{ width, height }}>
     {visible.map((object) => {
       const transform = evaluateTransform(object, frame);
       const crop = object.screenCrop;
-      const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])), clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` } as CSSProperties;
-      return <div key={object.id} className={`screen-space-layer ${selectedId === object.id ? 'selected' : ''}`} style={style} onPointerDown={(event) => { event.stopPropagation(); select(object.id); setDragging(object.id); event.currentTarget.parentElement?.setPointerCapture(event.pointerId); }}>
-        {object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <img src={object.asset.proxyPath} alt={object.name} draggable={false} />}
+      const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
+      const selected = selectedId === object.id;
+      return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
+        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <img src={object.asset.proxyPath} alt={object.name} draggable={false} />}</div>
+        {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Ruota livello" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Ridimensiona livello" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
       </div>;
     })}
   </div>;

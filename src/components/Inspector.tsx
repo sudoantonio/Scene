@@ -45,7 +45,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const cameraTransform = camera ? evaluateTransform(camera, frame) : undefined;
   const positionValues = transform && cameraView && cameraTransform && !object?.screenSpace ? toCameraSpace(transform.position, cameraTransform) : transform?.position;
   const positionControls: Array<[string, 0 | 1 | 2, number, number]> = object?.screenSpace
-    ? [['Orizzontale', 0, -1, 1], ['Verticale', 2, -1, 1]]
+    ? [['Orizzontale', 0, -1.6, 1.6], ['Verticale', 2, -1.6, 1.6]]
     : [['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20]];
   const motionObject = object ?? camera;
   const motionMode = motionObject && activeScene
