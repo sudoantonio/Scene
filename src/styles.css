@@ -3,6 +3,7 @@
   color: #e8edf5; background: #0e1117; font-synthesis: none; color-scheme: dark;
   --bg: #0e1117; --panel: #151922; --panel-2: #1b202a; --line: #2b3340; --muted: #929dab;
   --orange: #f3a847; --orange-2: #ffbd66; --blue: #72c7ef; --danger: #ff6f7d;
+  --radius-control: 7px; --radius-card: 10px; --radius-panel: 12px;
 }
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; width: 100%; height: 100%; overflow: hidden; }
@@ -531,7 +532,7 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .theme-dark .object-transform-sliders { border-color: #383838; }
 .theme-dark .transform-slider-title { color: #b7b7b2; }
 
-/* I bordi servono solo a separare le aree principali, non a decorare i controlli. */
+/* Linguaggio delle forme: ogni superficie interattiva ha angoli morbidi e coerenti. */
 .app-shell button,
 .app-shell input,
 .app-shell textarea,
@@ -543,22 +544,10 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .app-shell .slide-preview,
 .app-shell .start-card,
 .app-shell .toast {
-  border-left: 0 !important;
-  border-right: 0 !important;
-  border-radius: 0 !important;
+  border-radius: var(--radius-control) !important;
   box-shadow: none !important;
 }
-.app-shell button,
-.app-shell input,
-.app-shell textarea,
-.app-shell select,
-.app-shell details,
-.app-shell .scene-clip,
-.app-shell .slide-preview,
-.app-shell .start-card {
-  border-top: 0 !important;
-  border-bottom: 0 !important;
-}
+.app-shell :is(.edit-group, .prompt-card, .scene-clip, .slide-preview, .start-card, .toast) { border-radius: var(--radius-card) !important; }
 
 /* 0.10 · headbar compatta e timeline leggibile */
 .brand { min-width: 118px; }
@@ -1704,3 +1693,26 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .preview-screen-layer .screen-layer-content > span { display: block; padding: 2px 5px; font-size: calc(34px * var(--layer-scale)); font-weight: 650; line-height: 1.08; white-space: pre-wrap; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
 .preview-screen-layer .screen-layer-content > img { width: calc(260px * var(--layer-scale)); min-width: 36px; max-width: none; display: block; object-fit: contain; }
 .preview-empty { color: #aaa; font-size: 12px; letter-spacing: .02em; }
+
+/* Sistema arrotondato globale: controlli, superfici e clip condividono tre soli raggi. */
+.app-shell :is(button, input, textarea, select, summary) { border-radius: var(--radius-control) !important; }
+.app-shell :is(.left-panel, .inspector, .viewport, .timeline, .canvas-stage) { border-radius: var(--radius-panel); }
+.app-shell :is(.left-panel, .inspector, .viewport, .timeline) { overflow: hidden; }
+.app-shell :is(.quick-add-popover, .header-popover, .export-popover, .timeline-comment-popover,
+  .camera-drone-hint, .live-camera-preview, .viewport-tools, .camera-tool-switch,
+  .scenography-comment-editor, .advanced-panel, .background-current, .camera-zoom,
+  .comment, .operation-list, .plan-notes) { border-radius: var(--radius-card) !important; }
+.app-shell :is(.scene-card, .slide-button, .slide-preview, .add-slide, .shape-button,
+  .asset-button, .outliner-item, .scenography-comment-row, .scenography-object,
+  .scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment,
+  .element-thumbnail) { border-radius: var(--radius-control) !important; }
+.app-shell .scene-image { border-radius: inherit; }
+.app-shell .scene-clip .scene-image { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
+.app-shell .right-tabs { border-radius: 0 0 var(--radius-card) var(--radius-card); }
+.app-shell .scenography-comment-control.compact { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.app-shell .scenography-comment-row > span { border-radius: var(--radius-control) 0 0 var(--radius-control); }
+.app-shell .camera-frame-guide { border-radius: var(--radius-card); }
+.app-shell .screen-space-layer.selected { border-radius: var(--radius-control); }
+.app-shell :is(.play, .transition-marker, .screen-rotate-handle, .timeline-record:not(.active)) { border-radius: 50% !important; }
+.app-shell .timeline-record.active { border-radius: var(--radius-control) !important; }
+.preview-monitor-frame { border-radius: var(--radius-panel); }
