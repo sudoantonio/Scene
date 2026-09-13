@@ -1293,16 +1293,17 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .lighting-color { margin-top: 15px; padding-top: 12px; border-top: 1px solid color-mix(in srgb,var(--line) 65%,transparent); }
 .lighting-color .color-picker i { width: 20px; height: 20px; }
 .background-panel { padding: 16px !important; }
-.scene-aspect { margin-bottom: 12px; }
+.scene-aspect { margin: 0; min-width: 0; flex: 1; }
 .background-actions { display: flex; gap: 5px; }
 .background-actions button { min-height: 34px; flex: 1; padding: 0 9px; flex-direction: row; gap: 6px; background: transparent; border: 1px solid #d5d5d0; }
+.background-actions .scene-aspect select { width: 100%; min-width: 0; min-height: 34px; padding: 0 9px; }
 .background-current { min-height: 31px; margin-top: 7px; background: transparent; border: 1px solid #deded9; }
 .scene-elements-section .section-heading h2, .background-panel .scene-subtitle { color: #777873; font-size: 9px; font-weight: 600; }
 .scene-elements-section .outliner-item { min-height: 30px; padding: 0 5px; }
 .theme-dark .simple-inspector .right-tabs button.active { color: #ededE9; }
 .theme-dark .simple-inspector .right-tabs button.active::after { background: #c4c5c0; }
 .theme-dark .lighting-panel .section-heading h2 { color: #deded9; }
-.theme-dark .lighting-presets button, .theme-dark .background-actions button { color: #b8b8b3; background: transparent; border-color: #3e403e; }
+.theme-dark .lighting-presets button, .theme-dark .background-actions button, .theme-dark .background-actions .scene-aspect select { color: #b8b8b3; background: transparent; border-color: #3e403e; }
 .theme-dark .lighting-presets button.active { color: #f0f0ed; background: #343633; border-color: #5a5c58; }
 .theme-dark .background-current { background: transparent; border-color: #3e403e; }
 .thumbnail-renderers { position: fixed; z-index: -1; left: -10000px; top: 0; width: 220px; pointer-events: none; opacity: .01; }
@@ -1383,7 +1384,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .edit-group, .theme-dark .lighting-panel section, .theme-dark .simple-inspector section { border-color: #3e3e3e; }
 .theme-dark .secondary, .theme-dark .subtle { color: #d0d0d0; background: #303030; border-color: #494949; }
 .theme-dark .secondary:hover, .theme-dark .subtle:hover { color: #fff; background: #393939; border-color: #606060; }
-.theme-dark .lighting-presets button, .theme-dark .background-actions button { color: #bdbdbd; background: #2b2b2b; border-color: #464646; }
+.theme-dark .lighting-presets button, .theme-dark .background-actions button, .theme-dark .background-actions .scene-aspect select { color: #bdbdbd; background: #2b2b2b; border-color: #464646; }
 .theme-dark .lighting-presets button:hover, .theme-dark .background-actions button:hover { color: #eee; background: #333; border-color: #585858; }
 .theme-dark .lighting-presets button.active { color: #fff7dc; background: #4a3e20; border-color: #d9ad32; }
 .theme-dark .background-current { color: #bbb; background: #292929; border-color: #464646; }
@@ -1544,9 +1545,35 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .inspector, .theme-dark .right-tabs { background: #222; }
 .theme-dark input, .theme-dark textarea, .theme-dark select, .theme-dark .object-card .object-name { background: #292929; border-color: #404040; }
 .theme-dark .secondary, .theme-dark .subtle,
-.theme-dark .lighting-presets button, .theme-dark .background-actions button { background: #272727; border-color: #404040; }
+.theme-dark .lighting-presets button, .theme-dark .background-actions button, .theme-dark .background-actions .scene-aspect select { background: #272727; border-color: #404040; }
 .theme-dark .camera-tool-switch, .theme-dark .camera-drone-hint,
 .theme-dark .view-toggle, .theme-dark .center-shot, .theme-dark .viewport-tools { background-color: rgba(35,35,35,.96); }
+
+/* Scenografia: il commento vive accanto all'elemento cui si riferisce. */
+.scenography-outliner { display: flex; flex-direction: column; gap: 5px; }
+.scenography-context-comments { margin-bottom: 10px; padding-bottom: 8px; border-bottom: .5px solid rgba(80,80,76,.16); }
+.scenography-context-comments > span { display: block; margin-bottom: 3px; color: #8a8881; font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
+.scenography-object { overflow: hidden; border: .5px solid transparent; }
+.scenography-object.selected { background: rgba(169,130,32,.08); border-color: rgba(209,161,42,.36); }
+.scenography-object .outliner-item { width: 100%; }
+.scenography-add-comment, .scenography-comment-preview { width: 100%; min-height: 25px; padding: 0 6px; display: flex; align-items: center; gap: 6px; color: #807e77; background: transparent; border: 0; text-align: left; font-size: 9px; }
+.scenography-add-comment:hover { color: #5d4a12; background: rgba(169,130,32,.08); }
+.scenography-comment-preview { color: #6d6040; background: rgba(169,130,32,.07); }
+.scenography-comment-preview:hover { background: rgba(169,130,32,.13); }
+.scenography-comment-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scenography-comment-editor { padding: 5px 6px 6px; background: rgba(169,130,32,.06); }
+.scenography-comment-editor textarea { width: 100%; min-height: 58px; padding: 6px 7px; resize: vertical; font-size: 10px; }
+.scenography-comment-editor > div { margin-top: 5px; display: flex; justify-content: flex-end; gap: 4px; }
+.scenography-comment-editor .icon { width: 25px; height: 25px; }
+.scenography-comment-editor .subtle { min-height: 25px; margin: 0; padding: 0 8px; }
+.theme-dark .scenography-object.selected { background: rgba(209,161,42,.11); border-color: rgba(217,173,50,.45); }
+.theme-dark .scenography-context-comments { border-color: rgba(255,255,255,.1); }
+.theme-dark .scenography-context-comments > span { color: #aaa9a3; }
+.theme-dark .scenography-add-comment { color: #aaa9a2; }
+.theme-dark .scenography-add-comment:hover { color: #f1dc91; background: rgba(209,161,42,.11); }
+.theme-dark .scenography-comment-preview { color: #e1cb83; background: rgba(209,161,42,.1); }
+.theme-dark .scenography-comment-preview:hover { background: rgba(209,161,42,.16); }
+.theme-dark .scenography-comment-editor { background: rgba(209,161,42,.09); }
 
 /* Palette degli elementi: ardesia per contenuto, ocra per camera/azioni, bordeaux per movimento. */
 .kind-dot { background: #7d8789; }

@@ -84,7 +84,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   return <aside className="inspector simple-inspector">
     {(panel !== 'edit' || !object) && <button className="panel-collapse panel-collapse-right" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>}
     <nav className="right-tabs" aria-label="Sezioni pannello destro">{([
-      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scena'], ['light', Sun, 'Luce'],
+      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>
     {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <><BackgroundPanel /><ElementsPanel mode="scene" /></> : <>
       {object && transform ? <section className="object-section edit-stack">

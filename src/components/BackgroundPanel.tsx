@@ -25,9 +25,9 @@ export default function BackgroundPanel() {
     } catch (reason) { setError((reason as Error).message || 'Impossibile caricare lo sfondo.'); }
   };
   return <section className="background-panel">
-    <div className="scene-aspect"><span>Formato</span><select aria-label="Formato inquadratura" value={format} onChange={(event) => { const next = formats.find((item) => item.label === event.target.value); if (next) updateSettings({ resolutionX: next.width, resolutionY: next.height }); }}>{format === 'custom' && <option value="custom">Personalizzato</option>}{formats.map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}</select></div>
     <span className="scene-subtitle">Sfondo</span>
     <div className="background-actions">
+      <div className="scene-aspect"><select aria-label="Formato inquadratura" value={format} onChange={(event) => { const next = formats.find((item) => item.label === event.target.value); if (next) updateSettings({ resolutionX: next.width, resolutionY: next.height }); }}>{format === 'custom' && <option value="custom">Personalizzato</option>}{formats.map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}</select></div>
       <button onClick={() => choose('image')}><Image size={16} /><span>Immagine</span></button>
       <button onClick={() => choose('model')}><Box size={16} /><span>File 3D</span></button>
     </div>
