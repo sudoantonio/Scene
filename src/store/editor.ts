@@ -127,21 +127,43 @@ const putMotionKey = (object: SceneObject, sceneFrame: number, frame: number, pr
 };
 
 const RECORDING_SAMPLE_INTERVAL = 12;
-const recordTransformSample = (object: SceneObject, sceneFrame: number, recordFrame: number, transform: Transform, interpolation: Interpolation, session: RecordingSession): RecordingSession => {
+const recordingProperties = ['position', 'rotation', 'scale'] as const;
+const appendRecordingKey = (object: SceneObject, frame: number, property: typeof recordingProperties[number], value: KeyframeValue, interpolation: Interpolation) => {
+  const key = { id: crypto.randomUUID(), frame, property, value: structuredClone(value), interpolation, source: 'user' as const, purpose: 'motion' as const, commentIds: [] };
+  object.keyframes.push(key);
+  return key;
+};
+const freeRecordingFrame = (object: SceneObject, desiredFrame: number, sceneFrame: number, sceneEnd: number, reusableIds: string[] = []) => {
+  const reusable = new Set(reusableIds);
+  const available = (frame: number) => !object.keyframes.some((key) => recordingProperties.includes(key.property as typeof recordingProperties[number]) && key.frame === frame && !reusable.has(key.id));
+  if (available(desiredFrame)) return desiredFrame;
+  for (let distance = 1; distance < sceneEnd - sceneFrame; distance += 1) {
+    const after = desiredFrame + distance;
+    if (after < sceneEnd && available(after)) return after;
+    const before = desiredFrame - distance;
+    if (before >= sceneFrame && available(before)) return before;
+  }
+  return undefined;
+};
+const recordTransformSample = (object: SceneObject, sceneFrame: number, sceneEnd: number, recordFrame: number, transform: Transform, interpolation: Interpolation, session: RecordingSession): RecordingSession => {
   const recordedSession = { ...session, changed: true, lastMotion: { objectId: object.id, sceneId: session.sceneId } };
   const touched = session.touchedObjectIds.includes(object.id);
   if (!touched) {
     const startTransform = evaluateTransform(object, session.startFrame);
-    for (const property of ['position', 'rotation', 'scale'] as const) {
-      putMotionKey(object, sceneFrame, session.startFrame, property, startTransform[property], interpolation);
+    for (const property of recordingProperties) {
+      if (!object.keyframes.some((key) => key.property === property && key.frame === session.startFrame)) {
+        putKey(object, session.startFrame, property, startTransform[property], interpolation, false, 'motion');
+      } else appendRecordingKey(object, session.startFrame, property, startTransform[property], interpolation);
     }
-    const endpointKeys = (['position', 'rotation', 'scale'] as const).map((property) => putMotionKey(object, sceneFrame, recordFrame, property, transform[property], interpolation));
-    const fixed = recordFrame - session.startFrame >= RECORDING_SAMPLE_INTERVAL ? recordFrame : session.startFrame;
+    const endpointFrame = freeRecordingFrame(object, recordFrame, sceneFrame, sceneEnd);
+    if (endpointFrame === undefined) return session;
+    const endpointKeys = recordingProperties.map((property) => putKey(object, endpointFrame, property, transform[property], interpolation, false, 'motion'));
+    const fixed = endpointFrame - session.startFrame >= RECORDING_SAMPLE_INTERVAL ? endpointFrame : session.startFrame;
     return {
       ...recordedSession,
       touchedObjectIds: [...session.touchedObjectIds, object.id],
       lastFixedFrames: { ...session.lastFixedFrames, [object.id]: fixed },
-      endpointFrames: { ...session.endpointFrames, [object.id]: recordFrame },
+      endpointFrames: { ...session.endpointFrames, [object.id]: endpointFrame },
       endpointKeyIds: { ...session.endpointKeyIds, [object.id]: endpointKeys.map((key) => key.id) },
     };
   }
@@ -149,24 +171,25 @@ const recordTransformSample = (object: SceneObject, sceneFrame: number, recordFr
   const fixedFrame = session.lastFixedFrames[object.id] ?? session.startFrame;
   const endpointFrame = session.endpointFrames[object.id] ?? fixedFrame;
   let endpointIds = session.endpointKeyIds[object.id] ?? [];
-  if (recordFrame > endpointFrame && endpointFrame === fixedFrame) {
-    endpointIds = (['position', 'rotation', 'scale'] as const).map((property) => putMotionKey(object, sceneFrame, recordFrame, property, transform[property], interpolation).id);
+  const safeRecordFrame = freeRecordingFrame(object, recordFrame, sceneFrame, sceneEnd, endpointIds);
+  if (safeRecordFrame === undefined) return session;
+  if (safeRecordFrame > endpointFrame && endpointFrame === fixedFrame) {
+    endpointIds = recordingProperties.map((property) => putKey(object, safeRecordFrame, property, transform[property], interpolation, false, 'motion').id);
   } else {
     const endpointKeys = object.keyframes.filter((key) => endpointIds.includes(key.id));
     for (const key of endpointKeys) {
       const property = key.property as 'position' | 'rotation' | 'scale';
-      object.keyframes = object.keyframes.filter((candidate) => candidate.id === key.id || candidate.frame !== recordFrame || candidate.property !== property);
-      key.frame = recordFrame;
+      key.frame = safeRecordFrame;
       key.value = structuredClone(transform[property]);
       key.interpolation = interpolation;
       key.purpose = 'motion';
     }
   }
-  const nextFixed = recordFrame - fixedFrame >= RECORDING_SAMPLE_INTERVAL ? recordFrame : fixedFrame;
+  const nextFixed = safeRecordFrame - fixedFrame >= RECORDING_SAMPLE_INTERVAL ? safeRecordFrame : fixedFrame;
   return {
     ...recordedSession,
     lastFixedFrames: { ...session.lastFixedFrames, [object.id]: nextFixed },
-    endpointFrames: { ...session.endpointFrames, [object.id]: recordFrame },
+    endpointFrames: { ...session.endpointFrames, [object.id]: safeRecordFrame },
     endpointKeyIds: { ...session.endpointKeyIds, [object.id]: endpointIds },
   };
 };
@@ -832,7 +855,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       let nextSession = session;
       if (session) {
-        nextSession = recordTransformSample(camera, sceneFrame, recordFrame, {
+        nextSession = recordTransformSample(camera, sceneFrame, range!.end, recordFrame, {
           position, rotation, scale: evaluateTransform(camera, state.currentFrame).scale,
         }, state.interpolation, session);
       } else if (motionActive || editingSelectedMotion) {
@@ -875,7 +898,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       let nextSession = session;
       if (sessionActive && session) {
-        nextSession = recordTransformSample(object, sceneFrame, recordFrame, transform, state.interpolation, session);
+        nextSession = recordTransformSample(object, sceneFrame, range!.end, recordFrame, transform, state.interpolation, session);
       } else {
         for (const property of ['position', 'rotation', 'scale'] as const) {
           const editingExistingPoint = state.selectedMotion?.objectId === id

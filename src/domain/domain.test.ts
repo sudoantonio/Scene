@@ -270,6 +270,27 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(cube, 72).position).toEqual([7, 0, 1]);
   });
 
+  it('REC in pausa aggiunge un punto senza sovrascrivere i keyframe esistenti', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setTransform(cubeId, { position: [8, 0, 1], rotation: [0, 0, 35], scale: [1.2, 1.2, 1.2] });
+    useEditor.getState().stopMotion();
+    const before = structuredClone(useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes);
+    useEditor.getState().setFrame(1);
+    useEditor.getState().selectMotion(undefined);
+    useEditor.getState().startRecording(sceneId);
+    useEditor.getState().setFrame(24);
+    useEditor.getState().setPlaying(false);
+    useEditor.getState().setTransform(cubeId, { position: [3, 2, 1], rotation: [0, 0, 12], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
+    const after = useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes;
+    for (const oldKey of before) expect(after.find((key) => key.id === oldKey.id)).toEqual(oldKey);
+    expect(after.some((key) => key.property === 'position' && key.frame === 24 && key.purpose === 'motion' && JSON.stringify(key.value) === JSON.stringify([3, 2, 1]))).toBe(true);
+  });
+
   it('permette di spostare un punto esistente del percorso', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
