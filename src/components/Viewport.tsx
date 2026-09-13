@@ -350,6 +350,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
 
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
       onPointerOver={(event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={(event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
+      onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={startDirectDrag} onPointerMove={moveDirectDrag} onPointerUp={finishDirectDrag} onPointerCancel={finishDirectDrag}>
       <MeshVisual object={shown} />
     </group>;
@@ -796,6 +797,45 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     controls.update();
   };
 
+  useEffect(() => {
+    const flyCamera = (event: KeyboardEvent) => {
+      if (!cameraView || cameraTool === 'object' || event.metaKey || event.ctrlKey || event.altKey) return;
+      const targetElement = event.target as HTMLElement | null;
+      if (targetElement && (targetElement.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(targetElement.tagName))) return;
+      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(event.code)) return;
+      const controls = shotOrbitRef.current;
+      if (!controls || !activeCamera || !activeCut) return;
+      event.preventDefault();
+      useEditor.getState().setPlaying(false);
+      const camera = controls.object;
+      camera.up.set(0, 0, 1);
+      camera.updateMatrixWorld();
+      if (event.code === 'KeyQ' || event.code === 'KeyE') {
+        if (!selectedSubject) return;
+        const subject = new THREE.Vector3(...evaluateTransform(selectedSubject, frame).position);
+        const offset = camera.position.clone().sub(subject);
+        if (offset.lengthSq() < .001) offset.set(0, -1, .25);
+        const angle = THREE.MathUtils.degToRad((event.code === 'KeyQ' ? -2.4 : 2.4) * (event.shiftKey ? 2 : 1));
+        offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+        camera.position.copy(subject).add(offset);
+        controls.target.copy(subject);
+        camera.lookAt(subject);
+      } else {
+        const distance = Math.max(.5, camera.position.distanceTo(controls.target));
+        const step = distance * .032 * (event.shiftKey ? 2.5 : 1);
+        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+        const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+        const movement = event.code === 'KeyW' ? up : event.code === 'KeyS' ? up.multiplyScalar(-1) : event.code === 'KeyD' ? right : right.multiplyScalar(-1);
+        camera.position.addScaledVector(movement, step);
+        controls.target.addScaledVector(movement, step);
+      }
+      controls.update();
+      scheduleCameraCommit();
+    };
+    window.addEventListener('keydown', flyCamera);
+    return () => window.removeEventListener('keydown', flyCamera);
+  }, [activeCamera?.id, activeCut?.id, cameraTool, cameraView, frame, selectedSubject?.id]);
+
   return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}
       style={cameraStageStyle}>
@@ -822,6 +862,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <button className={cameraTool === 'object' ? 'active' : ''} onClick={() => setCameraTool('object')} title="Seleziona e sposta gli oggetti"><Move3d size={14} /><span>Oggetti</span></button>
       <button className={cameraTool === 'orbit' ? 'active' : ''} onClick={() => { centerFramingOnSubject(); setCameraTool('orbit'); }} title="Ruota la camera attorno al soggetto"><Rotate3d size={14} /><span>Ruota attorno</span></button>
     </div>}
+    {cameraView && cameraTool !== 'object' && <div className="camera-drone-hint" aria-label="Comandi camera drone">
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> sposta</span>
+      <span className={!selectedSubject ? 'disabled' : ''}><kbd>Q</kbd><kbd>E</kbd> ruota {selectedSubject ? `attorno a ${selectedSubject.name}` : '— seleziona un oggetto'}</span>
+    </div>}
     <div className="viewport-top-right">
       {!cameraView && activeCameraTransform && <button className="secondary small" onClick={() => {
         const controls = orbitRef.current;
@@ -846,7 +890,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
     <div className="viewport-help">{cameraView
-      ? cameraTool === 'frame' ? 'Trascina: sposta inquadratura · Rotella o pinch: zoom' : cameraTool === 'object' ? `Oggetto: ${actionName} · Gli assi seguono la vista camera` : 'Trascina: ruota attorno al soggetto · Rotella o pinch: zoom'
+      ? cameraTool === 'frame' ? 'W/S alto-basso · A/D sinistra-destra · Q/E orbita · Rotella o pinch: zoom' : cameraTool === 'object' ? `Oggetto: ${actionName} · Gli assi seguono la vista camera` : 'Q/E o trascina: ruota attorno al soggetto · WASD: sposta camera'
       : `Oggetto: ${actionName} · Trascina sfondo: ruota vista · Shift + 2 dita: sposta`}</div>
   </div>;
 }
