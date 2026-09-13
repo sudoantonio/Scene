@@ -161,7 +161,46 @@ describe('scene indipendenti', () => {
     expect(cameraFrames).toEqual([1, 30]);
     expect(state.recordingSession).toBeUndefined();
     expect(state.isPlaying).toBe(false);
-    expect(state.selectedMotion).toEqual({ objectId: sphereId, sceneId: scene.id });
+    expect(state.selectedMotion).toEqual({ objectId: cameraId, sceneId: scene.id });
+  });
+
+  it('REC segue una scena selezionata durante la registrazione e salva lì il movimento', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const [firstScene, secondScene] = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(firstScene.frame);
+    useEditor.getState().startRecording(firstScene.id);
+    useEditor.getState().setFrame(secondScene.frame);
+    expect(useEditor.getState().recordingSession?.sceneId).toBe(secondScene.id);
+    useEditor.getState().setFrame(secondScene.frame + 12);
+    useEditor.getState().setTransform(cubeId, { position: [4, 2, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
+    const state = useEditor.getState();
+    const cube = state.project.objects.find((object) => object.id === cubeId)!;
+    const secondSceneMotion = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame >= secondScene.frame);
+    expect(secondSceneMotion.map((key) => key.frame).sort((a, b) => a - b)).toEqual([secondScene.frame, secondScene.frame + 12]);
+    expect(state.selectedMotion).toEqual({ objectId: cubeId, sceneId: secondScene.id });
+  });
+
+  it('REC salva l’inquadratura modificata dopo il passaggio a una nuova scena', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    useEditor.getState().addShot();
+    const [firstScene, secondScene] = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(firstScene.frame);
+    useEditor.getState().startRecording(firstScene.id);
+    useEditor.getState().setFrame(secondScene.frame);
+    useEditor.getState().setFrame(secondScene.frame + 18);
+    useEditor.getState().setCameraFraming(secondScene.id, [9, -6, 4], [63, 0, 34], [1, 2, 1]);
+    useEditor.getState().stopRecording();
+    const state = useEditor.getState();
+    const updatedScene = state.project.cameraCuts.find((scene) => scene.id === secondScene.id)!;
+    const camera = state.project.objects.find((object) => object.id === updatedScene.cameraId)!;
+    const motion = camera.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame >= secondScene.frame).sort((a, b) => a.frame - b.frame);
+    expect(motion.map((key) => key.frame)).toEqual([secondScene.frame, secondScene.frame + 18]);
+    expect(motion.at(-1)?.value).toEqual([9, -6, 4]);
+    expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: secondScene.id });
   });
 
   it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {

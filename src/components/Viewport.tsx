@@ -410,8 +410,8 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
     onMouseUp={finishGizmoDrag} /></>;
 }
 
-function CameraViewControls({ frame, syncKey, target, controls }: {
-  frame: number; syncKey: string;
+function CameraViewControls({ syncKey, target, controls }: {
+  syncKey: string;
   target: Transform['position'];
   controls: React.RefObject<OrbitControlsImpl | null>;
 }) {
@@ -422,17 +422,20 @@ function CameraViewControls({ frame, syncKey, target, controls }: {
     camera.up.set(0, 0, 1);
     controls.current.target.set(...target);
     controls.current.update();
-  }, [camera, frame, syncKey]);
+  }, [camera, syncKey]);
 
   // The camera is driven by trackpad and keyboard so pointer events remain free
   // for selecting and transforming objects directly in camera view.
   return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
-export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
+export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, lockTransform = false }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; lockTransform?: boolean }) {
   const currentFrame = useEditor((state) => state.currentFrame);
   const frame = frameOverride ?? currentFrame;
   const transform = evaluateTransform(object, frame);
+  const lockedTransform = useRef(transform);
+  if (!lockTransform) lockedTransform.current = transform;
+  const cameraTransform = lockTransform ? lockedTransform.current : transform;
   const lens = evaluateProperty(object, 'lens', frame) as number;
   const sensorHeight = 36 / aspect;
   const frameFov = 2 * Math.atan(sensorHeight / (2 * lens));
@@ -441,7 +444,7 @@ export function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRa
   // same composition as thumbnails and exports.
   const safeFrameHeightRatio = THREE.MathUtils.clamp(frameHeightRatio, .1, 1);
   const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(frameFov / 2) / safeFrameHeightRatio));
-  return <PerspectiveCamera makeDefault position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
+  return <PerspectiveCamera makeDefault position={cameraTransform.position} rotation={cameraTransform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
 }
 
 const loadThumbnailImage = (source: string) => new Promise<HTMLImageElement | undefined>((resolve) => {
@@ -874,7 +877,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     cameraRotateBuffer.current = { x: 0, y: 0 };
     cameraCommitTimer.current = undefined;
     pendingCameraCommit.current = undefined;
-  }, [frame, cameraView, projectId, activeCut?.id]);
+  }, [cameraView, projectId]);
 
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => { if (event.key === 'Shift' || event.shiftKey) shiftPressed.current = true; };
@@ -916,7 +919,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       if (recording) return;
       window.clearTimeout(cameraCommitTimer.current);
     }
-    cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, recording ? 100 : 180);
+    cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, recording ? 240 : 180);
   };
 
   const panShotView = (deltaX: number, deltaY: number) => {
@@ -1171,14 +1174,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionHandleKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
-      {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} />}
-      {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} frame={frame} target={activeCameraTarget} syncKey={`${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
+      {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
+      {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
-    <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>
+    {!recordingSession && <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>}
     <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => setCameraView(!cameraView)}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">

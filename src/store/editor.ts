@@ -7,6 +7,8 @@ type RecordingSession = {
   sceneId: string;
   startFrame: number;
   touchedObjectIds: string[];
+  changed: boolean;
+  lastMotion?: { objectId: string; sceneId: string };
   beforeProject: AbacoProject;
   lastFixedFrames: Record<string, number>;
   endpointFrames: Record<string, number>;
@@ -126,6 +128,7 @@ const putMotionKey = (object: SceneObject, sceneFrame: number, frame: number, pr
 
 const RECORDING_SAMPLE_INTERVAL = 12;
 const recordTransformSample = (object: SceneObject, sceneFrame: number, recordFrame: number, transform: Transform, interpolation: Interpolation, session: RecordingSession): RecordingSession => {
+  const recordedSession = { ...session, changed: true, lastMotion: { objectId: object.id, sceneId: session.sceneId } };
   const touched = session.touchedObjectIds.includes(object.id);
   if (!touched) {
     const startTransform = evaluateTransform(object, session.startFrame);
@@ -135,7 +138,7 @@ const recordTransformSample = (object: SceneObject, sceneFrame: number, recordFr
     const endpointKeys = (['position', 'rotation', 'scale'] as const).map((property) => putMotionKey(object, sceneFrame, recordFrame, property, transform[property], interpolation));
     const fixed = recordFrame - session.startFrame >= RECORDING_SAMPLE_INTERVAL ? recordFrame : session.startFrame;
     return {
-      ...session,
+      ...recordedSession,
       touchedObjectIds: [...session.touchedObjectIds, object.id],
       lastFixedFrames: { ...session.lastFixedFrames, [object.id]: fixed },
       endpointFrames: { ...session.endpointFrames, [object.id]: recordFrame },
@@ -161,7 +164,7 @@ const recordTransformSample = (object: SceneObject, sceneFrame: number, recordFr
   }
   const nextFixed = recordFrame - fixedFrame >= RECORDING_SAMPLE_INTERVAL ? recordFrame : fixedFrame;
   return {
-    ...session,
+    ...recordedSession,
     lastFixedFrames: { ...session.lastFixedFrames, [object.id]: nextFixed },
     endpointFrames: { ...session.endpointFrames, [object.id]: recordFrame },
     endpointKeyIds: { ...session.endpointKeyIds, [object.id]: endpointIds },
@@ -272,8 +275,31 @@ export const useEditor = create<EditorState>((set, get) => {
       selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
     })),
     setFrame: (frame) => {
-      if (!get().recordingSession) flushPendingCameraEdit();
-      set((state) => ({ currentFrame: Math.max(state.project.settings.frameStart, Math.min(state.project.settings.frameEnd, Math.round(frame))) }));
+      const before = get();
+      const nextFrame = Math.max(before.project.settings.frameStart, Math.min(before.project.settings.frameEnd, Math.round(frame)));
+      const destination = before.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((scene) => scene.frame <= nextFrame);
+      const switchesRecordingScene = Boolean(before.recordingSession && destination && destination.id !== before.recordingSession.sceneId);
+      if (!before.recordingSession || switchesRecordingScene) flushPendingCameraEdit();
+      set((state) => {
+        const clampedFrame = Math.max(state.project.settings.frameStart, Math.min(state.project.settings.frameEnd, nextFrame));
+        const session = state.recordingSession;
+        const targetScene = state.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((scene) => scene.frame <= clampedFrame);
+        if (!session || !targetScene || targetScene.id === session.sceneId) return { currentFrame: clampedFrame };
+        const range = sceneRange(state.project, targetScene.id);
+        const startFrame = range ? Math.max(range.scene.frame, Math.min(range.end - 2, clampedFrame)) : clampedFrame;
+        return {
+          currentFrame: startFrame,
+          recordingSession: {
+            ...session,
+            sceneId: targetScene.id,
+            startFrame,
+            touchedObjectIds: [],
+            lastFixedFrames: {},
+            endpointFrames: {},
+            endpointKeyIds: {},
+          },
+        };
+      });
     },
     setPlaying: (isPlaying) => set({ isPlaying }),
     selectMotion: (selectedMotion) => set({ selectedMotion }),
@@ -563,7 +589,7 @@ export const useEditor = create<EditorState>((set, get) => {
         currentFrame: startFrame,
         recordingMotion: undefined,
         recordingSession: {
-          sceneId, startFrame, touchedObjectIds: [], beforeProject: snapshot(state.project),
+          sceneId, startFrame, touchedObjectIds: [], changed: false, beforeProject: snapshot(state.project),
           lastFixedFrames: {}, endpointFrames: {}, endpointKeyIds: {},
         },
         isPlaying: true,
@@ -573,15 +599,13 @@ export const useEditor = create<EditorState>((set, get) => {
       flushPendingCameraEdit();
       set((state) => {
         const session = state.recordingSession;
-        const selectedObjectId = state.selectedId && session?.touchedObjectIds.includes(state.selectedId)
-          ? state.selectedId
-          : session?.touchedObjectIds.at(-1);
+        const selection = session?.lastMotion;
         return {
           recordingSession: undefined,
           isPlaying: false,
-          selectedId: selectedObjectId ?? state.selectedId,
-          selectedMotion: selectedObjectId && session ? { objectId: selectedObjectId, sceneId: session.sceneId } : state.selectedMotion,
-          past: session?.touchedObjectIds.length
+          selectedId: selection?.objectId ?? state.selectedId,
+          selectedMotion: selection ?? state.selectedMotion,
+          past: session?.changed
             ? [...state.past.slice(-49), session.beforeProject]
             : state.past,
         };
