@@ -134,6 +134,54 @@ describe('scene indipendenti', () => {
     expect(cube.keyframes.some((key) => key.purpose === 'motion' && key.frame === 40)).toBe(false);
   });
 
+  it('una sessione REC registra tutti gli oggetti e la camera effettivamente mossi', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addObject('sphere');
+    const sphereId = useEditor.getState().selectedId!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const cameraId = scene.cameraId;
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setFrame(12);
+    useEditor.getState().setTransform(cubeId, { position: [2, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().setFrame(18);
+    useEditor.getState().setTransform(cubeId, { position: [4, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().setFrame(24);
+    useEditor.getState().setTransform(sphereId, { position: [0, 3, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().setFrame(30);
+    useEditor.getState().setCameraFraming(scene.id, [7, -7, 5], [60, 40, 20], [0, 0, 1]);
+    useEditor.getState().stopRecording();
+    const state = useEditor.getState();
+    const cubeFrames = state.project.objects.find((object) => object.id === cubeId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
+    const sphereFrames = state.project.objects.find((object) => object.id === sphereId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
+    const cameraFrames = state.project.objects.find((object) => object.id === cameraId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
+    expect(cubeFrames).toEqual([1, 12, 18]);
+    expect(sphereFrames).toEqual([1, 24]);
+    expect(cameraFrames).toEqual([1, 30]);
+    expect(state.recordingSession).toBeUndefined();
+    expect(state.isPlaying).toBe(false);
+  });
+
+  it('ridimensiona un blocco movimento rimappando i punti e quindi la velocità', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startRecording(sceneId);
+    useEditor.getState().setFrame(20);
+    useEditor.getState().setTransform(cubeId, { position: [5, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().setFrame(40);
+    useEditor.getState().setTransform(cubeId, { position: [10, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
+    useEditor.getState().resizeMotionRange(cubeId, sceneId, 10, 31);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const motionFrames = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
+    expect(motionFrames).toEqual([10, 20, 30]);
+    expect(evaluateTransform(cube, 10).position).toEqual([0, 0, 1]);
+    expect(evaluateTransform(cube, 30).position).toEqual([10, 0, 1]);
+  });
+
   it('REC porta al punto finale e produce subito un movimento modificabile', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');

@@ -13,6 +13,7 @@ type EditorState = {
   setCameraView(value: boolean): void;
   selectedMotion?: { objectId: string; sceneId: string };
   recordingMotion?: { objectId: string; sceneId: string; startFrame: number; provisionalFrame?: number };
+  recordingSession?: { sceneId: string; startFrame: number; touchedObjectIds: string[] };
   interpolation: Interpolation;
   gizmoMode: 'translate' | 'rotate' | 'scale';
   past: AbacoProject[];
@@ -38,6 +39,8 @@ type EditorState = {
   setTransitionMode(objectId: string, sceneId: string, mode: Interpolation): void;
   startMotion(objectId: string, sceneId: string): void;
   stopMotion(): void;
+  startRecording(sceneId: string): void;
+  stopRecording(): void;
   removeSelected(): void;
   updateObject(id: string, patch: Record<string, unknown>): void;
   setSceneNote(id: string, text: string): void;
@@ -56,6 +59,7 @@ type EditorState = {
   keyPose(id: string): void;
   updateMotionPoint(objectId: string, keyframeId: string, position: Vec3): void;
   moveMotionPoint(objectId: string, keyframeId: string, frame: number): void;
+  resizeMotionRange(objectId: string, sceneId: string, startFrame: number, endFrame: number): void;
   deleteMotionPoint(objectId: string, keyframeId: string): void;
   keyProperty(id: string, property: 'visibility' | 'text'): void;
   deleteKeyframe(objectId: string, keyframeId: string): void;
@@ -197,8 +201,8 @@ export const useEditor = create<EditorState>((set, get) => {
   }));
   return {
     project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
-    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, currentFrame: 1, past: [], future: [], dirty: false }),
-    loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, currentFrame: project.settings.frameStart, past: [], future: [], dirty: false }),
+    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
+    loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, currentFrame: project.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }),
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
     select: (selectedId) => set((state) => ({
       selectedId,
@@ -483,6 +487,23 @@ export const useEditor = create<EditorState>((set, get) => {
       });
     },
     stopMotion: () => set({ recordingMotion: undefined }),
+    startRecording: (sceneId) => {
+      flushPendingCameraEdit();
+      const state = get();
+      const range = sceneRange(state.project, sceneId);
+      if (!range) return;
+      const startFrame = Math.max(range.scene.frame, Math.min(range.end - 2, state.currentFrame));
+      set({
+        currentFrame: startFrame,
+        recordingMotion: undefined,
+        recordingSession: { sceneId, startFrame, touchedObjectIds: [] },
+        isPlaying: true,
+      });
+    },
+    stopRecording: () => {
+      flushPendingCameraEdit();
+      set({ recordingSession: undefined, isPlaying: false });
+    },
     removeSelected: () => {
       const state = get();
       if (!state.selectedId) return;
@@ -697,9 +718,21 @@ export const useEditor = create<EditorState>((set, get) => {
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       if (sceneFrame !== scene.frame) return;
       const motionActive = state.recordingMotion?.objectId === camera.id && state.recordingMotion.sceneId === scene.id;
-      if (motionActive) {
-        putMotionKey(camera, sceneFrame, state.currentFrame, 'position', position, state.interpolation);
-        putMotionKey(camera, sceneFrame, state.currentFrame, 'rotation', rotation, state.interpolation);
+      const session = state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
+      const sessionActive = Boolean(session);
+      const firstSessionChange = Boolean(session && !session.touchedObjectIds.includes(camera.id));
+      const range = sceneRange(next, scene.id);
+      const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
+      if (firstSessionChange && session) {
+        const startTransform = evaluateTransform(camera, session.startFrame);
+        for (const property of ['position', 'rotation', 'scale'] as const) {
+          putMotionKey(camera, scene.frame, session.startFrame, property, startTransform[property], state.interpolation);
+        }
+      }
+      if (motionActive || sessionActive) {
+        putMotionKey(camera, sceneFrame, recordFrame, 'position', position, state.interpolation);
+        putMotionKey(camera, sceneFrame, recordFrame, 'rotation', rotation, state.interpolation);
+        if (sessionActive) putMotionKey(camera, sceneFrame, recordFrame, 'scale', evaluateTransform(camera, state.currentFrame).scale, state.interpolation);
       } else {
         putKey(camera, sceneFrame, 'position', position, 'constant', false, 'snapshot');
         putKey(camera, sceneFrame, 'rotation', rotation, 'constant', false, 'snapshot');
@@ -708,9 +741,12 @@ export const useEditor = create<EditorState>((set, get) => {
         target: structuredClone(target),
         distance: Math.max(0.5, Math.min(100, Math.hypot(position[0] - target[0], position[1] - target[1], position[2] - target[2]))),
       };
-      makeCameraShotIndependent(next, camera, sceneFrame, state.currentFrame === sceneFrame);
+      makeCameraShotIndependent(next, camera, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       commit(next);
       if (previousCameraId && camera.id !== previousCameraId && state.selectedId === previousCameraId) set({ selectedId: camera.id });
+      if (session && !session.touchedObjectIds.includes(camera.id)) {
+        set({ recordingSession: { ...session, touchedObjectIds: [...session.touchedObjectIds, camera.id] } });
+      }
     },
     setTransform: (id, transform) => {
       const state = get();
@@ -722,15 +758,26 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object) return;
       const motionActive = state.recordingMotion?.objectId === id && state.recordingMotion.sceneId === scene?.id;
+      const session = scene && state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
+      const sessionActive = Boolean(session) && !object.kind.includes('light');
+      const firstSessionChange = Boolean(sessionActive && session && !session.touchedObjectIds.includes(object.id));
+      const range = scene ? sceneRange(next, scene.id) : undefined;
+      const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
       if (provisionalFrame !== undefined && provisionalFrame !== state.currentFrame) {
         object.keyframes = object.keyframes.filter((key) => key.frame !== provisionalFrame || key.purpose !== 'motion' || !['position', 'rotation', 'scale'].includes(key.property));
+      }
+      if (firstSessionChange && session) {
+        const startTransform = evaluateTransform(object, session.startFrame);
+        for (const property of ['position', 'rotation', 'scale'] as const) {
+          putMotionKey(object, sceneFrame, session.startFrame, property, startTransform[property], state.interpolation);
+        }
       }
       for (const property of ['position', 'rotation', 'scale'] as const) {
         const editingExistingPoint = state.selectedMotion?.objectId === id
           && state.selectedMotion.sceneId === scene?.id
           && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
-        if (motionActive || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+        if (motionActive || sessionActive || editingExistingPoint) putMotionKey(object, sceneFrame, sessionActive ? recordFrame : state.currentFrame, property, transform[property], state.interpolation);
         else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
       }
       if (object.kind === 'camera') {
@@ -742,7 +789,7 @@ export const useEditor = create<EditorState>((set, get) => {
           ));
           scene.framing.target = new THREE.Vector3(...transform.position).addScaledVector(forward, scene.framing.distance).toArray() as Vec3;
         }
-        makeCameraShotIndependent(next, object, sceneFrame, state.currentFrame === sceneFrame);
+        makeCameraShotIndependent(next, object, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       commit(next);
       if (object.id !== id) set({
@@ -750,6 +797,9 @@ export const useEditor = create<EditorState>((set, get) => {
         selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
         recordingMotion: motionActive ? { ...state.recordingMotion!, objectId: object.id, sceneId: scene!.id } : state.recordingMotion,
       });
+      if (sessionActive && session && !session.touchedObjectIds.includes(object.id)) {
+        set({ recordingSession: { ...session, touchedObjectIds: [...session.touchedObjectIds, object.id] } });
+      }
     },
     keyPose: (id) => {
       const state = get();
@@ -799,6 +849,44 @@ export const useEditor = create<EditorState>((set, get) => {
         if (!object.keyframes.some((key) => key.frame === scene.frame && key.property === property)) putKey(object, scene.frame, property, startTransform[property], 'constant', false, 'snapshot');
       }
       closePreviousScene(object, scene.frame);
+      commit(next);
+    },
+    resizeMotionRange: (objectId, sceneId, requestedStart, requestedEnd) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === objectId);
+      const range = sceneRange(next, sceneId);
+      if (!object || !range) return;
+      ensureSceneSnapshots(next);
+      const transformProperties = new Set<AnimProperty>(['position', 'rotation', 'scale']);
+      const isMotionKey = (key: SceneObject['keyframes'][number]) => key.frame >= range.scene.frame
+        && key.frame < range.end
+        && transformProperties.has(key.property)
+        && (key.purpose === 'motion' || (key.purpose === undefined && key.frame !== range.scene.frame));
+      const motionKeys = object.keyframes.filter(isMotionKey);
+      const sourceFrames = [...new Set(motionKeys.map((key) => key.frame))].sort((a, b) => a - b);
+      if (sourceFrames.length < 2) return;
+      const sourceStart = sourceFrames[0], sourceLast = sourceFrames[sourceFrames.length - 1];
+      const startFrame = Math.max(range.scene.frame, Math.min(range.end - 2, Math.round(requestedStart)));
+      const endFrame = Math.min(range.end, Math.max(startFrame + 2, Math.round(requestedEnd)));
+      const targetLast = endFrame - 1;
+      const startTransform = evaluateTransform(object, sourceStart);
+      const mapped = new Map<number, number>();
+      for (const sourceFrame of sourceFrames) {
+        const ratio = (sourceFrame - sourceStart) / Math.max(1, sourceLast - sourceStart);
+        mapped.set(sourceFrame, Math.round(startFrame + ratio * (targetLast - startFrame)));
+      }
+      object.keyframes = object.keyframes.filter((key) => !isMotionKey(key));
+      for (const key of motionKeys.sort((a, b) => a.frame - b.frame)) {
+        const frame = mapped.get(key.frame)!;
+        object.keyframes = object.keyframes.filter((existing) => existing.frame !== frame || existing.property !== key.property);
+        object.keyframes.push({ ...key, frame });
+      }
+      for (const property of ['position', 'rotation', 'scale'] as const) {
+        if (!object.keyframes.some((key) => key.frame === range.scene.frame && key.property === property)) {
+          putKey(object, range.scene.frame, property, startTransform[property], 'constant', false, 'snapshot');
+        }
+      }
+      closePreviousScene(object, range.scene.frame);
       commit(next);
     },
     deleteMotionPoint: (objectId, keyframeId) => {
@@ -890,12 +978,12 @@ export const useEditor = create<EditorState>((set, get) => {
     undo: () => set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;
-      return { project: previous, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, dirty: true };
+      return { project: previous, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
     redo: () => set((state) => {
       const next = state.future[0];
       if (!next) return state;
-      return { project: next, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, dirty: true };
+      return { project: next, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
   };
 });

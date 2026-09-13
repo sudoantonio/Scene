@@ -43,15 +43,15 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const playing = useEditor((state) => state.isPlaying);
   const selectedId = useEditor((state) => state.selectedId);
   const selectedMotion = useEditor((state) => state.selectedMotion);
-  const recordingMotion = useEditor((state) => state.recordingMotion);
+  const recordingSession = useEditor((state) => state.recordingSession);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const select = useEditor((state) => state.select);
   const selectMotion = useEditor((state) => state.selectMotion);
-  const startMotion = useEditor((state) => state.startMotion);
-  const stopMotion = useEditor((state) => state.stopMotion);
-  const keyPose = useEditor((state) => state.keyPose);
+  const startRecording = useEditor((state) => state.startRecording);
+  const stopRecording = useEditor((state) => state.stopRecording);
   const moveMotionPoint = useEditor((state) => state.moveMotionPoint);
+  const resizeMotionRange = useEditor((state) => state.resizeMotionRange);
   const deleteMotionPoint = useEditor((state) => state.deleteMotionPoint);
   const splitScene = useEditor((state) => state.splitScene);
   const deleteScene = useEditor((state) => state.deleteScene);
@@ -74,6 +74,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const [timelineZoom, setTimelineZoom] = useState(135);
   const [selectedTimelineObjectIds, setSelectedTimelineObjectIds] = useState<Set<string>>(new Set());
   const [presencePreview, setPresencePreview] = useState<{ objectId: string; sceneId: string; start: number; end: number }>();
+  const [motionRangePreview, setMotionRangePreview] = useState<{ objectId: string; sceneId: string; start: number; end: number }>();
   const selectedTimelineObjectIdsRef = useRef(selectedTimelineObjectIds);
   selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
   const start = project.settings.frameStart, end = project.settings.frameEnd;
@@ -93,22 +94,14 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const activeScene = scenes[activeSceneIndex] ?? scenes[0];
   const framingCamera = project.objects.find((object) => object.id === activeScene?.cameraId && object.kind === 'camera');
   const activeSceneEnd = scenes[activeSceneIndex + 1]?.frame ?? end + 1;
-  const selectedRecordObject = project.objects.find((object) => object.id === selectedId && !object.kind.includes('light'));
-  const recordTarget = selectedRecordObject ?? framingCamera;
   const toggleRecording = () => {
-    setPlaying(false);
-    if (recordingMotion) {
-      window.dispatchEvent(new Event('abaco:flush-camera-edit'));
-      keyPose(recordingMotion.objectId);
-      stopMotion();
+    if (recordingSession) {
+      stopRecording();
       return;
     }
-    if (!activeScene || !recordTarget) return;
-    startMotion(recordTarget.id, activeScene.id);
-    const recording = useEditor.getState().recordingMotion;
-    if (!recording) return;
-    select(recording.objectId);
-    selectMotion({ objectId: recording.objectId, sceneId: recording.sceneId });
+    if (!activeScene) return;
+    selectMotion(undefined);
+    startRecording(activeScene.id);
   };
   const canSplit = activeSceneIndex >= 0 && frame > scenes[activeSceneIndex].frame + 1 && frame < activeSceneEnd - 1;
   const selectTimelineObject = (objectId: string, additive = false) => {
@@ -266,6 +259,32 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
   };
+  const beginResizeMotion = (object: SceneObject, sceneId: string, sceneStart: number, sceneEnd: number, motionStart: number, motionEnd: number, edge: 'start' | 'end', event: React.PointerEvent<HTMLSpanElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    const track = event.currentTarget.closest('.movement-track') as HTMLElement | null;
+    if (!track) return;
+    const startX = event.clientX;
+    const framesPerPixel = (end - start + 1) / Math.max(1, track.getBoundingClientRect().width);
+    let preview = { objectId: object.id, sceneId, start: motionStart, end: motionEnd };
+    setMotionRangePreview(preview);
+    const update = (clientX: number) => {
+      const delta = Math.round((clientX - startX) * framesPerPixel);
+      preview = edge === 'start'
+        ? { ...preview, start: Math.max(sceneStart, Math.min(motionEnd - 2, motionStart + delta)), end: motionEnd }
+        : { ...preview, start: motionStart, end: Math.max(motionStart + 2, Math.min(sceneEnd, motionEnd + delta)) };
+      setMotionRangePreview(preview);
+    };
+    const move = (pointer: PointerEvent) => update(pointer.clientX);
+    const finish = (pointer: PointerEvent) => {
+      update(pointer.clientX);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      resizeMotionRange(object.id, sceneId, preview.start, preview.end);
+      setMotionRangePreview(undefined);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish, { once: true });
+  };
   const renderMotionTrack = (object: SceneObject | undefined, camera = false) => {
     const clips = scenes.flatMap((scene, index) => {
       const motionObject = camera ? project.objects.find((item) => item.id === scene.cameraId && item.kind === 'camera') : object;
@@ -274,13 +293,15 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       const keys = motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= scene.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
       const realPoints = keys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== scene.frame));
       if (!realPoints.length) return [];
-      const firstFrame = keys[0].frame;
+      const firstFrame = Math.min(...realPoints.map((key) => key.frame));
       const lastMotionFrame = Math.max(...realPoints.map((key) => key.frame));
-      const motionEnd = Math.min(sceneEnd, Math.max(scene.frame + 1, lastMotionFrame + 1));
+      const storedMotionEnd = Math.min(sceneEnd, Math.max(firstFrame + 2, lastMotionFrame + 1));
+      const preview = motionRangePreview?.objectId === motionObject.id && motionRangePreview.sceneId === scene.id ? motionRangePreview : undefined;
+      const motionStart = preview?.start ?? firstFrame;
+      const motionEnd = preview?.end ?? storedMotionEnd;
       const active = selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === scene.id;
-      const width = Math.max(0.2, ((motionEnd - scene.frame) / Math.max(1, end - start + 1)) * 100);
-      const insetLeft = index > 0 ? 4 : 0;
-      return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${active ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft}px)` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · ${realPoints.length} punti`} onClick={(event) => {
+      const width = Math.max(0.2, ((motionEnd - motionStart) / Math.max(1, end - start + 1)) * 100);
+      return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${preview ? 'resizing' : ''} ${active ? 'selected-block' : ''}`} style={{ left: left(motionStart), width: `${width}%` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · trascina i bordi per cambiare velocità`} onClick={(event) => {
         event.stopPropagation();
         setFrame(firstFrame);
         select(motionObject.id);
@@ -290,7 +311,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         setDeleteTarget({ kind: 'motion', objectId: motionObject.id, sceneId: scene.id });
         setCommentDraft(undefined);
         setTransitionDraft(undefined);
-      }}><MoveRight className="timeline-motion-icon" size={13} /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - scene.frame) / Math.max(1, motionEnd - scene.frame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span></button>];
+      }}><span className="motion-resize-handle start" role="separator" aria-label="Ridimensiona inizio movimento" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} /><MoveRight className="timeline-motion-icon" size={13} /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span><span className="motion-resize-handle end" role="separator" aria-label="Ridimensiona fine movimento" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} /></button>];
     });
     if (!clips.length) return null;
     return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy">{camera ? <Video size={13} /> : <MoveRight size={13} />}Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
@@ -388,7 +409,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
         <button className="icon" title="Frame precedente" aria-label="Frame precedente" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
         <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
-        <button className={`timeline-record ${recordingMotion ? 'active' : ''}`} disabled={!recordingMotion && !recordTarget} title={recordingMotion ? 'Salva il punto finale e termina la registrazione' : `Registra movimento ${recordTarget?.name ?? ''}`} aria-label={recordingMotion ? 'Ferma registrazione movimento' : 'Registra movimento'} onClick={toggleRecording}><i /></button>
+        <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
         <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
         <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
         <button className="timeline-comment-button" disabled={!currentCommentTarget()} title="Aggiungi un commento all’elemento selezionato" onClick={() => { const target = currentCommentTarget(); if (target) openComment(target); }}><MessageSquarePlus size={14} /><span>Commento</span></button>

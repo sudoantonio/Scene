@@ -137,6 +137,15 @@ export default function App() {
     if (!playing) return;
     const timer = window.setInterval(() => {
       const state = useEditor.getState();
+      if (state.recordingSession) {
+        const scenes = state.project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+        const index = scenes.findIndex((scene) => scene.id === state.recordingSession?.sceneId);
+        const sceneEnd = scenes[index + 1]?.frame ?? state.project.settings.frameEnd + 1;
+        if (index < 0 || state.currentFrame >= sceneEnd - 1) {
+          state.stopRecording();
+          return;
+        }
+      }
       if (state.currentFrame >= state.project.settings.frameEnd) { state.setFrame(state.project.settings.frameStart); state.setPlaying(false); }
       else state.setFrame(state.currentFrame + 1);
     }, 1000 / project.settings.fps);

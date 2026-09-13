@@ -1478,6 +1478,11 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .motion-key-tick { pointer-events: auto; cursor: ew-resize; }
 .motion-key-tick.selected { width: 7px; height: 7px; background: white; border-color: #b63838; }
 .theme-dark .motion-key-tick { background: #ff7777; border-color: #ffd0d0; }
+.motion-resize-handle { position: absolute; z-index: 7; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.motion-resize-handle.start { left: 0; }
+.motion-resize-handle.end { right: 0; }
+.recorded-motion-segment:hover .motion-resize-handle { background: rgba(255,255,255,.14); }
+.recorded-motion-segment.resizing { opacity: .86; }
 .timeline-record { width: 25px; min-width: 25px; height: 25px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #a5a5a0; background: transparent; border: 1px solid #585854; border-radius: 50%; }
 .timeline-record > i { width: 9px; height: 9px; flex: none; background: #e15050; border-radius: 50%; }
 .timeline-record.active { width: 36px; min-width: 36px; background: #8e2727; border-color: #ff6868; border-radius: 4px; animation: rec-pulse 1.05s ease-in-out infinite; }
@@ -1673,6 +1678,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   border-color: #ff4141 !important;
   box-shadow: 0 0 0 1px #ff4141, 0 0 12px rgba(255,65,65,.52) !important;
 }
+.recording-motion .canvas-stage { box-shadow: inset 0 0 0 2px #ff4141, inset 0 0 18px rgba(255,65,65,.18); }
 
 /* La finestra può restringersi senza essere bloccata dalle dimensioni dei pannelli. */
 .workspace, .left-panel, .inspector, .viewport { min-width: 0; }

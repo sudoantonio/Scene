@@ -200,6 +200,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
   const currentFrame = useEditor((state) => state.currentFrame);
   const selectedId = useEditor((state) => state.selectedId);
   const selectedMotion = useEditor((state) => state.selectedMotion);
+  const recordingSession = useEditor((state) => state.recordingSession);
   const mode = useEditor((state) => state.gizmoMode);
   const select = useEditor((state) => state.select);
   const setTransform = useEditor((state) => state.setTransform);
@@ -288,7 +289,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
     // contemporaneamente la stessa trasformazione e la rotazione sembra fermarsi.
     const nearest = event.intersections[0]?.object;
     if (nearest && nearest !== ref.current && !ref.current.getObjectById(nearest.id)) return;
-    event.stopPropagation(); select(object.id); setPlaying(false);
+    event.stopPropagation(); select(object.id); if (!recordingSession) setPlaying(false);
     event.camera.updateMatrixWorld();
     const forward = event.camera.getWorldDirection(new THREE.Vector3()).normalize();
     const right = new THREE.Vector3().setFromMatrixColumn(event.camera.matrixWorld, 0).normalize();
@@ -364,7 +365,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
   };
   const startGizmoDrag = () => {
     if (gizmoDragging.current) return;
-    setPlaying(false);
+    if (!recordingSession) setPlaying(false);
     gizmoDragging.current = true;
     setDragging(true);
     onDragChange(true);
@@ -714,6 +715,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const frame = useEditor((state) => state.currentFrame);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const recordingMotion = useEditor((state) => state.recordingMotion);
+  const recordingSession = useEditor((state) => state.recordingSession);
   const select = useEditor((state) => state.select);
   const addObject = useEditor((state) => state.addObject);
   const selectedId = useEditor((state) => state.selectedId);
@@ -1021,7 +1023,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       if (movementCodes.has(event.code)) {
         event.preventDefault();
         held.add(event.code);
-        useEditor.getState().setPlaying(false);
+        const editor = useEditor.getState();
+        if (!editor.recordingSession) editor.setPlaying(false);
       }
       if (event.code.startsWith('Shift') || event.code.startsWith('Alt')) held.add(event.code);
     };
@@ -1086,7 +1089,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
   }, [cameraView]);
 
-  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
+  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
