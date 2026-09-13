@@ -633,7 +633,6 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
 function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChange }: { objectId: string; keyframe: Keyframe; selected: boolean; onSelect(): void; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number; start: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number; moved: boolean } | undefined>(undefined);
-  const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const updateMotionPoint = useEditor((state) => state.updateMotionPoint);
   const position = keyframe.value as Vec3;
@@ -641,7 +640,6 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
     if (event.button !== 0 || !ref.current) return;
     event.stopPropagation();
     setPlaying(false);
-    setFrame(keyframe.frame);
     onSelect();
     event.camera.updateMatrixWorld();
     const forward = event.camera.getWorldDirection(new THREE.Vector3()).normalize();
@@ -676,7 +674,7 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
   };
   return <>
     <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'grab'; }} onPointerOut={() => { if (!drag.current) document.body.style.cursor = 'default'; }}>
-      <mesh><sphereGeometry args={[selected ? .15 : .115, 18, 14]} /><meshBasicMaterial color={selected ? '#ffffff' : '#ef3f3f'} depthTest={false} /></mesh>
+      <mesh rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[selected ? .22 : .16, selected ? .22 : .16, selected ? .22 : .16]} /><meshBasicMaterial color={selected ? '#ffffff' : '#ef3f3f'} depthTest={false} /></mesh>
       <mesh><sphereGeometry args={[.28, 12, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
     </group>
   </>;
@@ -685,6 +683,20 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
 function MotionPath({ objectId, keyframes, points, onDragChange }: { objectId: string; keyframes: Keyframe[]; points: Transform['position'][]; onDragChange(value: boolean): void }) {
   const [selectedPointId, setSelectedPointId] = useState<string>();
   const deleteMotionPoint = useEditor((state) => state.deleteMotionPoint);
+  const directionMarkers = useMemo(() => {
+    if (points.length < 3) return [];
+    const interval = Math.max(2, Math.floor(points.length / 5));
+    const markers: Array<{ position: Vec3; quaternion: [number, number, number, number] }> = [];
+    for (let index = interval; index < points.length; index += interval) {
+      const from = new THREE.Vector3(...points[Math.max(0, index - 1)]);
+      const to = new THREE.Vector3(...points[index]);
+      const direction = to.clone().sub(from);
+      if (direction.lengthSq() < .0001) continue;
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+      markers.push({ position: from.lerp(to, .5).toArray() as Vec3, quaternion: quaternion.toArray() as [number, number, number, number] });
+    }
+    return markers;
+  }, [points]);
   useEffect(() => {
     if (selectedPointId && !keyframes.some((key) => key.id === selectedPointId)) setSelectedPointId(undefined);
   }, [keyframes, selectedPointId]);
@@ -703,6 +715,7 @@ function MotionPath({ objectId, keyframes, points, onDragChange }: { objectId: s
   if (points.length < 2) return null;
   return <group renderOrder={20}>
     <Line points={points} color="#ef3f3f" lineWidth={2.4} depthTest={false} transparent opacity={.95} />
+    {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color="#ef3f3f" depthTest={false} /></mesh>)}
     {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={selectedPointId === keyframe.id} onSelect={() => setSelectedPointId(keyframe.id)} onDragChange={onDragChange} />)}
   </group>;
 }
@@ -752,6 +765,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const motionPositionKeys = useMemo(() => motionObject && motionScene && motionSceneEnd
     ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= motionScene.frame && key.frame < motionSceneEnd).sort((a, b) => a.frame - b.frame)
     : [], [motionObject, motionScene, motionSceneEnd]);
+  const motionHandleKeys = useMemo(() => motionScene
+    ? motionPositionKeys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== motionScene.frame))
+    : [], [motionPositionKeys, motionScene]);
   const motionPathPoints = useMemo(() => {
     if (!motionObject || !motionScene || !motionSceneEnd) return [];
     const realPoints = motionPositionKeys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== motionScene.frame));
@@ -797,7 +813,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     cameraCommitTimer.current = undefined;
     pendingCameraCommit.current = undefined;
     const state = useEditor.getState();
-    if (state.project.id === pending.projectId && state.currentFrame === pending.frame) {
+    if (state.project.id === pending.projectId && (state.currentFrame === pending.frame || state.recordingSession?.sceneId === pending.sceneId)) {
       state.setCameraFraming(pending.sceneId, pending.position, pending.rotation, pending.target);
     }
   };
@@ -884,8 +900,12 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       rotation: [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
       target: controls.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
     };
-    if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
-    cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, 180);
+    const recording = Boolean(useEditor.getState().recordingSession);
+    if (cameraCommitTimer.current) {
+      if (recording) return;
+      window.clearTimeout(cameraCommitTimer.current);
+    }
+    cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, recording ? 100 : 180);
   };
 
   const panShotView = (deltaX: number, deltaY: number) => {
@@ -1011,12 +1031,19 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   useEffect(() => {
     const movementCodes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
     const held = new Set<string>();
+    let freeFlight: { sceneId: string; position: Vec3; rotation: Vec3; target: Vec3; lastCommitTime: number } | undefined;
     let animationFrame = 0;
     let previousTime = performance.now();
 
     const editableTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
       return Boolean(element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)));
+    };
+    const flushFreeFlight = () => {
+      if (!freeFlight) return;
+      const editor = useEditor.getState();
+      editor.setCameraFraming(freeFlight.sceneId, freeFlight.position, freeFlight.rotation, freeFlight.target);
+      freeFlight = undefined;
     };
     const keyDown = (event: KeyboardEvent) => {
       if (editableTarget(event.target) || event.metaKey || event.ctrlKey) return;
@@ -1028,8 +1055,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       }
       if (event.code.startsWith('Shift') || event.code.startsWith('Alt')) held.add(event.code);
     };
-    const keyUp = (event: KeyboardEvent) => { held.delete(event.code); };
-    const clearKeys = () => held.clear();
+    const keyUp = (event: KeyboardEvent) => {
+      held.delete(event.code);
+      if (![...held].some((code) => movementCodes.has(code))) flushFreeFlight();
+    };
+    const clearKeys = () => { flushFreeFlight(); held.clear(); };
     const tick = (time: number) => {
       const deltaSeconds = Math.min(.05, Math.max(0, (time - previousTime) / 1000));
       previousTime = time;
@@ -1039,7 +1069,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         const cameraObject = editor.project.objects.find((object) => object.id === currentScene?.cameraId && object.kind === 'camera');
         if (currentScene && cameraObject) {
           const controls = cameraView ? shotOrbitRef.current : undefined;
-          const transform = evaluateTransform(cameraObject, editor.currentFrame);
+          const live = freeFlight?.sceneId === currentScene.id ? freeFlight : undefined;
+          const transform = live
+            ? { position: live.position, rotation: live.rotation, scale: evaluateTransform(cameraObject, editor.currentFrame).scale }
+            : evaluateTransform(cameraObject, editor.currentFrame);
           const camera = controls?.object ?? new THREE.PerspectiveCamera();
           if (!controls) {
             camera.position.set(...transform.position);
@@ -1047,7 +1080,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
           }
           camera.up.set(0, 0, 1);
           camera.updateMatrixWorld();
-          const target = controls?.target ?? new THREE.Vector3(...transform.position).addScaledVector(camera.getWorldDirection(new THREE.Vector3()), currentScene.framing.distance);
+          const target = controls?.target ?? (live ? new THREE.Vector3(...live.target) : new THREE.Vector3(...transform.position).addScaledVector(camera.getWorldDirection(new THREE.Vector3()), currentScene.framing.distance));
           const distance = Math.max(.5, camera.position.distanceTo(target));
           const speedModifier = ([...held].some((code) => code.startsWith('Shift')) ? 3 : 1) * ([...held].some((code) => code.startsWith('Alt')) ? .25 : 1);
           const step = THREE.MathUtils.clamp(distance * .72, .65, 18) * deltaSeconds * speedModifier;
@@ -1071,7 +1104,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
             const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
             const framingTarget = target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
             if (cameraView) scheduleCameraCommit();
-            else editor.setCameraFraming(currentScene.id, position, rotation, framingTarget);
+            else {
+              const lastCommitTime = live?.lastCommitTime ?? time;
+              freeFlight = { sceneId: currentScene.id, position, rotation, target: framingTarget, lastCommitTime };
+              if (time - lastCommitTime >= 100) {
+                editor.setCameraFraming(currentScene.id, position, rotation, framingTarget);
+                freeFlight.lastCommitTime = time;
+              }
+            }
           }
         }
       }
@@ -1082,6 +1122,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     window.addEventListener('blur', clearKeys);
     animationFrame = requestAnimationFrame(tick);
     return () => {
+      flushFreeFlight();
       cancelAnimationFrame(animationFrame);
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
@@ -1103,7 +1144,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
       {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
+      {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionHandleKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
       {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} frame={frame} target={activeCameraTarget} syncKey={`${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}

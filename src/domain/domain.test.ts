@@ -156,11 +156,29 @@ describe('scene indipendenti', () => {
     const cubeFrames = state.project.objects.find((object) => object.id === cubeId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
     const sphereFrames = state.project.objects.find((object) => object.id === sphereId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
     const cameraFrames = state.project.objects.find((object) => object.id === cameraId)!.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').map((key) => key.frame).sort((a, b) => a - b);
-    expect(cubeFrames).toEqual([1, 12, 18]);
+    expect(cubeFrames).toEqual([1, 18]);
     expect(sphereFrames).toEqual([1, 24]);
     expect(cameraFrames).toEqual([1, 30]);
     expect(state.recordingSession).toBeUndefined();
     expect(state.isPlaying).toBe(false);
+  });
+
+  it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startRecording(sceneId);
+    for (let frame = 2; frame <= 72; frame += 1) {
+      useEditor.getState().setFrame(frame);
+      useEditor.getState().setTransform(cubeId, { position: [frame / 10, Math.sin(frame / 8), 1], rotation: [0, 0, frame], scale: [1, 1, 1] });
+    }
+    useEditor.getState().stopRecording();
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const positions = cube.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion').sort((a, b) => a.frame - b.frame);
+    expect(positions.length).toBeLessThanOrEqual(7);
+    expect(positions.at(-1)?.frame).toBe(72);
+    expect(evaluateTransform(cube, 72).position).toEqual([7.2, Math.sin(9), 1]);
   });
 
   it('ridimensiona un blocco movimento rimappando i punti e quindi la velocità', () => {

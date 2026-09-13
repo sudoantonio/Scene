@@ -3,6 +3,10 @@ import { defaultBackground, defaultCameraFraming, defaultLighting, type AbacoPro
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const ease = (t: number, mode: Keyframe['interpolation']) => mode === 'constant' ? 0 : mode === 'bezier' ? t * t * (3 - 2 * t) : t;
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+const catmullRom = (p0: number, p1: number, p2: number, p3: number, t: number) => {
+  const t2 = t * t, t3 = t2 * t;
+  return .5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+};
 
 export function evaluateProperty(object: SceneObject, property: AnimProperty, frame: number): KeyframeValue {
   const base: Record<AnimProperty, KeyframeValue> = {
@@ -20,6 +24,12 @@ export function evaluateProperty(object: SceneObject, property: AnimProperty, fr
   if (!Array.isArray(previous.value) || !Array.isArray(next.value)) return previous.value;
   const previousVector = previous.value as Vec3;
   const nextVector = next.value as Vec3;
+  if (property === 'position' && previous.interpolation === 'bezier' && (previous.purpose === 'motion' || next.purpose === 'motion')) {
+    const before = (keys[Math.max(0, nextIndex - 2)].value as Vec3) ?? previousVector;
+    const afterCandidate = keys[Math.min(keys.length - 1, nextIndex + 1)];
+    const after = afterCandidate?.purpose === 'motion' ? afterCandidate.value as Vec3 : nextVector;
+    return previousVector.map((_, index) => catmullRom(before[index], previousVector[index], nextVector[index], after[index], t)) as Vec3;
+  }
   return previousVector.map((value, index) => mix(value, nextVector[index], t)) as Vec3;
 }
 
