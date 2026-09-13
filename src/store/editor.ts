@@ -48,6 +48,7 @@ type EditorState = {
   reorderObjects(sourceId: string, targetId: string): void;
   deleteObject(id: string): void;
   duplicateObjectsToScene(objectIds: string[], sceneId: string): string[];
+  resizeObjectPresence(objectId: string, sceneId: string, startFrame: number, endFrame: number): void;
   deleteObjectFromScene(objectId: string, sceneId: string): void;
   deleteMotionFromScene(objectId: string, sceneId: string): void;
   setTransform(id: string, transform: Transform): void;
@@ -555,6 +556,21 @@ export const useEditor = create<EditorState>((set, get) => {
       commit(next);
       set({ selectedId: created.at(-1) });
       return created;
+    },
+    resizeObjectPresence: (objectId, sceneId, requestedStart, requestedEnd) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
+      const range = sceneRange(next, sceneId);
+      if (!object || !range) return;
+      ensureSceneSnapshots(next);
+      const startFrame = Math.max(range.scene.frame, Math.min(range.end - 1, Math.round(requestedStart)));
+      const endFrame = Math.max(startFrame + 1, Math.min(range.end, Math.round(requestedEnd)));
+      object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility' || key.frame < range.scene.frame || key.frame >= range.end);
+      putKey(object, range.scene.frame, 'visibility', startFrame === range.scene.frame, 'constant');
+      if (startFrame > range.scene.frame) putKey(object, startFrame, 'visibility', true, 'constant');
+      if (endFrame < range.end) putKey(object, endFrame, 'visibility', false, 'constant');
+      if (object.sceneIds.length && !object.sceneIds.includes(sceneId)) object.sceneIds.push(sceneId);
+      commit(next);
     },
     deleteObjectFromScene: (objectId, sceneId) => {
       const next = snapshot(get().project);

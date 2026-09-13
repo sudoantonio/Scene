@@ -14,6 +14,16 @@ type DeleteTarget =
   | { kind: 'motion'; objectId: string; sceneId: string }
   | { kind: 'keyframe'; objectId: string; keyframeId: string };
 let copiedTimelineObjectIds: string[] = [];
+const objectPresenceRange = (object: SceneObject, sceneStart: number, sceneEnd: number): [number, number] | undefined => {
+  let first = -1, last = -1;
+  for (let candidate = sceneStart; candidate < sceneEnd; candidate += 1) {
+    if (evaluateProperty(object, 'visibility', candidate)) {
+      if (first < 0) first = candidate;
+      last = candidate;
+    } else if (first >= 0) break;
+  }
+  return first < 0 ? undefined : [first, last + 1];
+};
 function ElementThumbnail({ object, compact = false }: { object: SceneObject; compact?: boolean }) {
   const size = compact ? 11 : 12;
   const icon = object.kind === 'text' ? <Type size={size} />
@@ -52,6 +62,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const reorderObjects = useEditor((state) => state.reorderObjects);
   const deleteObject = useEditor((state) => state.deleteObject);
   const duplicateObjectsToScene = useEditor((state) => state.duplicateObjectsToScene);
+  const resizeObjectPresence = useEditor((state) => state.resizeObjectPresence);
   const deleteObjectFromScene = useEditor((state) => state.deleteObjectFromScene);
   const deleteMotionFromScene = useEditor((state) => state.deleteMotionFromScene);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
@@ -62,6 +73,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const [sceneThumbnails, setSceneThumbnails] = useState<Record<string, string>>({});
   const [timelineZoom, setTimelineZoom] = useState(135);
   const [selectedTimelineObjectIds, setSelectedTimelineObjectIds] = useState<Set<string>>(new Set());
+  const [presencePreview, setPresencePreview] = useState<{ objectId: string; sceneId: string; start: number; end: number }>();
   const selectedTimelineObjectIdsRef = useRef(selectedTimelineObjectIds);
   selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
   const start = project.settings.frameStart, end = project.settings.frameEnd;
@@ -155,6 +167,33 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       resizeScene(scene.id, originalDuration + (pointer.clientX - startX) * framesPerPixel);
       window.removeEventListener('pointerup', finish);
     };
+    window.addEventListener('pointerup', finish, { once: true });
+  };
+  const beginResizePresence = (object: SceneObject, sceneId: string, sceneStart: number, sceneEnd: number, edge: 'start' | 'end', event: React.PointerEvent<HTMLSpanElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    const track = event.currentTarget.closest('.presence-track') as HTMLElement | null;
+    const range = objectPresenceRange(object, sceneStart, sceneEnd);
+    if (!track || !range) return;
+    const startX = event.clientX;
+    const framesPerPixel = (end - start + 1) / Math.max(1, track.getBoundingClientRect().width);
+    let preview = { objectId: object.id, sceneId, start: range[0], end: range[1] };
+    setPresencePreview(preview);
+    const update = (clientX: number) => {
+      const delta = Math.round((clientX - startX) * framesPerPixel);
+      preview = edge === 'start'
+        ? { ...preview, start: Math.max(sceneStart, Math.min(range[1] - 1, range[0] + delta)), end: range[1] }
+        : { ...preview, start: range[0], end: Math.max(range[0] + 1, Math.min(sceneEnd, range[1] + delta)) };
+      setPresencePreview(preview);
+    };
+    const move = (pointer: PointerEvent) => update(pointer.clientX);
+    const finish = (pointer: PointerEvent) => {
+      update(pointer.clientX);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      resizeObjectPresence(object.id, sceneId, preview.start, preview.end);
+      setPresencePreview(undefined);
+    };
+    window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
   };
   const saveTransition = () => {
@@ -392,14 +431,18 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
           {scenes.map((scene, index) => {
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
-            const width = ((clipEnd - scene.frame) / Math.max(1, end - start + 1)) * 100;
-            const insetLeft = index > 0 ? 4 : 0, insetRight = index < scenes.length - 1 ? 4 : 1;
-            const visible = evaluateProperty(object, 'visibility', scene.frame) as boolean;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`}` };
-            if (!visible || (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id))) return null;
-            return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${visible ? '' : 'hidden'} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }} title={`${displayName} · ${scene.name ?? `Scena ${index + 1}`}`} onClick={(event) => {
+            if (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id)) return null;
+            const storedRange = objectPresenceRange(object, scene.frame, clipEnd);
+            const preview = presencePreview?.objectId === object.id && presencePreview.sceneId === scene.id ? presencePreview : undefined;
+            const range = preview ? [preview.start, preview.end] as const : storedRange;
+            if (!range) return null;
+            const width = ((range[1] - range[0]) / Math.max(1, end - start + 1)) * 100;
+            const insetLeft = range[0] === scene.frame && index > 0 ? 4 : 0;
+            const insetRight = range[1] === clipEnd && index < scenes.length - 1 ? 4 : 1;
+            return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${preview ? 'resizing' : ''} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: `calc(${left(range[0])} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }} title={`${displayName} · frame ${range[0]}–${range[1] - 1}`} onClick={(event) => {
               event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
-            }}><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}</button>;
+            }}><span className="presence-resize-handle start" role="separator" aria-label="Ridimensiona inizio elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Ridimensiona fine elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
           })}
           <i style={{ left: left(frame) }} />
         </div>

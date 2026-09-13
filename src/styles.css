@@ -1753,3 +1753,42 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   width: calc(20.3125cqw * var(--layer-scale));
   min-width: calc(2.8125cqw * var(--layer-scale));
 }
+
+/* Trim fluido della presenza: le maniglie compaiono sul blocco senza alterarne l'altezza. */
+.presence-segment { touch-action: none; }
+.presence-segment.resizing { transition: none !important; }
+.presence-resize-handle {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  opacity: 0;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.presence-resize-handle.start { left: 0; }
+.presence-resize-handle.end { right: 0; }
+.presence-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background: currentColor;
+  opacity: .72;
+}
+.presence-resize-handle.start::after { left: 3px; }
+.presence-resize-handle.end::after { right: 3px; }
+.presence-segment:hover .presence-resize-handle,
+.presence-segment.selected-block .presence-resize-handle,
+.presence-segment.resizing .presence-resize-handle { opacity: 1; }
+
+/* I blocchi elemento usano solo il colore di riempimento, senza cornici. */
+.app-shell .timeline .presence-segment,
+.app-shell .timeline .presence-segment.selected-block {
+  min-width: 2px;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell .timeline .presence-segment.selected-block { filter: brightness(1.12); }

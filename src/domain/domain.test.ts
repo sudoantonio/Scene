@@ -278,6 +278,20 @@ describe('scene indipendenti', () => {
     expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(false);
   });
 
+  it('ridimensiona la presenza di un elemento dentro la scena al singolo frame', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().resizeObjectPresence(cubeId, sceneId, 13, 25);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateProperty(cube, 'visibility', 12)).toBe(false);
+    expect(evaluateProperty(cube, 'visibility', 13)).toBe(true);
+    expect(evaluateProperty(cube, 'visibility', 24)).toBe(true);
+    expect(evaluateProperty(cube, 'visibility', 25)).toBe(false);
+    expect(() => ProjectSchema.parse(useEditor.getState().project)).not.toThrow();
+  });
+
   it('incolla copie indipendenti soltanto nella scena scelta', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('text');
