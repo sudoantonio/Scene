@@ -80,7 +80,7 @@ class BackgroundAssetBoundary extends Component<{ resetKey: string; children: Re
 }
 
 function AssetPlaceholder() {
-  return <mesh castShadow><boxGeometry args={[1.4, 1.4, 1.4]} /><meshStandardMaterial color="#9cabb8" wireframe /></mesh>;
+  return <mesh castShadow><boxGeometry args={[1.4, 1.4, 1.4]} /><meshStandardMaterial color="#7e8c94" wireframe /></mesh>;
 }
 
 function BlendAssetModel({ source, object }: { source: string; object: SceneObject }) {
@@ -157,13 +157,13 @@ function CameraVisual({ object }: { object: SceneObject }) {
     [halfWidth, halfHeight, -depth], [-halfWidth, halfHeight, -depth],
   ];
   return <group>
-    <mesh position={[0, 0, .35]}><boxGeometry args={[.82, .55, .48]} /><meshStandardMaterial color="#4cc9f0" roughness={.35} /></mesh>
-    <mesh position={[0, 0, .03]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[.2, .29, .38, 24]} /><meshStandardMaterial color="#1d91b5" roughness={.25} /></mesh>
-    <mesh position={[0, .36, .46]}><boxGeometry args={[.34, .18, .22]} /><meshStandardMaterial color="#4cc9f0" /></mesh>
-    {corners.map((corner, index) => <Line key={index} points={[origin, corner]} color="#54d6ff" lineWidth={1.25} depthTest={false} transparent opacity={.85} />)}
-    <Line points={[...corners, corners[0]]} color="#54d6ff" lineWidth={1.5} depthTest={false} transparent opacity={.9} />
-    <Line points={[origin, [0, 0, -depth - .6]]} color="#ff5b5b" lineWidth={1.4} depthTest={false} transparent opacity={.9} />
-    <mesh position={[0, 0, -depth]}><planeGeometry args={[halfWidth * 2, halfHeight * 2]} /><meshBasicMaterial color="#54d6ff" transparent opacity={.055} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+    <mesh position={[0, 0, .35]}><boxGeometry args={[.82, .55, .48]} /><meshStandardMaterial color="#858077" roughness={.42} /></mesh>
+    <mesh position={[0, 0, .03]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[.2, .29, .38, 24]} /><meshStandardMaterial color="#3c3c39" roughness={.3} /></mesh>
+    <mesh position={[0, .36, .46]}><boxGeometry args={[.34, .18, .22]} /><meshStandardMaterial color="#858077" /></mesh>
+    {corners.map((corner, index) => <Line key={index} points={[origin, corner]} color="#d9ad32" lineWidth={1.25} depthTest={false} transparent opacity={.82} />)}
+    <Line points={[...corners, corners[0]]} color="#d9ad32" lineWidth={1.5} depthTest={false} transparent opacity={.88} />
+    <Line points={[origin, [0, 0, -depth - .6]]} color="#b55d55" lineWidth={1.4} depthTest={false} transparent opacity={.82} />
+    <mesh position={[0, 0, -depth]}><planeGeometry args={[halfWidth * 2, halfHeight * 2]} /><meshBasicMaterial color="#d9ad32" transparent opacity={.045} side={THREE.DoubleSide} depthWrite={false} /></mesh>
   </group>;
 }
 

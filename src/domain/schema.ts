@@ -192,8 +192,12 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     transform.rotation = [60.255, 40.966, 20.538];
   }
   if (kind.includes('light')) transform.position = [4, -4, 6];
+  const professionalColors: Record<ObjectKind, string> = {
+    cube: '#7e8c94', sphere: '#899084', cylinder: '#887f76', cone: '#827b74', plane: '#717b78', text: '#718292',
+    blend_asset: '#777984', camera: '#d1a12a', area_light: '#f2dfac', point_light: '#f2dfac', sun_light: '#f2dfac',
+  };
   return {
-    id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: kind.includes('light') ? '#fff1c7' : '#9cabb8',
+    id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
     asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, sceneNotes: [], keyframes: [],
   };
