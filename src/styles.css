@@ -1626,3 +1626,8 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .panel-resizer.vertical::after { width: .5px; }
 .panel-resizer.horizontal::after { height: .5px; }
 .camera-frame-guide { outline-width: .5px; }
+
+/* La miniatura della camera resta distinguibile anche nella vista libera. */
+.live-camera-preview { border-width: 1px !important; border-color: #74746f !important; }
+.live-camera-preview:hover { border-color: #d1a12a !important; }
+.theme-dark .live-camera-preview { border-color: #85857f !important; }
