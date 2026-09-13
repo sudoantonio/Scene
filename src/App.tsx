@@ -10,6 +10,7 @@ import SettingsModal from './components/SettingsModal';
 import Timeline from './components/Timeline';
 import Viewport, { captureContactSheet } from './components/Viewport';
 import { useEditor } from './store/editor';
+import headerLogo from './assets/abaco-scene-header.png';
 
 const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Esportazione diretta senza modifiche AI.', assumptions: [], warnings: [], operations: [] });
 const initialLayout = () => {
@@ -222,7 +223,10 @@ export default function App() {
     });
   };
   return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
-    <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
+    <div className="slim-headbar">
+      <img className="headbar-logo" src={headerLogo} alt="Abaco Scene" draggable={false} />
+      <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+    </div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,${leftWidth}px) 5px minmax(0,1fr) 5px minmax(0,${rightWidth}px)` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
