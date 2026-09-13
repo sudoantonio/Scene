@@ -424,9 +424,8 @@ function CameraViewControls({ frame, syncKey, target, controls }: {
   return <OrbitControls ref={controls} makeDefault enabled={false} enableDamping={false} enableZoom={false} enableRotate={false} enablePan={false} />;
 }
 
-function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, target }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; target?: Vec3 }) {
+function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
   const currentFrame = useEditor((state) => state.currentFrame);
-  const ref = useRef<THREE.PerspectiveCamera>(null);
   const frame = frameOverride ?? currentFrame;
   const transform = evaluateTransform(object, frame);
   const lens = evaluateProperty(object, 'lens', frame) as number;
@@ -437,19 +436,23 @@ function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1
   // same composition as thumbnails and exports.
   const safeFrameHeightRatio = THREE.MathUtils.clamp(frameHeightRatio, .1, 1);
   const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(frameFov / 2) / safeFrameHeightRatio));
-  useLayoutEffect(() => { if (target) ref.current?.lookAt(...target); }, [target?.[0], target?.[1], target?.[2], frame]);
-  return <PerspectiveCamera ref={ref} makeDefault position={transform.position} rotation={target ? undefined : transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
+  return <PerspectiveCamera makeDefault position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
 }
 
 function ThumbnailEmitter({ projectId, sceneId, revision }: { projectId: string; sceneId: string; revision: string }) {
   const { gl, invalidate } = useThree();
   useEffect(() => {
     invalidate();
-    const timer = window.setTimeout(() => {
-      const url = gl.domElement.toDataURL('image/jpeg', .72);
-      window.dispatchEvent(new CustomEvent('abaco:scene-thumbnail', { detail: { projectId, sceneId, url } }));
-    }, 180);
-    return () => window.clearTimeout(timer);
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      invalidate();
+      secondFrame = window.requestAnimationFrame(() => {
+        invalidate();
+        const url = gl.domElement.toDataURL('image/jpeg', .72);
+        window.dispatchEvent(new CustomEvent('abaco:scene-thumbnail', { detail: { projectId, sceneId, revision, url } }));
+      });
+    });
+    return () => { window.cancelAnimationFrame(firstFrame); window.cancelAnimationFrame(secondFrame); };
   }, [gl, invalidate, projectId, revision, sceneId]);
   return null;
 }
@@ -471,13 +474,13 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark }: { p
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
   const revision = `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}`).join('|')}`;
-  return <div className="thumbnail-renderer"><Canvas frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+  return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><Canvas frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
     <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
     <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
     <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
     {objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
-    <ShotCamera object={camera} aspect={aspect} frame={frame} target={scene.framing.target} />
+    <ShotCamera object={camera} aspect={aspect} frame={frame} />
     <ThumbnailEmitter projectId={projectId} sceneId={scene.id} revision={revision} />
   </Canvas></div>;
 }

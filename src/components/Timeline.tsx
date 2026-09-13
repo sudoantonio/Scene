@@ -86,7 +86,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   useEffect(() => {
     const loaded: Record<string, string> = {};
     for (const scene of scenes) {
-      const value = localStorage.getItem(`abaco-thumb:${project.id}:${scene.id}`);
+      const value = localStorage.getItem(`abaco-thumb:v2:${project.id}:${scene.id}`);
       if (value) loaded[scene.id] = value;
     }
     setSceneThumbnails(loaded);
@@ -94,7 +94,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       const detail = (event as CustomEvent<{ projectId: string; sceneId: string; url: string }>).detail;
       if (!detail || detail.projectId !== project.id) return;
       setSceneThumbnails((current) => ({ ...current, [detail.sceneId]: detail.url }));
-      try { localStorage.setItem(`abaco-thumb:${detail.projectId}:${detail.sceneId}`, detail.url); } catch { /* cache piena */ }
+      try { localStorage.setItem(`abaco-thumb:v2:${detail.projectId}:${detail.sceneId}`, detail.url); } catch { /* cache piena */ }
     };
     window.addEventListener('abaco:scene-thumbnail', receive);
     return () => window.removeEventListener('abaco:scene-thumbnail', receive);
