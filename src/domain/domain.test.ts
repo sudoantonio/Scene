@@ -161,6 +161,7 @@ describe('scene indipendenti', () => {
     expect(cameraFrames).toEqual([1, 30]);
     expect(state.recordingSession).toBeUndefined();
     expect(state.isPlaying).toBe(false);
+    expect(state.selectedMotion).toEqual({ objectId: sphereId, sceneId: scene.id });
   });
 
   it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {

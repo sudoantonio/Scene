@@ -1,5 +1,5 @@
-import { Canvas, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
+import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { Box, Focus, LayoutTemplate, Move3d, Plus, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
@@ -210,6 +210,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
   const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', currentFrame) as boolean;
   const helperOnly = object.kind === 'camera' || object.kind.includes('light');
   const helperSelected = selectedId === object.id || selectedMotion?.objectId === object.id;
+  const motionEditing = Boolean(selectedMotion);
   const shown = useMemo(() => ({ ...object, text }), [object, text]);
   const viewTranslation = cameraView && mode === 'translate';
   useLayoutEffect(() => {
@@ -387,16 +388,16 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
   }, []);
 
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
-      onPointerOver={(event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={(event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
-      onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
-      onPointerDown={startDirectDrag} onPointerMove={moveDirectDrag} onPointerUp={finishDirectDrag} onPointerCancel={finishDirectDrag}>
+      onPointerOver={motionEditing ? undefined : (event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={motionEditing ? undefined : (event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
+      onClick={motionEditing ? undefined : (event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
+      onPointerDown={motionEditing ? undefined : startDirectDrag} onPointerMove={motionEditing ? undefined : moveDirectDrag} onPointerUp={motionEditing ? undefined : finishDirectDrag} onPointerCancel={motionEditing ? undefined : finishDirectDrag}>
       <MeshVisual object={shown} />
     </group>;
 
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
   // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
   // e salti soprattutto durante la scala.
-  if (!interactionEnabled || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
+  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
   return <>{visual}<group ref={translationProxy} /><TransformControls object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={0.8} enabled
     showZ={!viewTranslation}
     onObjectChange={() => {
@@ -636,6 +637,14 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
   const setPlaying = useEditor((state) => state.setPlaying);
   const updateMotionPoint = useEditor((state) => state.updateMotionPoint);
   const position = keyframe.value as Vec3;
+  useFrame(({ camera, size }) => {
+    if (!ref.current) return;
+    const distance = Math.max(.01, camera.position.distanceTo(ref.current.position));
+    const worldPerPixel = camera instanceof THREE.PerspectiveCamera
+      ? (2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, size.height)
+      : (camera.top - camera.bottom) / Math.max(1, size.height);
+    ref.current.scale.setScalar(worldPerPixel * (selected ? 22 : 18));
+  });
   const startDrag = (event: ThreeEvent<PointerEvent>) => {
     if (event.button !== 0 || !ref.current) return;
     event.stopPropagation();
@@ -674,8 +683,10 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
   };
   return <>
     <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'grab'; }} onPointerOut={() => { if (!drag.current) document.body.style.cursor = 'default'; }}>
-      <mesh rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[selected ? .22 : .16, selected ? .22 : .16, selected ? .22 : .16]} /><meshBasicMaterial color={selected ? '#ffffff' : '#ef3f3f'} depthTest={false} /></mesh>
-      <mesh><sphereGeometry args={[.28, 12, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+      <Billboard follow>
+        <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={selected ? '#b41622' : '#ef3f3f'} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+        <mesh renderOrder={26}><circleGeometry args={[1.2, 16]} /><meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+      </Billboard>
     </group>
   </>;
 }
@@ -952,7 +963,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   };
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (draggingObject) { event.preventDefault(); event.stopPropagation(); return; }
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
@@ -1027,6 +1037,22 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     controls.target.add(right).add(up);
     controls.update();
   };
+
+  useEffect(() => {
+    const releaseViewportDrag = () => {
+      setDraggingObject(false);
+      if (orbitRef.current) orbitRef.current.enabled = !cameraView;
+      document.body.style.cursor = 'default';
+    };
+    window.addEventListener('pointerup', releaseViewportDrag, true);
+    window.addEventListener('pointercancel', releaseViewportDrag, true);
+    window.addEventListener('blur', releaseViewportDrag);
+    return () => {
+      window.removeEventListener('pointerup', releaseViewportDrag, true);
+      window.removeEventListener('pointercancel', releaseViewportDrag, true);
+      window.removeEventListener('blur', releaseViewportDrag);
+    };
+  }, [cameraView]);
 
   useEffect(() => {
     const movementCodes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);

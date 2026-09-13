@@ -571,13 +571,21 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     stopRecording: () => {
       flushPendingCameraEdit();
-      set((state) => ({
-        recordingSession: undefined,
-        isPlaying: false,
-        past: state.recordingSession?.touchedObjectIds.length
-          ? [...state.past.slice(-49), state.recordingSession.beforeProject]
-          : state.past,
-      }));
+      set((state) => {
+        const session = state.recordingSession;
+        const selectedObjectId = state.selectedId && session?.touchedObjectIds.includes(state.selectedId)
+          ? state.selectedId
+          : session?.touchedObjectIds.at(-1);
+        return {
+          recordingSession: undefined,
+          isPlaying: false,
+          selectedId: selectedObjectId ?? state.selectedId,
+          selectedMotion: selectedObjectId && session ? { objectId: selectedObjectId, sceneId: session.sceneId } : state.selectedMotion,
+          past: session?.touchedObjectIds.length
+            ? [...state.past.slice(-49), session.beforeProject]
+            : state.past,
+        };
+      });
     },
     removeSelected: () => {
       const state = get();
