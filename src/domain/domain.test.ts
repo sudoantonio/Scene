@@ -109,11 +109,13 @@ describe('scene indipendenti', () => {
     useEditor.getState().setTransform(cubeId, { position: [2, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
     expect(useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.some((key) => key.purpose === 'motion')).toBe(false);
     useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(40);
     useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
     const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
     const positions = cube.keyframes.filter((key) => key.property === 'position').sort((a, b) => a.frame - b.frame);
-    expect(positions.map((key) => [key.frame, key.purpose])).toEqual([[1, 'motion'], [25, 'motion']]);
-    expect(evaluateTransform(cube, 13).position).toEqual([4, 0, 1]);
+    expect(positions.map((key) => [key.frame, key.purpose])).toEqual([[1, 'snapshot'], [25, 'motion'], [40, 'motion']]);
+    expect(evaluateTransform(cube, 25).position).toEqual([2, 0, 1]);
+    expect(evaluateTransform(cube, 40).position).toEqual([6, 0, 1]);
   });
 
   it('REC si interrompe senza trasformare gli spostamenti successivi in nuovi punti', () => {

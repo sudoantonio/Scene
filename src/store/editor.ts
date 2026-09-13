@@ -413,10 +413,12 @@ export const useEditor = create<EditorState>((set, get) => {
       let object = next.objects.find((item) => item.id === objectId);
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object || !scene) return;
-      const transform = evaluateTransform(object, scene.frame);
-      for (const property of ['position', 'rotation', 'scale'] as const) putKey(object, scene.frame, property, transform[property], state.interpolation, false, 'motion');
+      const sceneEnd = next.cameraCuts.filter((item) => item.frame > scene.frame).sort((a, b) => a.frame - b.frame)[0]?.frame ?? next.settings.frameEnd + 1;
+      const motionFrame = Math.max(scene.frame, Math.min(sceneEnd - 1, state.currentFrame));
+      const transform = evaluateTransform(object, motionFrame);
+      for (const property of ['position', 'rotation', 'scale'] as const) putMotionKey(object, scene.frame, motionFrame, property, transform[property], state.interpolation);
       commit(next);
-      set({ selectedMotion: { objectId: object.id, sceneId }, recordingMotion: { objectId: object.id, sceneId, startFrame: scene.frame }, selectedId: object.id });
+      set({ selectedMotion: { objectId: object.id, sceneId }, recordingMotion: { objectId: object.id, sceneId, startFrame: motionFrame }, selectedId: object.id });
     },
     stopMotion: () => set({ recordingMotion: undefined }),
     removeSelected: () => {

@@ -14,7 +14,7 @@ type DeleteTarget =
   | { kind: 'motion'; objectId: string; sceneId: string }
   | { kind: 'keyframe'; objectId: string; keyframeId: string };
 function ElementThumbnail({ object, compact = false }: { object: SceneObject; compact?: boolean }) {
-  const label = object.kind === 'text' ? 'T' : object.kind === 'blend_asset' ? 'B' : '';
+  const label = object.kind === 'text' ? 'T' : object.screenSpace ? 'I' : object.kind === 'blend_asset' ? '3D' : '';
   return <span className={`element-thumbnail ${object.kind} ${compact ? 'compact' : ''}`} style={{ '--element-color': object.color } as React.CSSProperties}>{label}</span>;
 }
 export default function Timeline({ collapsed, viewportFullscreen, onToggleCollapse, onToggleViewportFullscreen }: { collapsed?: boolean; viewportFullscreen?: boolean; onToggleCollapse?(): void; onToggleViewportFullscreen?(): void }) {
@@ -72,23 +72,17 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const toggleRecording = () => {
     setPlaying(false);
     if (recordingMotion) {
-      const recordingSceneIndex = scenes.findIndex((scene) => scene.id === recordingMotion.sceneId);
-      const recordingScene = scenes[recordingSceneIndex];
-      const recordingEnd = scenes[recordingSceneIndex + 1]?.frame ?? end + 1;
-      if (recordingScene && (frame < recordingScene.frame || frame >= recordingEnd)) setFrame(recordingEnd - 1);
       window.dispatchEvent(new Event('abaco:flush-camera-edit'));
       keyPose(recordingMotion.objectId);
       stopMotion();
       return;
     }
     if (!activeScene || !recordTarget) return;
-    setFrame(activeScene.frame);
     startMotion(recordTarget.id, activeScene.id);
     const recording = useEditor.getState().recordingMotion;
     if (!recording) return;
     select(recording.objectId);
     selectMotion({ objectId: recording.objectId, sceneId: recording.sceneId });
-    setFrame(Math.max(activeScene.frame + 1, activeSceneEnd - 1));
   };
   const canSplit = activeSceneIndex >= 0 && frame > scenes[activeSceneIndex].frame + 1 && frame < activeSceneEnd - 1;
   const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;

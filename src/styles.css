@@ -1241,16 +1241,17 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .scene-framing.comment-target, .scene-image.comment-target { box-shadow: inset 0 0 0 2px #d3b228; }
 .scene-clip .clip-resize-handle { top: 2px; bottom: 2px; }
 .scene-track .transition-marker { top: 40px; }
-.element-thumbnail { --element-color: #8a989f; width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #fff; background: var(--element-color); border: 1px solid rgba(42,44,42,.28); border-radius: 2px; font-size: 8px; font-weight: 700; box-shadow: inset 0 1px rgba(255,255,255,.25); }
+.element-thumbnail { --element-color: #8a989f; width: 21px; height: 21px; flex: none; display: grid; place-items: center; color: #fff; background: color-mix(in srgb,var(--element-color) 72%,#202326); border: 1px solid rgba(255,255,255,.42); border-radius: 2px; font-size: 8px; font-weight: 800; line-height: 1; text-shadow: 0 1px 1px rgba(0,0,0,.55); box-shadow: inset 0 1px rgba(255,255,255,.25),0 0 0 1px rgba(0,0,0,.3); }
 .element-thumbnail.sphere { border-radius: 50%; }
 .element-thumbnail.cone { clip-path: polygon(50% 2%,98% 98%,2% 98%); }
 .element-thumbnail.cylinder { border-radius: 50% / 18%; }
 .element-thumbnail.plane { height: 11px; transform: skew(-12deg); }
-.element-thumbnail.text { color: #32332f; background: transparent; border-color: #8f908a; box-shadow: none; }
-.element-thumbnail.blend_asset { color: #fff8df; background: #80651c; }
+.element-thumbnail.text { color: #f6eaff; background: #604273; border-color: #b98bce; box-shadow: inset 0 1px rgba(255,255,255,.18),0 0 0 1px rgba(0,0,0,.3); }
+.element-thumbnail.plane { height: 21px; color: #e9f8ff; background: #35677f; border-color: #75afc8; transform: none; }
+.element-thumbnail.blend_asset { color: #fff8df; background: #746020; border-color: #bea748; }
 .motion-segment { isolation: isolate; }
-.segment-thumbnails { position: absolute; z-index: -1; left: 7px; top: 50%; width: 24px; height: 24px; display: grid; place-items: center; overflow: hidden; opacity: .7; transform: translateY(-50%); pointer-events: none; }
-.element-thumbnail.compact { width: 22px; height: 22px; flex: 0 0 22px; opacity: .82; }
+.segment-thumbnails { position: absolute; z-index: 1; left: 6px; top: 50%; width: 22px; height: 22px; display: grid; place-items: center; overflow: visible; opacity: 1; transform: translateY(-50%); pointer-events: none; }
+.element-thumbnail.compact { width: 19px; height: 19px; flex: 0 0 19px; opacity: 1; }
 .segment-mode { position: relative; z-index: 1; margin-left: 29px; padding: 0; color: inherit; background: transparent; }
 .motion-segment .segment-comment { position: relative; z-index: 2; margin-left: auto; }
 .timeline-object-label { gap: 5px; }
@@ -1474,15 +1475,15 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .left-panel.slides-only { background: #181818; }
 
 /* 0.52 · timeline compatta */
-.timeline-scroll { grid-template-rows: 24px 38px; grid-auto-rows: 38px; }
-.timeline .scene-label, .timeline .scene-track { min-height: 38px; }
+.timeline-scroll { grid-template-rows: 22px 34px; grid-auto-rows: 34px; }
+.timeline .scene-label, .timeline .scene-track { min-height: 34px; }
 .timeline .scene-clip { display: block; }
 .timeline .scene-image { padding: 5px 8px; }
 .timeline .scene-image { height: 100%; }
 .timeline .scene-label::after { display: none; }
 .timeline .scene-track .transition-marker { top: 19px; width: 16px; height: 16px; }
-.presence-segment { top: 5px; bottom: 5px; }
-.recorded-motion-segment { top: 5px; height: 28px; padding: 0 7px; border-radius: 3px; }
+.presence-segment { top: 2px; bottom: 2px; }
+.recorded-motion-segment { top: 2px; height: 30px; padding: 0 7px; border-radius: 3px; }
 .motion-key-ticks { position: absolute; z-index: 4; inset: auto 0 0; height: 5px; pointer-events: none; }
 .motion-key-tick { position: absolute; bottom: 0; width: 5px; height: 5px; transform: translateX(-50%) rotate(45deg); background: #ef3f3f; border: 1px solid rgba(255,255,255,.72); }
 .motion-key-tick { pointer-events: auto; cursor: ew-resize; }
