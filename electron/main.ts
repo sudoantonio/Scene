@@ -285,7 +285,9 @@ ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: str
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {
   const project = ProjectSchema.parse(payload.project);
-  if (!project.comments.some((comment) => comment.status === 'pending')) throw new Error('Aggiungi almeno un commento da interpretare.');
+  if (!project.comments.some((comment) => comment.status === 'pending')) {
+    return { schemaVersion: 'BlenderPlanV1', summary: 'Esportazione della scena corrente senza istruzioni Astra.', assumptions: [], warnings: ['Nessun commento pending: sono state preservate scena, camera e animazioni esistenti.'], operations: [] };
+  }
   const settings = await readSettings();
   if (!settings.apiKey) throw new Error('Configura prima la chiave API OpenAI nelle impostazioni.');
   const client = new OpenAI({ apiKey: settings.apiKey });

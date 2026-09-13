@@ -71,6 +71,11 @@ export default function App() {
       const saved = await save();
       if (!saved) return;
       const current = useEditor.getState().project;
+      if (!current.comments.some((comment) => comment.status === 'pending')) {
+        const output = await window.abaco!.buildBlender(current, emptyPlan(), saved.path);
+        notify('ok', `Creato ${output.version}: ${output.blendPath}. Nessun commento da interpretare: ho esportato la scena corrente.`);
+        return;
+      }
       const frames = [useEditor.getState().currentFrame, ...current.comments.filter((comment) => comment.status === 'pending').flatMap((comment) => [comment.startFrame, comment.endFrame]), ...current.cameraCuts.map((cut) => cut.frame)];
       const sheet = await captureContactSheet(frames);
       const response = await window.abaco!.generatePlan(current, sheet);
