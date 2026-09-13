@@ -314,14 +314,23 @@ describe('scene indipendenti', () => {
   it('salva target e posa del rig camera soltanto nella scena indicata', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addShot();
+    const modern = structuredClone(useEditor.getState().project);
+    const modernScenes = modern.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    const originalSecondCameraId = modernScenes[1].cameraId;
+    modernScenes[1].cameraId = modernScenes[0].cameraId;
+    modern.objects = modern.objects.filter((object) => object.id !== originalSecondCameraId);
+    useEditor.setState({ project: modern, currentFrame: modernScenes[1].frame, selectedId: undefined, past: [], future: [], dirty: false });
     const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
     const cameraId = scenes[0].cameraId;
     const firstPosition = evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cameraId)!, scenes[0].frame).position;
     useEditor.getState().setCameraFraming(scenes[1].id, [2, -5, 3], [60, 10, 20], [1, 1, 0]);
     const project = useEditor.getState().project;
-    const camera = project.objects.find((object) => object.id === cameraId)!;
-    expect(evaluateTransform(camera, scenes[0].frame).position).toEqual(firstPosition);
-    expect(evaluateTransform(camera, scenes[1].frame).position).toEqual([2, -5, 3]);
+    const firstCamera = project.objects.find((object) => object.id === cameraId)!;
+    const secondScene = project.cameraCuts.find((scene) => scene.id === scenes[1].id)!;
+    const secondCamera = project.objects.find((object) => object.id === secondScene.cameraId)!;
+    expect(secondScene.cameraId).not.toBe(cameraId);
+    expect(evaluateTransform(firstCamera, scenes[0].frame).position).toEqual(firstPosition);
+    expect(evaluateTransform(secondCamera, scenes[1].frame).position).toEqual([2, -5, 3]);
     expect(project.cameraCuts.find((scene) => scene.id === scenes[1].id)?.framing.target).toEqual([1, 1, 0]);
     expect(project.cameraCuts.find((scene) => scene.id === scenes[0].id)?.framing.target).toEqual([0, 0, 1]);
   });

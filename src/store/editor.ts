@@ -63,6 +63,9 @@ type EditorState = {
 
 const snapshot = (project: AbacoProject) => structuredClone(project);
 const LOCAL_DRAFT_KEY = 'abaco-animatic-project-v1';
+const flushPendingCameraEdit = () => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('abaco:flush-camera-edit'));
+};
 const initialProject = () => {
   try {
     const saved = typeof localStorage === 'undefined' ? null : localStorage.getItem(LOCAL_DRAFT_KEY);
@@ -128,6 +131,32 @@ function ensureSceneSnapshots(project: AbacoProject) {
   }
 }
 
+// Le vecchie versioni riutilizzavano lo stesso oggetto camera per tutte le
+// clip. Al primo uso separiamo il rig della scena: così pose, movimento e
+// interpolazione di una clip non possono più modificare quelle vicine.
+const makeSceneCameraExclusive = (project: AbacoProject, scene: AbacoProject['cameraCuts'][number]) => {
+  const source = project.objects.find((object) => object.id === scene.cameraId && object.kind === 'camera');
+  if (!source) return undefined;
+  if (!project.cameraCuts.some((cut) => cut.id !== scene.id && cut.cameraId === source.id)) return source;
+  const sceneEnd = project.cameraCuts.filter((cut) => cut.frame > scene.frame).sort((a, b) => a.frame - b.frame)[0]?.frame ?? project.settings.frameEnd + 1;
+  const transform = evaluateTransform(source, scene.frame);
+  const lens = evaluateProperty(source, 'lens', scene.frame) as number;
+  const camera = structuredClone(source);
+  camera.id = crypto.randomUUID();
+  camera.name = `Camera ${scene.name ?? 'scena'}`;
+  camera.transform = structuredClone(transform);
+  camera.keyframes = source.keyframes
+    .filter((key) => key.frame >= scene.frame && key.frame < sceneEnd)
+    .map((key) => ({ ...structuredClone(key), id: crypto.randomUUID() }));
+  putKey(camera, scene.frame, 'position', transform.position, 'constant', false, 'snapshot');
+  putKey(camera, scene.frame, 'rotation', transform.rotation, 'constant', false, 'snapshot');
+  putKey(camera, scene.frame, 'scale', transform.scale, 'constant', false, 'snapshot');
+  putKey(camera, scene.frame, 'lens', lens, 'constant', false, 'snapshot');
+  project.objects.push(camera);
+  scene.cameraId = camera.id;
+  return camera;
+};
+
 const renameScenes = (project: AbacoProject) => project.cameraCuts.sort((a, b) => a.frame - b.frame).forEach((scene, index) => { scene.name = `Scena ${index + 1}`; });
 const syncScopedCommentRanges = (project: AbacoProject) => {
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
@@ -146,7 +175,7 @@ export const useEditor = create<EditorState>((set, get) => {
     past: [...state.past.slice(-49), snapshot(state.project)], future: [], dirty: true,
   }));
   return {
-    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => set({ cameraView }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
+    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
     newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, currentFrame: 1, past: [], future: [], dirty: false }),
     loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, currentFrame: project.settings.frameStart, past: [], future: [], dirty: false }),
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
@@ -154,7 +183,7 @@ export const useEditor = create<EditorState>((set, get) => {
       selectedId,
       selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
     })),
-    setFrame: (frame) => set((state) => ({ currentFrame: Math.max(state.project.settings.frameStart, Math.min(state.project.settings.frameEnd, Math.round(frame))) })),
+    setFrame: (frame) => { flushPendingCameraEdit(); set((state) => ({ currentFrame: Math.max(state.project.settings.frameStart, Math.min(state.project.settings.frameEnd, Math.round(frame))) })); },
     setPlaying: (isPlaying) => set({ isPlaying }),
     selectMotion: (selectedMotion) => set({ selectedMotion }),
     setInterpolation: (interpolation) => set({ interpolation }),
@@ -237,7 +266,9 @@ export const useEditor = create<EditorState>((set, get) => {
         const sourceNote = object.sceneNotes.filter((note) => note.frame <= sourceFrame).sort((a, b) => b.frame - a.frame)[0]?.text;
         if (sourceNote) object.sceneNotes.push({ frame: nextFrame, text: sourceNote });
       }
-      next.cameraCuts.push({ id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scena ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) });
+      const newScene: AbacoProject['cameraCuts'][number] = { id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scena ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) };
+      next.cameraCuts.push(newScene);
+      makeSceneCameraExclusive(next, newScene);
       syncScopedCommentRanges(next);
       commit(next);
       set({ selectedId: undefined, currentFrame: nextFrame });
@@ -266,6 +297,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       const split = { id: crypto.randomUUID(), cameraId: scene.cameraId, frame: state.currentFrame, source: 'user' as const, commentIds: [], transition: 'auto' as const, lighting: structuredClone(scene.lighting), background: structuredClone(scene.background), framing: structuredClone(scene.framing) };
       next.cameraCuts.push(split);
+      makeSceneCameraExclusive(next, split);
       const following = scenes[index + 1];
       if (following) next.comments.forEach((comment) => { if (comment.kind === 'transition' && comment.fromSceneId === scene.id && comment.toSceneId === following.id) comment.fromSceneId = split.id; });
       renameScenes(next);
@@ -284,6 +316,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
       const duration = sceneEnd - scene.frame;
       next.cameraCuts = next.cameraCuts.filter((cut) => cut.id !== id);
+      if (!next.cameraCuts.some((cut) => cut.cameraId === scene.cameraId)) next.objects = next.objects.filter((object) => object.id !== scene.cameraId);
       for (const cut of next.cameraCuts) if (cut.frame >= sceneEnd) cut.frame -= duration;
       for (const object of next.objects) {
         object.keyframes = object.keyframes
@@ -356,13 +389,14 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
-      const object = next.objects.find((item) => item.id === objectId);
       const scene = next.cameraCuts.find((item) => item.id === sceneId);
+      let object = next.objects.find((item) => item.id === objectId);
+      if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object || !scene) return;
       const transform = evaluateTransform(object, scene.frame);
       for (const property of ['position', 'rotation', 'scale'] as const) putKey(object, scene.frame, property, transform[property], state.interpolation, false, 'motion');
       commit(next);
-      set({ selectedMotion: { objectId, sceneId }, selectedId: objectId });
+      set({ selectedMotion: { objectId: object.id, sceneId }, selectedId: object.id });
     },
     removeSelected: () => {
       const state = get();
@@ -499,9 +533,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
-      const cameraId = next.cameraCuts.find((cut) => cut.frame === sceneFrame)?.cameraId;
       const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
-      const camera = next.objects.find((object) => object.id === cameraId && object.kind === 'camera');
+      const camera = scene ? makeSceneCameraExclusive(next, scene) : undefined;
       if (!camera || !scene) return;
       const defaults = createSceneObject('camera', 1);
       putKey(camera, sceneFrame, 'position', defaults.transform.position, 'constant');
@@ -517,7 +550,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
       const scene = next.cameraCuts.find((cut) => cut.id === sceneId);
-      const camera = next.objects.find((object) => object.id === scene?.cameraId && object.kind === 'camera');
+      const previousCameraId = scene?.cameraId;
+      const camera = scene ? makeSceneCameraExclusive(next, scene) : undefined;
       if (!scene || !camera || ![...position, ...rotation, ...target].every(Number.isFinite)) return;
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       if (sceneFrame !== scene.frame) return;
@@ -535,15 +569,17 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       makeCameraShotIndependent(next, camera, sceneFrame, state.currentFrame === sceneFrame);
       commit(next);
+      if (previousCameraId && camera.id !== previousCameraId && state.selectedId === previousCameraId) set({ selectedId: camera.id });
     },
     setTransform: (id, transform) => {
       const state = get();
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
-      const object = next.objects.find((item) => item.id === id);
-      if (!object) return;
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
+      let object = next.objects.find((item) => item.id === id);
+      if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
+      if (!object) return;
       const motionActive = state.selectedMotion?.objectId === id && state.selectedMotion.sceneId === scene?.id;
       for (const property of ['position', 'rotation', 'scale'] as const) {
         if (motionActive) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
@@ -561,6 +597,7 @@ export const useEditor = create<EditorState>((set, get) => {
         makeCameraShotIndependent(next, object, sceneFrame, state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       commit(next);
+      if (object.id !== id) set({ selectedId: object.id, selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined });
     },
     keyPose: (id) => {
       const state = get();

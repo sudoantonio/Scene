@@ -5,6 +5,7 @@ import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useSt
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
+import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -219,8 +220,45 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
     translationProxy.current.updateMatrixWorld();
   });
 
+  const snapToOtherObjects = (position: THREE.Vector3) => {
+    const state = useEditor.getState();
+    const others = state.project.objects.filter((item) => item.id !== object.id && item.kind !== 'camera' && !item.kind.includes('light') && evaluateProperty(item, 'visibility', state.currentFrame));
+    if (!others.length) return position;
+    const threshold = .22;
+    if (cameraView) {
+      const cameraPose: Transform = {
+        position: viewCamera.position.toArray() as Vec3,
+        rotation: [viewCamera.rotation.x, viewCamera.rotation.y, viewCamera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3,
+        scale: [1, 1, 1],
+      };
+      const local = toCameraSpace(position.toArray() as Vec3, cameraPose);
+      for (const axis of [0, 2] as const) {
+        let nearest = local[axis], nearestDistance = threshold;
+        for (const item of others) {
+          const value = toCameraSpace(evaluateTransform(item, state.currentFrame).position, cameraPose)[axis];
+          const distance = Math.abs(local[axis] - value);
+          if (distance < nearestDistance) { nearest = value; nearestDistance = distance; }
+        }
+        local[axis] = nearest;
+      }
+      return new THREE.Vector3(...fromCameraSpace(local, cameraPose));
+    }
+    const snapped = position.clone();
+    for (const axis of [0, 1, 2] as const) {
+      let nearest = snapped.getComponent(axis), nearestDistance = threshold;
+      for (const item of others) {
+        const value = evaluateTransform(item, state.currentFrame).position[axis];
+        const distance = Math.abs(snapped.getComponent(axis) - value);
+        if (distance < nearestDistance) { nearest = value; nearestDistance = distance; }
+      }
+      snapped.setComponent(axis, nearest);
+    }
+    return snapped;
+  };
+
   const commit = () => {
     if (!ref.current) return;
+    if (mode === 'translate') ref.current.position.copy(snapToOtherObjects(ref.current.position));
     const result: Transform = {
       position: ref.current.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
       rotation: [ref.current.rotation.x, ref.current.rotation.y, ref.current.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
@@ -295,6 +333,7 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
       ref.current.position.copy(drag.position)
         .addScaledVector(drag.right, dx * drag.worldPerPixel)
         .addScaledVector(drag.up, -dy * drag.worldPerPixel);
+      ref.current.position.copy(snapToOtherObjects(ref.current.position));
     } else if (mode === 'rotate') {
       ref.current.rotation.set(drag.rotation.x + dy * 0.003, drag.rotation.y, drag.rotation.z + dx * 0.003);
     } else if (mode === 'scale') {
@@ -358,7 +397,12 @@ function SceneItem({ object, cameraView, interactionEnabled = true, onDragChange
   if (!interactionEnabled || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
   return <>{visual}<group ref={translationProxy} /><TransformControls object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={0.8} enabled
     showZ={!viewTranslation}
-    onObjectChange={() => { if (viewTranslation && translationProxy.current && ref.current) ref.current.position.copy(translationProxy.current.position); }}
+    onObjectChange={() => {
+      if (mode !== 'translate' || !ref.current) return;
+      if (viewTranslation && translationProxy.current) ref.current.position.copy(translationProxy.current.position);
+      ref.current.position.copy(snapToOtherObjects(ref.current.position));
+      if (viewTranslation && translationProxy.current) translationProxy.current.position.copy(ref.current.position);
+    }}
     onMouseDown={startGizmoDrag}
     onMouseUp={finishGizmoDrag} /></>;
 }
@@ -390,13 +434,18 @@ function CameraViewControls({ frame, syncKey, target, disabled, mode, controls, 
     ); }} />;
 }
 
-function ShotCamera({ object, aspect, frame: frameOverride }: { object: SceneObject; aspect: number; frame?: number }) {
+function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1 }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number }) {
   const currentFrame = useEditor((state) => state.currentFrame);
   const frame = frameOverride ?? currentFrame;
   const transform = evaluateTransform(object, frame);
   const lens = evaluateProperty(object, 'lens', frame) as number;
   const sensorHeight = 36 / aspect;
-  const fov = THREE.MathUtils.radToDeg(2 * Math.atan(sensorHeight / (2 * lens)));
+  const frameFov = 2 * Math.atan(sensorHeight / (2 * lens));
+  // In camera view the canvas also shows the workspace outside the exported frame.
+  // Widen its vertical field of view so the rectangle still contains exactly the
+  // same composition as thumbnails and exports.
+  const safeFrameHeightRatio = THREE.MathUtils.clamp(frameHeightRatio, .1, 1);
+  const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(frameFov / 2) / safeFrameHeightRatio));
   return <PerspectiveCamera makeDefault position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} up={[0, 0, 1]} fov={fov} near={0.01} far={1000} />;
 }
 
@@ -553,6 +602,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cameraView = useEditor((state) => state.cameraView);
   const setCameraView = useEditor((state) => state.setCameraView);
   const [cameraTool, setCameraTool] = useState<CameraTool>('frame');
+  const [cameraHintVisible, setCameraHintVisible] = useState(true);
   const [draggingObject, setDraggingObject] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const shotOrbitRef = useRef<OrbitControlsImpl | null>(null);
@@ -561,8 +611,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cameraPanBuffer = useRef<{ x: number; y: number; timer?: number }>({ x: 0, y: 0 });
   const cameraRotateBuffer = useRef<{ x: number; y: number; timer?: number }>({ x: 0, y: 0 });
   const cameraCommitTimer = useRef<number | undefined>(undefined);
+  const pendingCameraCommit = useRef<{ projectId: string; sceneId: string; frame: number; position: Vec3; rotation: Vec3; target: Vec3 } | undefined>(undefined);
   const shiftPressed = useRef(false);
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
   const hasContent = objects.some((object) => object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
   const activeCamera = objects.find((object) => object.id === activeCut?.cameraId && object.kind === 'camera');
@@ -609,13 +660,27 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const lightPosition: [number, number, number] = [Math.sin(lightAngle) * lightRadius, -Math.cos(lightAngle) * lightRadius, 1.5 + Math.sin(lightElevation) * 9];
   const aspect = settings.resolutionX / settings.resolutionY;
   const actionName = gizmoMode === 'translate' ? 'sposta' : gizmoMode === 'rotate' ? 'ruota' : 'ridimensiona';
-  const cameraStageStyle = useMemo(() => {
-    if (!cameraView || !viewportSize.width || !viewportSize.height) return cameraView ? { aspectRatio: `${settings.resolutionX} / ${settings.resolutionY}` } : undefined;
-    const availableWidth = Math.max(1, viewportSize.width - 24);
-    const availableHeight = Math.max(1, viewportSize.height - 24);
+  const cameraFrame = useMemo(() => {
+    if (!cameraView || !viewportSize.width || !viewportSize.height) return undefined;
+    const margin = Math.min(48, Math.max(20, Math.min(viewportSize.width, viewportSize.height) * .07));
+    const availableWidth = Math.max(1, viewportSize.width - margin * 2);
+    const availableHeight = Math.max(1, viewportSize.height - margin * 2);
     const width = Math.min(availableWidth, availableHeight * aspect);
-    return { width, height: width / aspect, aspectRatio: `${settings.resolutionX} / ${settings.resolutionY}` };
-  }, [aspect, cameraView, settings.resolutionX, settings.resolutionY, viewportSize]);
+    const height = width / aspect;
+    return { width, height, heightRatio: height / viewportSize.height };
+  }, [aspect, cameraView, viewportSize]);
+
+  const flushPendingCameraCommit = () => {
+    const pending = pendingCameraCommit.current;
+    if (!pending) return;
+    if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
+    cameraCommitTimer.current = undefined;
+    pendingCameraCommit.current = undefined;
+    const state = useEditor.getState();
+    if (state.project.id === pending.projectId && state.currentFrame === pending.frame) {
+      state.setCameraFraming(pending.sceneId, pending.position, pending.rotation, pending.target);
+    }
+  };
 
   const cameraMotionSelection = motionObject?.kind === 'camera' ? `${selectedMotion?.sceneId}:${motionObject.id}` : undefined;
   useEffect(() => {
@@ -637,9 +702,17 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   }, [cameraView, cameraMotionSelection]);
 
   useEffect(() => {
+    window.addEventListener('abaco:flush-camera-edit', flushPendingCameraCommit);
+    return () => window.removeEventListener('abaco:flush-camera-edit', flushPendingCameraCommit);
+  }, []);
+
+  useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
-    const measure = () => setViewportSize({ width: element.clientWidth, height: element.clientHeight });
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
+      setViewportSize({ width: element.clientWidth, height: element.clientHeight, left: rect.left });
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
@@ -653,6 +726,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     cameraPanBuffer.current = { x: 0, y: 0 };
     cameraRotateBuffer.current = { x: 0, y: 0 };
     cameraCommitTimer.current = undefined;
+    pendingCameraCommit.current = undefined;
   }, [frame, cameraView, projectId, activeCut?.id]);
 
   useEffect(() => {
@@ -682,16 +756,16 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const controls = shotOrbitRef.current;
     if (!controls || !activeCamera || !activeCut) return;
     const camera = controls.object;
-    const sceneId = activeCut.id;
-    const position = camera.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
-    const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
-    const target = controls.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
+    pendingCameraCommit.current = {
+      projectId,
+      sceneId: activeCut.id,
+      frame,
+      position: camera.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
+      rotation: [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
+      target: controls.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
+    };
     if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
-    cameraCommitTimer.current = window.setTimeout(() => {
-      const state = useEditor.getState();
-      if (state.currentFrame === frame && state.project.id === projectId && state.cameraView) state.setCameraFraming(sceneId, position, rotation, target);
-      cameraCommitTimer.current = undefined;
-    }, 180);
+    cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, 180);
   };
 
   const panShotView = (deltaX: number, deltaY: number) => {
@@ -879,8 +953,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   }, [cameraTool, cameraView]);
 
   return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} data-testid="viewport">
-    <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}
-      style={cameraStageStyle}>
+    <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
@@ -888,27 +961,34 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <SceneBackground kind={activeCut?.background?.kind ?? 'none'} path={activeCut?.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
       <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow />
-      {!cameraView && <Grid name="abaco-free-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#3a3d3a' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#555955' : '#bdbdb7'} fadeDistance={45} infiniteGrid />}
+      <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#3a3d3a' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#555955' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
       {objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} interactionEnabled={!cameraView || cameraTool === 'object'} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {motionObject && motionPathPoints.length > 1 && (!cameraView || cameraTool === 'object') && <MotionPath objectId={motionObject.id} keyframes={motionPositionKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
-      {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} />}
+      {cameraView && activeCamera && <ShotCamera object={activeCamera} aspect={aspect} frameHeightRatio={cameraFrame?.heightRatio} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} frame={frame} target={activeCameraTarget} syncKey={`${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} disabled={draggingObject} mode={cameraTool} onCommit={(position, rotation, target) => useEditor.getState().setCameraFraming(activeCut.id, position, rotation, target)} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>
     </div>
+    {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true">
+      <span>INQUADRATURA · {settings.resolutionX}:{settings.resolutionY}</span>
+      <i className="corner top-left" /><i className="corner top-right" /><i className="corner bottom-left" /><i className="corner bottom-right" />
+    </div>}
     <div className="thumbnail-renderers" aria-hidden="true">{cuts.map((scene) => <SceneThumbnailRenderer key={scene.id} projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} />)}</div>
     <button className={`view-toggle ${cameraView ? 'active' : ''}`} title={cameraView ? 'Vista libera' : 'Vista camera'} aria-label={cameraView ? 'Vista libera' : 'Vista camera'} onClick={() => { const next = !cameraView; setCameraView(next); if (next) setCameraTool('frame'); }}>{cameraView ? <LayoutTemplate size={16} /> : <Video size={16} />}</button>
-    {cameraView && <div className="camera-tool-switch" aria-label="Modalità controllo camera">
+    {cameraView && <div className="camera-tool-switch" style={{ left: viewportSize.left }} aria-label="Modalità controllo camera">
       <button className={cameraTool === 'frame' ? 'active' : ''} onClick={() => setCameraTool('frame')} title="Trascina per spostare l'inquadratura"><Focus size={14} /><span>Inquadratura</span></button>
       <button className={cameraTool === 'object' ? 'active' : ''} onClick={() => setCameraTool('object')} title="Seleziona e sposta gli oggetti"><Move3d size={14} /><span>Oggetti</span></button>
       <button className={cameraTool === 'orbit' ? 'active' : ''} onClick={() => { centerFramingOnSubject(); setCameraTool('orbit'); }} title="Ruota la camera attorno al soggetto"><Rotate3d size={14} /><span>Ruota attorno</span></button>
     </div>}
-    {(!cameraView || cameraTool !== 'object') && <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
-      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
-      <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
-      <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
-      <small>Shift veloce · Alt lento</small>
+    {cameraHintVisible && (!cameraView || cameraTool !== 'object') && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
+      <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
+        <button className="camera-hint-close" title="Nascondi istruzioni" aria-label="Nascondi istruzioni" onClick={() => setCameraHintVisible(false)}>×</button>
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
+        <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
+        <small>Shift veloce · Alt lento</small>
+      </div>
     </div>}
     <div className="viewport-top-right">
       {!cameraView && activeCameraTransform && <button className="secondary small" onClick={() => {
@@ -934,7 +1014,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
     <div className="viewport-help">{cameraView
-      ? cameraTool === 'frame' ? 'Stile Blender: WASD/frecce vola · Q/E giù-su · Shift veloce · Alt lento' : cameraTool === 'object' ? `Oggetto: ${actionName} · Gli assi seguono la vista camera` : 'Trascina: ruota attorno al soggetto · WASD/frecce: vola'
-      : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName}`}</div>
+      ? cameraTool === 'frame' ? 'Stile Blender: WASD/frecce vola · Q/E giù-su · Shift veloce · Alt lento' : cameraTool === 'object' ? `Oggetto: ${actionName} · Aggancio magnetico agli altri elementi` : 'Trascina: ruota attorno al soggetto · WASD/frecce: vola'
+      : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName} con aggancio`}</div>
   </div>;
 }

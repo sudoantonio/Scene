@@ -49,7 +49,6 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const [timelineZoom, setTimelineZoom] = useState(135);
   const start = project.settings.frameStart, end = project.settings.frameEnd;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-  const framingCamera = project.objects.find((object) => object.kind === 'camera');
   const selectedSubject = project.objects.find((object) => object.id === selectedId && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
   const framingSubject = selectedSubject ?? project.objects.find((object) => object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
   const timelineObjects = project.objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light'));
@@ -63,6 +62,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   };
   const activeSceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? end + 1));
   const activeScene = scenes[activeSceneIndex] ?? scenes[0];
+  const framingCamera = project.objects.find((object) => object.id === activeScene?.cameraId && object.kind === 'camera');
   const activeSceneEnd = scenes[activeSceneIndex + 1]?.frame ?? end + 1;
   const canSplit = activeSceneIndex >= 0 && frame > scenes[activeSceneIndex].frame + 1 && frame < activeSceneEnd - 1;
   const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;
