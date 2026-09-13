@@ -121,7 +121,7 @@ export default function App() {
     const move = (pointer: PointerEvent) => {
       finalValue = valueFromPointer(pointer);
       if (part === 'timeline' && shellRef.current) shellRef.current.style.gridTemplateRows = `40px minmax(0,1fr) 5px ${finalValue}px`;
-      else if (workspaceRef.current) workspaceRef.current.style.gridTemplateColumns = `${part === 'left' ? finalValue : layout.left}px 5px minmax(300px,1fr) 5px ${part === 'right' ? finalValue : layout.right}px`;
+      else if (workspaceRef.current) workspaceRef.current.style.gridTemplateColumns = `minmax(0,${part === 'left' ? finalValue : layout.left}px) 5px minmax(0,1fr) 5px minmax(0,${part === 'right' ? finalValue : layout.right}px)`;
     };
     const finish = () => {
       window.removeEventListener('pointermove', move);
@@ -214,7 +214,7 @@ export default function App() {
   };
   return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
     <div className="slim-headbar"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div></div>
-    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(300px,1fr) 5px ${rightWidth}px` }}>
+    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,${leftWidth}px) 5px minmax(0,1fr) 5px minmax(0,${rightWidth}px)` }}>
       <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
       <Viewport dark={theme === 'dark'} />

@@ -183,7 +183,7 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1500, height: 960, minWidth: 1100, minHeight: 720, backgroundColor: '#101319',
+    width: 1500, height: 960, minWidth: 640, minHeight: 480, backgroundColor: '#101319',
     title: 'Abaco Animatic',
     titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
