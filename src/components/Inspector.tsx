@@ -1,4 +1,4 @@
-import { Box, ChevronRight, KeyRound, Palette, PanelRightClose, PanelRightOpen, SlidersHorizontal, Sun, Trash2 } from 'lucide-react';
+import { Box, ChevronRight, Circle, Cone, Cylinder, FileBox, Image, KeyRound, Palette, PanelRightClose, PanelRightOpen, RefreshCw, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -27,6 +27,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const frame = useEditor((state) => state.currentFrame);
   const cameraView = useEditor((state) => state.cameraView);
   const updateObject = useEditor((state) => state.updateObject);
+  const replaceObject = useEditor((state) => state.replaceObject);
   const setTransform = useEditor((state) => state.setTransform);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const startMotion = useEditor((state) => state.startMotion);
@@ -82,6 +83,27 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     const position = target.clone().add(direction.normalize().multiplyScalar(distance)).toArray() as Vec3;
     setCameraFraming(activeScene.id, position, cameraTransform.rotation, target.toArray() as Vec3);
   };
+  const replaceWithImage = async () => {
+    if (!object) return;
+    try {
+      if (!window.abaco) throw new Error('La sostituzione con immagini è disponibile nell’app desktop.');
+      const image = await window.abaco.chooseBackground('image');
+      if (!image) return;
+      replaceObject(object.id, {
+        kind: 'plane', name: image.name, screenSpace: true,
+        asset: { sourcePath: image.path, proxyPath: await window.abaco.loadAsset(image.path), collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1 },
+      });
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Sostituzione immagine non riuscita.'); }
+  };
+  const replaceWithBlendAsset = async () => {
+    if (!object) return;
+    try {
+      if (!window.abaco) throw new Error('La sostituzione con file .blend è disponibile nell’app desktop.');
+      const asset = await window.abaco.chooseBlendAsset();
+      if (!asset) return;
+      replaceObject(object.id, { kind: 'blend_asset', name: asset.name, asset });
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Sostituzione Blender non riuscita.'); }
+  };
 
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className="inspector simple-inspector">
@@ -94,6 +116,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         <div className="edit-group identity-group">
           <div className="name-row"><input aria-label="Nome elemento" className="object-name" value={object.name} onChange={(event) => updateObject(object.id, { name: event.target.value || object.name })} /><button className="icon collapse-inline" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={14} /></button><button className="icon danger" title="Elimina" onClick={removeSelected}><Trash2 size={14} /></button></div>
           {object.kind === 'text' && <label className="field"><span>Testo</span><textarea value={evaluateProperty(object, 'text', frame) as string} onChange={(event) => updateObject(object.id, { text: event.target.value })} /></label>}
+          <details className="replace-object-control"><summary><RefreshCw size={13} /> Sostituisci</summary><div className="replace-object-menu">
+            {!object.screenSpace && <>{([['cube', 'Cubo', Box], ['sphere', 'Sfera', Circle], ['cylinder', 'Cilindro', Cylinder], ['cone', 'Cono', Cone], ['plane', 'Piano', SquareDashed]] as const).map(([kind, label, Icon]) => <button key={kind} onClick={(event) => { replaceObject(object.id, { kind, name: label }); (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); }}><Icon size={13} />{label}</button>)}<button onClick={replaceWithBlendAsset}><FileBox size={13} />Asset Blender</button></>}
+            {object.screenSpace && <><button onClick={(event) => { replaceObject(object.id, { kind: 'text', name: 'Testo', text: 'Testo', screenSpace: true }); (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); }}><TextCursorInput size={13} />Testo</button><button onClick={replaceWithImage}><Image size={13} />Immagine</button></>}
+          </div></details>
         </div>
 
         <div className="edit-group compact-style">

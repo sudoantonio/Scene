@@ -112,6 +112,92 @@ async function atomicWrite(filePath: string, contents: string) {
   await fs.rename(temp, filePath);
 }
 
+const portablePath = (value: string) => value.split(path.sep).join('/');
+const safeAssetName = (value: string) => value.normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'asset';
+const isDataUrl = (value: string) => value.startsWith('data:');
+const isInside = (root: string, value: string) => {
+  const relative = path.relative(root, value);
+  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+};
+async function fileExists(filePath: string) {
+  try { await fs.access(filePath); return true; } catch { return false; }
+}
+async function imageFileDataUrl(filePath: string) {
+  const image = nativeImage.createFromPath(filePath);
+  if (image.isEmpty()) throw new Error(`Immagine non leggibile: ${path.basename(filePath)}`);
+  const size = image.getSize();
+  const maxSide = 2560;
+  const scale = Math.min(1, maxSide / Math.max(size.width, size.height));
+  const preview = scale < 1 ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), quality: 'good' }) : image;
+  return preview.toDataURL();
+}
+function dataUrlBuffer(value: string) {
+  const match = value.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
+  if (!match) return undefined;
+  const extension = match[1] === 'image/jpeg' ? '.jpg' : match[1] === 'image/webp' ? '.webp' : '.png';
+  return { extension, buffer: match[2] ? Buffer.from(match[3], 'base64') : Buffer.from(decodeURIComponent(match[3])) };
+}
+async function makePortableProject(project: AbacoProject, root: string) {
+  const portable = structuredClone(project);
+  const copied = new Map<string, string>();
+  const copyAsset = async (source: string, category: string, identity: string, fallback?: string) => {
+    const usable = isDataUrl(source) ? source : source && await fileExists(source) ? source : fallback;
+    if (!usable) throw new Error(`Asset mancante durante l’esportazione: ${source || identity}`);
+    const cached = copied.get(usable);
+    if (cached) return cached;
+    const encoded = isDataUrl(usable) ? dataUrlBuffer(usable) : undefined;
+    const originalName = encoded ? `${identity}${encoded.extension}` : path.basename(usable);
+    const destination = path.join(root, 'assets', category, `${identity.slice(0, 8)}-${safeAssetName(originalName)}`);
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    if (encoded) await fs.writeFile(destination, encoded.buffer);
+    else await fs.copyFile(usable, destination);
+    const relative = portablePath(path.relative(root, destination));
+    copied.set(usable, relative);
+    return relative;
+  };
+  for (const object of portable.objects) {
+    if (object.kind === 'blend_asset') {
+      if (object.asset.sourcePath) object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'modelli', object.id);
+      if (object.asset.proxyPath) object.asset.proxyPath = await copyAsset(object.asset.proxyPath, 'anteprime', `${object.id}-preview`);
+    } else if (object.screenSpace && (object.asset.sourcePath || object.asset.proxyPath)) {
+      const relative = await copyAsset(object.asset.sourcePath, 'immagini', object.id, object.asset.proxyPath);
+      object.asset.sourcePath = relative;
+      object.asset.proxyPath = relative;
+    }
+  }
+  for (const scene of portable.cameraCuts) {
+    if (scene.background.path) scene.background.path = await copyAsset(scene.background.path, 'sfondi', scene.id);
+  }
+  return ProjectSchema.parse(portable);
+}
+function projectForStorage(project: AbacoProject, filePath: string) {
+  const stored = structuredClone(project);
+  const root = path.dirname(filePath);
+  const relativeIfBundled = (value: string) => value && !isDataUrl(value) && path.isAbsolute(value) && isInside(root, value) ? portablePath(path.relative(root, value)) : value;
+  for (const object of stored.objects) {
+    object.asset.sourcePath = relativeIfBundled(object.asset.sourcePath);
+    if (object.screenSpace && object.asset.sourcePath && !isDataUrl(object.asset.sourcePath)) object.asset.proxyPath = object.asset.sourcePath;
+    else object.asset.proxyPath = relativeIfBundled(object.asset.proxyPath);
+  }
+  for (const scene of stored.cameraCuts) scene.background.path = relativeIfBundled(scene.background.path);
+  return stored;
+}
+async function hydratePortableProject(project: AbacoProject, filePath: string) {
+  const hydrated = structuredClone(project);
+  const root = path.dirname(filePath);
+  const resolveAsset = (value: string) => value && !isDataUrl(value) && !path.isAbsolute(value) ? path.resolve(root, value) : value;
+  for (const object of hydrated.objects) {
+    object.asset.sourcePath = resolveAsset(object.asset.sourcePath);
+    object.asset.proxyPath = resolveAsset(object.asset.proxyPath);
+    if (object.screenSpace && !isDataUrl(object.asset.proxyPath)) {
+      const imagePath = object.asset.sourcePath || object.asset.proxyPath;
+      if (imagePath) object.asset.proxyPath = await imageFileDataUrl(imagePath);
+    }
+  }
+  for (const scene of hydrated.cameraCuts) scene.background.path = resolveAsset(scene.background.path);
+  return ProjectSchema.parse(hydrated);
+}
+
 function compactProject(project: AbacoProject) {
   const round = (value: unknown): unknown => {
     if (typeof value === 'number') return Number(value.toFixed(4));
@@ -252,10 +338,20 @@ ipcMain.on('preview:frame', (_event, incomingFrame: number) => {
 ipcMain.handle('preview:get', () => latestPreviewState);
 
 ipcMain.handle('project:open', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Abaco Animatic', extensions: ['json'] }] });
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile', 'openDirectory'], title: 'Apri progetto o cartella Abaco', filters: [{ name: 'Abaco Animatic', extensions: ['json'] }] });
   if (result.canceled || !result.filePaths[0]) return null;
-  const project = ProjectSchema.parse(JSON.parse(await fs.readFile(result.filePaths[0], 'utf8')));
-  return { project, path: result.filePaths[0] };
+  let filePath = result.filePaths[0];
+  if ((await fs.stat(filePath)).isDirectory()) {
+    const entries = await fs.readdir(filePath);
+    const projectFile = entries.find((entry) => entry === 'project.abaco.json')
+      ?? entries.find((entry) => entry.endsWith('.abaco.json'))
+      ?? entries.find((entry) => entry === 'input.json');
+    if (!projectFile) throw new Error('La cartella non contiene un progetto Abaco ricaricabile.');
+    filePath = path.join(filePath, projectFile);
+  }
+  const stored = ProjectSchema.parse(JSON.parse(await fs.readFile(filePath, 'utf8')));
+  const project = await hydratePortableProject(stored, filePath);
+  return { project, path: filePath };
 });
 
 ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; path?: string }) => {
@@ -266,7 +362,7 @@ ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; 
     if (result.canceled || !result.filePath) return null;
     filePath = result.filePath;
   }
-  await atomicWrite(filePath, JSON.stringify(project, null, 2));
+  await atomicWrite(filePath, JSON.stringify(projectForStorage(project, filePath), null, 2));
   return { path: filePath, project };
 });
 
@@ -295,15 +391,7 @@ ipcMain.handle('background:choose', async (_event, kind: 'image' | 'model') => {
 
 ipcMain.handle('asset:load', async (_event, filePath: string) => {
   const extension = path.extname(filePath).toLowerCase();
-  if (extension !== '.glb') {
-    const image = nativeImage.createFromPath(filePath);
-    if (image.isEmpty()) throw new Error('Immagine non leggibile. Usa PNG, JPG o WebP.');
-    const size = image.getSize();
-    const maxSide = 2560;
-    const scale = Math.min(1, maxSide / Math.max(size.width, size.height));
-    const preview = scale < 1 ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), quality: 'good' }) : image;
-    return preview.toDataURL();
-  }
+  if (extension !== '.glb') return imageFileDataUrl(filePath);
   const buffer = await fs.readFile(filePath);
   return `data:model/gltf-binary;base64,${buffer.toString('base64')}`;
 });
@@ -367,19 +455,18 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
   const tempDir = path.join(exportsRoot, `.${version}-${crypto.randomUUID()}.tmp`);
   const finalDir = path.join(exportsRoot, version);
   await fs.mkdir(tempDir, { recursive: true });
-  const inputPath = path.join(tempDir, 'input.json');
-  const planPath = path.join(tempDir, 'plan.json');
-  const scriptPath = path.join(tempDir, 'build_scene.py');
-  const blendPath = path.join(tempDir, `scene_${version}.blend`);
-  await fs.writeFile(inputPath, JSON.stringify(project, null, 2));
-  await fs.writeFile(planPath, JSON.stringify(plan, null, 2));
-  await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);
-  const readableAssetDirs = project.objects.filter((object) => object.kind === 'blend_asset' && object.asset.sourcePath)
-    .map((object) => `${path.dirname(object.asset.sourcePath)}:ro`);
-  const readableBackgroundDirs = project.cameraCuts.filter((cut) => cut.background.path)
-    .map((cut) => `${path.dirname(cut.background.path)}:ro`);
-  const invocation = await blenderCommand([...Array.from(new Set([`${path.dirname(payload.projectPath)}:ro`, ...readableAssetDirs, ...readableBackgroundDirs])), tempDir]);
   try {
+    const portableProject = await makePortableProject(project, tempDir);
+    const projectBundlePath = path.join(tempDir, 'project.abaco.json');
+    const inputPath = path.join(tempDir, 'input.json');
+    const planPath = path.join(tempDir, 'plan.json');
+    const scriptPath = path.join(tempDir, 'build_scene.py');
+    const blendPath = path.join(tempDir, `scene_${version}.blend`);
+    await fs.writeFile(projectBundlePath, JSON.stringify(portableProject, null, 2));
+    await fs.writeFile(inputPath, JSON.stringify(portableProject, null, 2));
+    await fs.writeFile(planPath, JSON.stringify(plan, null, 2));
+    await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);
+    const invocation = await blenderCommand([tempDir]);
     const output = await runProcess(invocation.command, [...invocation.prefix, '--background', '--python', scriptPath, '--', inputPath, planPath, blendPath], tempDir);
     await fs.writeFile(path.join(tempDir, 'blender.log'), output);
     await fs.rename(tempDir, finalDir);

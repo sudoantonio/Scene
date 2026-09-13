@@ -30,6 +30,7 @@ type EditorState = {
   addObject(kind: ObjectKind): void;
   addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number }): void;
+  replaceObject(id: string, replacement: { kind: ObjectKind; name?: string; text?: string; screenSpace?: boolean; asset?: SceneObject['asset'] }): void;
   addShot(): void;
   splitScene(): void;
   deleteScene(id: string): void;
@@ -274,6 +275,34 @@ export const useEditor = create<EditorState>((set, get) => {
       next.objects.push(object);
       commit(next);
       set({ selectedId: object.id });
+    },
+    replaceObject: (id, replacement) => {
+      const state = get();
+      const next = snapshot(state.project);
+      const index = next.objects.findIndex((item) => item.id === id && item.kind !== 'camera' && !item.kind.includes('light'));
+      if (index < 0 || replacement.kind === 'camera' || replacement.kind.includes('light')) return;
+      const current = next.objects[index];
+      const fresh = createSceneObject(replacement.kind, next.objects.filter((item) => item.kind === replacement.kind && item.id !== id).length + 1);
+      fresh.id = current.id;
+      fresh.name = replacement.name?.trim() || fresh.name;
+      fresh.visible = current.visible;
+      fresh.transform = structuredClone(current.transform);
+      fresh.sceneIds = structuredClone(current.sceneIds);
+      fresh.sceneNotes = structuredClone(current.sceneNotes);
+      fresh.keyframes = current.keyframes.filter((key) => ['position', 'rotation', 'scale', 'visibility'].includes(key.property)).map((key) => structuredClone(key));
+      fresh.screenSpace = replacement.screenSpace ?? fresh.screenSpace;
+      fresh.screenCrop = fresh.screenSpace && current.screenSpace ? structuredClone(current.screenCrop) : [0, 0, 0, 0];
+      if (replacement.asset) fresh.asset = structuredClone(replacement.asset);
+      if (replacement.kind === 'text') {
+        fresh.text = replacement.text?.trim() || 'Testo';
+        const sceneIds = new Set(fresh.sceneIds);
+        for (const scene of next.cameraCuts) {
+          if (!sceneIds.size || sceneIds.has(scene.id)) putKey(fresh, scene.frame, 'text', fresh.text, 'constant');
+        }
+      }
+      next.objects[index] = fresh;
+      commit(next);
+      set({ selectedId: fresh.id });
     },
     addShot: () => {
       const state = get();

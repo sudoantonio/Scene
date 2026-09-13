@@ -1794,3 +1794,47 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   box-shadow: none !important;
 }
 .app-shell .timeline .presence-segment.selected-block { filter: brightness(1.12); }
+
+/* Sostituzione contestuale: cambia soggetto senza alterare posizione, scala o animazione. */
+.replace-object-control { position: relative; margin-top: 8px; }
+.replace-object-control > summary { min-height: 28px; padding: 0 9px; display: flex; align-items: center; gap: 7px; color: #74736e; background: transparent; border: .5px solid rgba(80,80,76,.2); cursor: pointer; list-style: none; font-size: 9px; }
+.replace-object-control > summary::-webkit-details-marker { display: none; }
+.replace-object-control[open] > summary { color: #312b1d; background: rgba(209,161,42,.11); border-color: rgba(209,161,42,.42); }
+.replace-object-menu { margin-top: 4px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 3px; }
+.replace-object-menu button { min-width: 0; min-height: 29px; padding: 0 7px; display: flex; align-items: center; gap: 6px; color: #696863; background: rgba(80,80,76,.06); border: .5px solid rgba(80,80,76,.14); font-size: 9px; text-align: left; }
+.replace-object-menu button:hover { color: #292824; background: rgba(80,80,76,.11); }
+.theme-dark .replace-object-control > summary { color: #bcbcb7; border-color: rgba(255,255,255,.14); }
+.theme-dark .replace-object-control[open] > summary { color: #fff2c4; background: rgba(209,161,42,.13); border-color: rgba(209,161,42,.48); }
+.theme-dark .replace-object-menu button { color: #c7c7c2; background: #292929; border-color: rgba(255,255,255,.11); }
+.theme-dark .replace-object-menu button:hover { color: #fff; background: #343434; }
+
+/* La colonna Elementi è distinta dalle tracce; tutte le icone sono monocromatiche e senza badge. */
+.timeline .element-thumbnail,
+.timeline .element-thumbnail.text,
+.timeline .element-thumbnail.plane,
+.timeline .element-thumbnail.blend_asset {
+  color: #fff !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.timeline .element-thumbnail svg { stroke-width: 1.75; }
+.theme-dark .timeline .ruler-label,
+.theme-dark .timeline .track-label,
+.theme-dark .timeline .scene-label,
+.theme-dark .timeline .camera-row .track-label,
+.theme-dark .timeline .object-row .track-label {
+  color: #d0d0cc;
+  background: #171717 !important;
+}
+.theme-dark .timeline .track-pair.active .track-label { background: #242424 !important; }
+.theme-light .timeline .ruler-label,
+.theme-light .timeline .track-label,
+.theme-light .timeline .scene-label,
+.theme-light .timeline .camera-row .track-label,
+.theme-light .timeline .object-row .track-label {
+  color: #f4f4f1;
+  background: #555650 !important;
+}
+.theme-light .timeline .track-pair.active .track-label { background: #686963 !important; }

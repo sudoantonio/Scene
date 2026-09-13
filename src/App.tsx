@@ -77,7 +77,7 @@ export default function App() {
       const current = useEditor.getState().project;
       if (!current.comments.some((comment) => comment.status === 'pending')) {
         const output = await window.abaco!.buildBlender(current, emptyPlan(), saved.path);
-        notify('ok', `Creato ${output.version}: ${output.blendPath}. Nessun commento da interpretare: ho esportato la scena corrente.`);
+        notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
         return;
       }
       const frames = [useEditor.getState().currentFrame, ...current.comments.filter((comment) => comment.status === 'pending').flatMap((comment) => [comment.startFrame, comment.endFrame]), ...current.cameraCuts.map((cut) => cut.frame)];
@@ -96,7 +96,7 @@ export default function App() {
       acceptPlan(plan);
       const saved = await window.abaco.saveProject(useEditor.getState().project, projectPath);
       if (saved) markSaved(saved.project, saved.path);
-      setPlan(undefined); notify('ok', `Creato ${output.version}: ${output.blendPath}`);
+      setPlan(undefined); notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
@@ -107,7 +107,7 @@ export default function App() {
       const saved = await save();
       if (!saved) return;
       const output = await window.abaco!.buildBlender(useEditor.getState().project, emptyPlan(), saved.path);
-      notify('ok', `Creato ${output.version}: ${output.blendPath}`);
+      notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };

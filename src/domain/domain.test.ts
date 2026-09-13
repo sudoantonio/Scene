@@ -224,6 +224,25 @@ describe('scene indipendenti', () => {
     expect(asset.keyframes.map((key) => key.property)).toEqual(['position', 'rotation', 'scale', 'visibility']);
     expect(evaluateTransform(asset, 1).rotation[2]).toBeCloseTo(45, 3);
   });
+
+  it('sostituisce un soggetto mantenendo identità, posizione, dimensione e movimento', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().setTransform(cubeId, { position: [3, -2, 1], rotation: [5, 10, 15], scale: [1.8, 1.8, 1.8] });
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setTransform(cubeId, { position: [6, -2, 1], rotation: [5, 10, 15], scale: [1.8, 1.8, 1.8] });
+    useEditor.getState().stopMotion();
+    useEditor.getState().replaceObject(cubeId, { kind: 'sphere', name: 'Sfera sostitutiva' });
+    const replacement = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(replacement.kind).toBe('sphere');
+    expect(replacement.screenSpace).toBe(false);
+    expect(replacement.name).toBe('Sfera sostitutiva');
+    expect(evaluateTransform(replacement, 1)).toEqual({ position: [3, -2, 1], rotation: [5, 10, 15], scale: [1.8, 1.8, 1.8] });
+    expect(evaluateTransform(replacement, 72).position).toEqual([6, -2, 1]);
+    expect(replacement.sceneIds).toEqual([sceneId]);
+  });
   it('salva localmente anche la posizione di un progetto senza file', () => {
     vi.useFakeTimers();
     localStorage.removeItem('abaco-animatic-project-v1');
