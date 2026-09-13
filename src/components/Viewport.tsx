@@ -756,8 +756,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const shotOrbitRef = useRef<OrbitControlsImpl | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const cameraPanBuffer = useRef<{ x: number; y: number; timer?: number }>({ x: 0, y: 0 });
-  const cameraRotateBuffer = useRef<{ x: number; y: number; timer?: number }>({ x: 0, y: 0 });
+  const cameraPanBuffer = useRef<{ x: number; y: number; persist: boolean; timer?: number }>({ x: 0, y: 0, persist: true });
+  const cameraRotateBuffer = useRef<{ x: number; y: number; persist: boolean; timer?: number }>({ x: 0, y: 0, persist: true });
   const cameraCommitTimer = useRef<number | undefined>(undefined);
   const pendingCameraCommit = useRef<{ projectId: string; sceneId: string; frame: number; position: Vec3; rotation: Vec3; target: Vec3 } | undefined>(undefined);
   const shiftPressed = useRef(false);
@@ -873,8 +873,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (cameraPanBuffer.current.timer) window.clearTimeout(cameraPanBuffer.current.timer);
     if (cameraRotateBuffer.current.timer) window.clearTimeout(cameraRotateBuffer.current.timer);
     if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
-    cameraPanBuffer.current = { x: 0, y: 0 };
-    cameraRotateBuffer.current = { x: 0, y: 0 };
+    cameraPanBuffer.current = { x: 0, y: 0, persist: true };
+    cameraRotateBuffer.current = { x: 0, y: 0, persist: true };
     cameraCommitTimer.current = undefined;
     pendingCameraCommit.current = undefined;
   }, [cameraView, projectId]);
@@ -922,7 +922,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     cameraCommitTimer.current = window.setTimeout(flushPendingCameraCommit, recording ? 240 : 180);
   };
 
-  const panShotView = (deltaX: number, deltaY: number) => {
+  const panShotView = (deltaX: number, deltaY: number, persist = true) => {
     const controls = shotOrbitRef.current;
     if (!activeCamera || !controls) return;
     const camera = controls.object;
@@ -934,7 +934,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(gesture.horizontal * worldPerPixel);
     const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).multiplyScalar(gesture.vertical * worldPerPixel);
     camera.position.add(right).add(up); controls.target.add(right).add(up); controls.update();
-    scheduleCameraCommit();
+    if (persist) scheduleCameraCommit();
   };
 
   const rotateViewFromTrackpad = (deltaX: number, deltaY: number) => {
@@ -948,7 +948,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     scheduleCameraCommit();
   };
 
-  const tiltShotCameraFromTrackpad = (deltaX: number, deltaY: number) => {
+  const tiltShotCameraFromTrackpad = (deltaX: number, deltaY: number, persist = true) => {
     const controls = shotOrbitRef.current;
     if (!controls || !activeCamera) return;
     const camera = controls.object;
@@ -962,11 +962,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     controls.target.copy(camera.position).addScaledVector(direction, distance);
     camera.lookAt(controls.target);
     controls.update();
-    scheduleCameraCommit();
+    if (persist) scheduleCameraCommit();
   };
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
+    // Durante REC il trackpad serve solo a orientarsi: il movimento della
+    // camera viene rifinito in seguito selezionando i punti nella timeline.
+    const persistCameraEdit = !useEditor.getState().recordingSession;
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
     if (event.ctrlKey) {
@@ -983,7 +986,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         camera.position.copy(controls.target).add(offset.setLength(distance));
         camera.lookAt(controls.target);
         controls.update();
-        scheduleCameraCommit();
+        if (persistCameraEdit) scheduleCameraCommit();
       } else if (orbitRef.current) {
         const controls = orbitRef.current;
         const offset = controls.object.position.clone().sub(controls.target);
@@ -999,12 +1002,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       event.preventDefault(); event.stopPropagation();
       if (cameraView) {
         const buffer = cameraRotateBuffer.current;
+        if (!buffer.timer) buffer.persist = persistCameraEdit;
+        else buffer.persist = buffer.persist && persistCameraEdit;
         buffer.x += delta.x; buffer.y += delta.y;
         if (!buffer.timer) buffer.timer = window.setTimeout(() => {
           const pending = cameraRotateBuffer.current;
-          const x = pending.x, y = pending.y;
-          pending.x = 0; pending.y = 0; pending.timer = undefined;
-          tiltShotCameraFromTrackpad(x, y);
+          const x = pending.x, y = pending.y, persist = pending.persist;
+          pending.x = 0; pending.y = 0; pending.persist = true; pending.timer = undefined;
+          tiltShotCameraFromTrackpad(x, y, persist);
         }, 24);
       } else if (!cameraView) rotateViewFromTrackpad(delta.x, delta.y);
       return;
@@ -1014,13 +1019,15 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     event.stopPropagation();
     if (cameraView) {
       const buffer = cameraPanBuffer.current;
+      if (!buffer.timer) buffer.persist = persistCameraEdit;
+      else buffer.persist = buffer.persist && persistCameraEdit;
       buffer.x += delta.x;
       buffer.y += delta.y;
       if (!buffer.timer) buffer.timer = window.setTimeout(() => {
         const pending = cameraPanBuffer.current;
-        const x = pending.x, y = pending.y;
-        pending.x = 0; pending.y = 0; pending.timer = undefined;
-        panShotView(x, y);
+        const x = pending.x, y = pending.y, persist = pending.persist;
+        pending.x = 0; pending.y = 0; pending.persist = true; pending.timer = undefined;
+        panShotView(x, y, persist);
       }, 32);
       return;
     }

@@ -239,6 +239,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     setPlaying(false);
     select(object.id);
     selectMotion({ objectId: object.id, sceneId });
+    setFrame(keyframeFrame);
     setDeleteTarget({ kind: 'keyframe', objectId: object.id, keyframeId });
     const startX = event.clientX;
     const pixels = Math.max(1, track.getBoundingClientRect().width);
@@ -253,6 +254,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', finish);
       moveMotionPoint(object.id, keyframeId, nextFrame);
+      setFrame(nextFrame);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
