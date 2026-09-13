@@ -36,11 +36,11 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
     setTimelineComment(scope, activeScene.id, '', objectId);
     setCommentEditor(undefined);
   };
-  const CommentControl = ({ scope, label, objectId }: { scope: TimelineCommentScope; label: string; objectId?: string }) => {
+  const CommentControl = ({ scope, label, objectId, compact = false }: { scope: TimelineCommentScope; label: string; objectId?: string; compact?: boolean }) => {
     const comment = commentFor(scope, objectId);
     const editing = commentEditor?.scope === scope && commentEditor.objectId === objectId;
-    return <div className={`scenography-comment-control ${comment ? 'has-comment' : ''}`}>
-      {!editing && <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={!activeScene} title={comment ? `Modifica commento ${label}` : `Aggiungi commento ${label}`} onClick={() => openComment(scope, objectId)}>{comment ? <MessageSquare size={12} /> : <MessageSquarePlus size={12} />}<span>{comment ? comment.text : `Commento ${label}`}</span></button>}
+    return <div className={`scenography-comment-control ${compact ? 'compact' : ''} ${comment ? 'has-comment' : ''}`}>
+      {!editing && <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={!activeScene} title={comment ? `Modifica commento ${label}` : `Aggiungi commento ${label}`} onClick={() => openComment(scope, objectId)}>{comment ? <MessageSquare size={12} /> : <MessageSquarePlus size={12} />}<span>{comment ? comment.text : 'Commento'}</span></button>}
       {editing && <div className="scenography-comment-editor">
         <textarea autoFocus placeholder={`Indicazione ${label}`} value={commentEditor.text} onChange={(event) => setCommentEditor({ ...commentEditor, text: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveComment(); if (event.key === 'Escape') setCommentEditor(undefined); }} />
         <div><button className="icon" title="Annulla" onClick={() => setCommentEditor(undefined)}><X size={13} /></button>{comment && <button className="icon danger" title="Elimina commento" onClick={() => removeComment(scope, objectId)}><Trash2 size={13} /></button>}<button className="subtle" disabled={!commentEditor.text.trim()} onClick={saveComment}><Check size={13} /> Salva</button></div>
@@ -64,11 +64,14 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
         }}><FileBox size={15} /><span>Asset Blender</span></button>
       </div>
   </section> : <section className="outliner-section scene-elements-section">
-      <div className="scenography-context-comments"><span>Commenti scena</span><CommentControl scope="scene" label={activeScene?.name ?? 'scena'} /><CommentControl scope="framing" label={activeCamera?.name ?? 'camera'} /></div>
+      <div className="scenography-context-comments">
+        <div className="scenography-comment-row"><span>{activeScene?.name ?? 'Scena'}</span><CommentControl compact scope="scene" label={activeScene?.name ?? 'scena'} /></div>
+        <div className="scenography-comment-row"><span>{activeCamera?.name ?? 'Camera'}</span><CommentControl compact scope="framing" label={activeCamera?.name ?? 'camera'} /></div>
+      </div>
       <div className="outliner scenography-outliner">{sceneObjects.map((object) => {
         return <div key={object.id} className={`scenography-object ${selectedId === object.id ? 'selected' : ''}`}>
           <button className="outliner-item" onClick={() => select(object.id)}><span className={`kind-dot ${object.kind}`} /><span>{object.name}</span></button>
-          <CommentControl scope="object" label={object.name} objectId={object.id} />
+          <CommentControl compact scope="object" label={object.name} objectId={object.id} />
         </div>;
       })}</div>
     </section>}
