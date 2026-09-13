@@ -612,6 +612,7 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .camera-drone-hint { position: absolute; z-index: 5; top: 52px; left: 12px; padding: 7px 8px; display: flex; flex-direction: column; gap: 5px; color: #5e5d58; background: rgba(255,255,255,.9); border: 1px solid #d2d2cd; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,.08); font-size: 9px; pointer-events: none; }
 .camera-drone-hint span { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
 .camera-drone-hint span.disabled { color: #a7a6a1; }
+.camera-drone-hint small { color: #8c8b85; font-size: 8px; white-space: nowrap; }
 .camera-drone-hint kbd { min-width: 18px; height: 18px; padding: 0 4px; display: inline-grid; place-items: center; color: #34332f; background: #f7f7f4; border: 1px solid #c7c7c1; border-bottom-width: 2px; border-radius: 3px; font: 600 9px/1 system-ui,sans-serif; }
 .live-camera-preview { position: absolute; z-index: 5; right: 12px; bottom: 12px; width: clamp(150px, 24%, 236px); padding: 0; overflow: hidden; color: #eee; background: #171817; border: 1px solid #777973; border-radius: 7px; box-shadow: 0 8px 24px rgba(0,0,0,.28); text-align: left; }
 .live-camera-preview:hover { border-color: #a9aaa5; transform: translateY(-1px); }
@@ -1355,6 +1356,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .camera-tool-switch button.active { color: #fff; background: #4b4b70; }
 .theme-dark .camera-drone-hint { color: #bdbdb8; background: rgba(43,43,43,.94); border-color: #484848; }
 .theme-dark .camera-drone-hint span.disabled { color: #777; }
+.theme-dark .camera-drone-hint small { color: #888; }
 .theme-dark .camera-drone-hint kbd { color: #ededeb; background: #353535; border-color: #606060; }
 .theme-dark .live-camera-preview { border-color: #5b5b5b; }
 .theme-dark .live-camera-preview:hover { border-color: var(--premiere-accent); }

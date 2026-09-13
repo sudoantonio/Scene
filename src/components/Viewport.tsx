@@ -798,43 +798,85 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   };
 
   useEffect(() => {
-    const flyCamera = (event: KeyboardEvent) => {
-      if (!cameraView || cameraTool === 'object' || event.metaKey || event.ctrlKey || event.altKey) return;
-      const targetElement = event.target as HTMLElement | null;
-      if (targetElement && (targetElement.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(targetElement.tagName))) return;
-      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(event.code)) return;
-      const controls = shotOrbitRef.current;
-      if (!controls || !activeCamera || !activeCut) return;
-      event.preventDefault();
-      useEditor.getState().setPlaying(false);
-      const camera = controls.object;
-      camera.up.set(0, 0, 1);
-      camera.updateMatrixWorld();
-      if (event.code === 'KeyQ' || event.code === 'KeyE') {
-        if (!selectedSubject) return;
-        const subject = new THREE.Vector3(...evaluateTransform(selectedSubject, frame).position);
-        const offset = camera.position.clone().sub(subject);
-        if (offset.lengthSq() < .001) offset.set(0, -1, .25);
-        const angle = THREE.MathUtils.degToRad((event.code === 'KeyQ' ? -2.4 : 2.4) * (event.shiftKey ? 2 : 1));
-        offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
-        camera.position.copy(subject).add(offset);
-        controls.target.copy(subject);
-        camera.lookAt(subject);
-      } else {
-        const distance = Math.max(.5, camera.position.distanceTo(controls.target));
-        const step = distance * .032 * (event.shiftKey ? 2.5 : 1);
-        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-        const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-        const movement = event.code === 'KeyW' ? up : event.code === 'KeyS' ? up.multiplyScalar(-1) : event.code === 'KeyD' ? right : right.multiplyScalar(-1);
-        camera.position.addScaledVector(movement, step);
-        controls.target.addScaledVector(movement, step);
-      }
-      controls.update();
-      scheduleCameraCommit();
+    const movementCodes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+    const held = new Set<string>();
+    let animationFrame = 0;
+    let previousTime = performance.now();
+
+    const editableTarget = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return Boolean(element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)));
     };
-    window.addEventListener('keydown', flyCamera);
-    return () => window.removeEventListener('keydown', flyCamera);
-  }, [activeCamera?.id, activeCut?.id, cameraTool, cameraView, frame, selectedSubject?.id]);
+    const keyDown = (event: KeyboardEvent) => {
+      if (editableTarget(event.target) || event.metaKey || event.ctrlKey) return;
+      if (movementCodes.has(event.code)) {
+        if (cameraView && cameraTool === 'object') return;
+        event.preventDefault();
+        held.add(event.code);
+        useEditor.getState().setPlaying(false);
+      }
+      if (event.code.startsWith('Shift') || event.code.startsWith('Alt')) held.add(event.code);
+    };
+    const keyUp = (event: KeyboardEvent) => { held.delete(event.code); };
+    const clearKeys = () => held.clear();
+    const tick = (time: number) => {
+      const deltaSeconds = Math.min(.05, Math.max(0, (time - previousTime) / 1000));
+      previousTime = time;
+      if ([...held].some((code) => movementCodes.has(code))) {
+        const editor = useEditor.getState();
+        const currentScene = editor.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((scene) => scene.frame <= editor.currentFrame);
+        const cameraObject = editor.project.objects.find((object) => object.id === currentScene?.cameraId && object.kind === 'camera');
+        if (currentScene && cameraObject && (!cameraView || cameraTool !== 'object')) {
+          const controls = cameraView ? shotOrbitRef.current : undefined;
+          const transform = evaluateTransform(cameraObject, editor.currentFrame);
+          const camera = controls?.object ?? new THREE.PerspectiveCamera();
+          if (!controls) {
+            camera.position.set(...transform.position);
+            camera.rotation.set(...transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]);
+          }
+          camera.up.set(0, 0, 1);
+          camera.updateMatrixWorld();
+          const target = controls?.target ?? new THREE.Vector3(...transform.position).addScaledVector(camera.getWorldDirection(new THREE.Vector3()), currentScene.framing.distance);
+          const distance = Math.max(.5, camera.position.distanceTo(target));
+          const speedModifier = ([...held].some((code) => code.startsWith('Shift')) ? 3 : 1) * ([...held].some((code) => code.startsWith('Alt')) ? .25 : 1);
+          const step = THREE.MathUtils.clamp(distance * .72, .65, 18) * deltaSeconds * speedModifier;
+          const forward = camera.getWorldDirection(new THREE.Vector3()).normalize();
+          const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+          const movement = new THREE.Vector3();
+          if (held.has('KeyW') || held.has('ArrowUp')) movement.add(forward);
+          if (held.has('KeyS') || held.has('ArrowDown')) movement.sub(forward);
+          if (held.has('KeyA') || held.has('ArrowLeft')) movement.sub(right);
+          if (held.has('KeyD') || held.has('ArrowRight')) movement.add(right);
+          if (held.has('KeyE')) movement.z += 1;
+          if (held.has('KeyQ')) movement.z -= 1;
+          if (movement.lengthSq() > 0) {
+            movement.normalize().multiplyScalar(step);
+            camera.position.add(movement);
+            target.add(movement);
+            camera.lookAt(target);
+            camera.updateMatrixWorld();
+            controls?.update();
+            const position = camera.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
+            const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
+            const framingTarget = target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
+            if (cameraView) scheduleCameraCommit();
+            else editor.setCameraFraming(currentScene.id, position, rotation, framingTarget);
+          }
+        }
+      }
+      animationFrame = requestAnimationFrame(tick);
+    };
+    window.addEventListener('keydown', keyDown);
+    window.addEventListener('keyup', keyUp);
+    window.addEventListener('blur', clearKeys);
+    animationFrame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
+      window.removeEventListener('blur', clearKeys);
+    };
+  }, [cameraTool, cameraView]);
 
   return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''}`} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}
@@ -862,9 +904,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <button className={cameraTool === 'object' ? 'active' : ''} onClick={() => setCameraTool('object')} title="Seleziona e sposta gli oggetti"><Move3d size={14} /><span>Oggetti</span></button>
       <button className={cameraTool === 'orbit' ? 'active' : ''} onClick={() => { centerFramingOnSubject(); setCameraTool('orbit'); }} title="Ruota la camera attorno al soggetto"><Rotate3d size={14} /><span>Ruota attorno</span></button>
     </div>}
-    {cameraView && cameraTool !== 'object' && <div className="camera-drone-hint" aria-label="Comandi camera drone">
-      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> sposta</span>
-      <span className={!selectedSubject ? 'disabled' : ''}><kbd>Q</kbd><kbd>E</kbd> ruota {selectedSubject ? `attorno a ${selectedSubject.name}` : '— seleziona un oggetto'}</span>
+    {(!cameraView || cameraTool !== 'object') && <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
+      <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
+      <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
+      <small>Shift veloce · Alt lento</small>
     </div>}
     <div className="viewport-top-right">
       {!cameraView && activeCameraTransform && <button className="secondary small" onClick={() => {
@@ -890,7 +934,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>}
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
     <div className="viewport-help">{cameraView
-      ? cameraTool === 'frame' ? 'W/S alto-basso · A/D sinistra-destra · Q/E orbita · Rotella o pinch: zoom' : cameraTool === 'object' ? `Oggetto: ${actionName} · Gli assi seguono la vista camera` : 'Q/E o trascina: ruota attorno al soggetto · WASD: sposta camera'
-      : `Oggetto: ${actionName} · Trascina sfondo: ruota vista · Shift + 2 dita: sposta`}</div>
+      ? cameraTool === 'frame' ? 'Stile Blender: WASD/frecce vola · Q/E giù-su · Shift veloce · Alt lento' : cameraTool === 'object' ? `Oggetto: ${actionName} · Gli assi seguono la vista camera` : 'Trascina: ruota attorno al soggetto · WASD/frecce: vola'
+      : `Camera: WASD/frecce vola · Q/E giù-su · Oggetto: ${actionName}`}</div>
   </div>;
 }
