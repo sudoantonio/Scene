@@ -4,70 +4,70 @@
 
 # Scene
 
-**Scene è un editor desktop locale e semplificato per creare storyboard e animatic 3D senza dover conoscere Blender.**
+**Scene is a simple, local desktop editor for creating 3D storyboards and animatics without having to learn Blender.**
 
-Permette di comporre una sequenza di scene, disporre elementi 3D e livelli 2D, impostare camera e movimenti, aggiungere audio e scrivere indicazioni precise. Il risultato è un progetto strutturato e modificabile, esportabile come file Blender e utilizzabile come base di lavoro per un agente AI.
+It lets you build a sequence of scenes, arrange 3D objects and 2D layers, define camera positions and movements, add audio, and write precise production notes. The result is a structured, editable project that can be exported to Blender and used as input for an AI coding agent.
 
 <p align="center">
-  <img src="docs/assets/scene-interface.png" alt="Interfaccia di Scene" width="1200">
+  <img src="docs/assets/scene-interface.png" alt="Scene interface" width="1200">
 </p>
 
-## Perché nasce
+## Why Scene exists
 
-Mi sono reso conto che i modelli AI più recenti sono diventati molto efficaci nel creare, modificare e organizzare contenuti 3D. Allo stesso tempo, ABACO aveva bisogno di produrre con maggiore continuità contenuti divulgativi animati per i propri canali social.
+Recent AI models have become very capable at creating, modifying, and organizing 3D content. At the same time, ABACO needed a more consistent way to produce educational animated content for its social channels.
 
-Da queste due esigenze nasce **Scene**: uno strumento pensato per trasformare un’idea in uno storyboard 3D anche senza competenze tecniche specifiche. L’obiettivo non è sostituire Blender o un software professionale di animazione, ma rendere accessibili le operazioni essenziali per preparare scene, inquadrature, tempi e indicazioni.
+These two needs led to **Scene**: a tool designed to turn an idea into a 3D storyboard without requiring specialist skills. It is not intended to replace Blender or professional animation software. Instead, it makes the essential work of preparing scenes, shots, timing, and production notes more accessible.
 
-Il progetto prodotto da Scene può essere aperto in Blender oppure affidato al proprio agente di sviluppo preferito — per esempio Codex, Claude Code o Cursor — insieme a istruzioni dettagliate per continuare la lavorazione, aggiungere logica o rifinire la scena 3D.
+A project created with Scene can be opened directly in Blender or passed to a preferred coding agent—such as Codex, Claude Code, or Cursor—together with detailed instructions for extending, automating, or refining the 3D scene.
 
-Scene è ancora un software giovane e volutamente essenziale. È nato per un utilizzo concreto e circoscritto alla produzione social di ABACO; continuerà a evolversi quando emergeranno nuove necessità reali. Il codice rimane comunque disponibile a chi si trova in una situazione simile e vuole adattarlo, estenderlo o integrare servizi aggiuntivi, incluse API e automazioni proprie.
+Scene is still an early-stage project and is intentionally focused. It was created for ABACO's social-media production workflow and will evolve as new practical needs emerge. The code is available to anyone facing a similar challenge who wants to adapt it, extend it, or integrate additional services, APIs, and automations.
 
-## Cosa permette di fare
+## Features
 
-- organizzare più scene su una timeline continua;
-- aggiungere forme 3D, file Blender, immagini e testo 2D;
-- impostare inquadratura, camera e movimenti tramite punti temporali;
-- annotare scene, movimenti ed elementi con indicazioni operative;
-- importare tracce audio, visualizzarne la waveform e regolarne il volume;
-- riprodurre l’animatic direttamente nell’editor;
-- esportare un progetto Blender versionato e una traccia audio WAV separata;
-- salvare un progetto portabile, con gli asset raccolti insieme ai dati della scena.
+- organize multiple scenes on a continuous timeline;
+- add 3D primitives, Blender files, images, and 2D text;
+- define shots, camera positions, and motion using timeline control points;
+- attach production notes to scenes, movements, and individual elements;
+- import audio tracks, display their waveforms, and adjust volume;
+- preview the animatic directly in the editor;
+- export versioned Blender projects and a separate WAV audio track;
+- save portable projects with their assets collected alongside the scene data.
 
-## Flusso di lavoro
+## Workflow
 
-1. Crea le scene e definisci la loro durata.
-2. Inserisci gli elementi e prepara le inquadrature.
-3. Registra o modifica i movimenti sulla timeline.
-4. Aggiungi indicazioni testuali e tracce audio.
-5. Salva il progetto ed esporta il file `.blend`.
-6. Continua manualmente in Blender oppure passa progetto e indicazioni a un agente AI per una lavorazione più avanzata.
+1. Create the scenes and set their duration.
+2. Add the required elements and compose each shot.
+3. Record or edit camera and object motion on the timeline.
+4. Add production notes and audio tracks.
+5. Save the project and export the `.blend` file.
+6. Continue manually in Blender, or pass the project and its instructions to an AI agent for more advanced work.
 
-I progetti sono salvati come `scene.abaco.json`. Gli export vengono creati accanto al progetto in cartelle progressive (`exports/v001`, `v002` e così via), senza sovrascrivere le versioni precedenti.
+Projects are saved as `scene.abaco.json`. Exports are created next to the project in incrementally versioned folders (`exports/v001`, `v002`, and so on), so previous versions are never overwritten.
 
-## Architettura
+## Architecture
 
-Scene è un’applicazione desktop basata su Electron, React e Three.js. Lo stato del progetto è validato con Zod e l’esportazione Blender viene generata da uno script Python locale e deterministico.
+Scene is a desktop application built with Electron, React, and Three.js. Project data is validated with Zod, while Blender exports are generated by a deterministic local Python script.
 
-L’applicazione funziona anche senza una chiave API per la composizione e l’esportazione diretta. L’integrazione AI è opzionale: quando configurata, la chiave OpenAI viene cifrata tramite `safeStorage` di Electron e non viene inclusa nei file di progetto.
+The application can compose scenes and export projects without an API key. AI integration is optional: when enabled, the OpenAI API key is encrypted with Electron's `safeStorage` and is never included in project files.
 
-Il piano prodotto dal modello viene validato prima dell’applicazione: non può fornire codice Python arbitrario, scegliere percorsi locali o cancellare direttamente gli elementi del progetto.
+Plans produced by the model are validated before they are applied. The model cannot provide arbitrary Python code, select local filesystem paths, or directly delete project elements.
 
-## Sviluppo
+## Development
 
-Requisiti:
+Requirements:
 
-- Node.js 22 o successivo;
+- Node.js 22 or later;
 - npm;
 - Blender.
 
-Su macOS Scene cerca Blender automaticamente in `/Applications/Blender.app`; su Linux rileva il Flatpak `org.blender.Blender`. È possibile indicare un eseguibile differente dalle impostazioni.
+On macOS, Scene automatically looks for Blender in `/Applications/Blender.app`. On Linux, it detects the `org.blender.Blender` Flatpak. A different executable can be selected in the application settings.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Test e pacchetti
+## Testing and packaging
 
 ```bash
 npm test
@@ -76,8 +76,8 @@ npm run package:linux
 npm run package:mac
 ```
 
-I pacchetti vengono generati in `release/`: AppImage per Linux e ZIP per macOS Apple Silicon.
+Packages are generated in `release/`: AppImage for Linux and ZIP for Apple Silicon Macs.
 
-## Stato del progetto
+## Project status
 
-Scene è sperimentale e in sviluppo. Le funzioni disponibili sono intenzionalmente poche e orientate al flusso di lavoro interno di ABACO. Segnalazioni, adattamenti e integrazioni sono benvenuti, purché mantengano l’esperienza semplice e comprensibile anche per chi non lavora abitualmente con software 3D.
+Scene is experimental and under active development. Its current feature set is intentionally small and focused on ABACO's internal workflow. Bug reports, adaptations, and integrations are welcome, provided they preserve an experience that remains simple and understandable for people who do not regularly work with 3D software.
