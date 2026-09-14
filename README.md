@@ -8,6 +8,10 @@
 
 Permette di comporre una sequenza di scene, disporre elementi 3D e livelli 2D, impostare camera e movimenti, aggiungere audio e scrivere indicazioni precise. Il risultato è un progetto strutturato e modificabile, esportabile come file Blender e utilizzabile come base di lavoro per un agente AI.
 
+<p align="center">
+  <img src="docs/assets/scene-interface.png" alt="Interfaccia di Scene" width="1200">
+</p>
+
 ## Perché nasce
 
 Mi sono reso conto che i modelli AI più recenti sono diventati molto efficaci nel creare, modificare e organizzare contenuti 3D. Allo stesso tempo, ABACO aveva bisogno di produrre con maggiore continuità contenuti divulgativi animati per i propri canali social.
