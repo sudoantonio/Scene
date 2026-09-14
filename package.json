@@ -3,6 +3,7 @@
   "version": "0.57.39",
   "private": true,
   "author": "Abaco Animation",
+  "license": "MIT",
   "desktopName": "Scene",
   "description": "Editor desktop locale per bozze 3D assistite da GPT-6 Astra e Blender",
   "main": "dist-electron/main.cjs",
