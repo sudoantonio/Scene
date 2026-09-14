@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/scene-logo.png" alt="Scene" width="720">
+</p>
+
 # Scene
 
 **Scene è un editor desktop locale e semplificato per creare storyboard e animatic 3D senza dover conoscere Blender.**
