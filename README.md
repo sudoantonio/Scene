@@ -4,9 +4,9 @@
 
 # Scene
 
-**Scene is a simple, local desktop editor for creating 3D storyboards and animatics without having to learn Blender.**
+**Scene is a simple, local desktop editor designed to save time when creating 3D storyboards and animatics.**
 
-It lets you build a sequence of scenes, arrange 3D objects and 2D layers, define camera positions and movements, add audio, and write precise production notes. The result is a structured, editable project that can be exported to Blender and used as input for an AI coding agent.
+Blender is extremely powerful, but its broad feature set also introduces a steep learning curve and a great deal of setup for people who only need to plan a video. Scene removes that overhead and keeps the workflow focused on the essentials: composing shots, arranging 3D objects and 2D layers, defining camera movement and timing, adding audio, and writing precise production notes. The result is a structured, editable project that can be exported to Blender and used as input for an AI coding agent.
 
 <p align="center">
   <img src="docs/assets/scene-interface.png" alt="Scene interface" width="1200">
@@ -16,7 +16,9 @@ It lets you build a sequence of scenes, arrange 3D objects and 2D layers, define
 
 Recent AI models have become very capable at creating, modifying, and organizing 3D content. At the same time, ABACO needed a more consistent way to produce educational animated content for its social channels.
 
-These two needs led to **Scene**: a tool designed to turn an idea into a 3D storyboard without requiring specialist skills. It is not intended to replace Blender or professional animation software. Instead, it makes the essential work of preparing scenes, shots, timing, and production notes more accessible.
+These two needs led to **Scene**: a tool designed to turn an idea into a 3D storyboard without requiring specialist skills. Its primary goal is to make storyboarding faster and less tiring. Blender can do far more, but learning and navigating features that are not needed during previsualization can make a simple storyboard unnecessarily slow to produce. Scene reduces the number of tools and decisions involved, so users can concentrate on the sequence, composition, timing, and instructions.
+
+Scene is not intended to replace Blender or professional animation software. It provides a focused starting point for the early planning stage, while keeping the project ready for more advanced work later.
 
 A project created with Scene can be opened directly in Blender or passed to a preferred coding agent—such as Codex, Claude Code, or Cursor—together with detailed instructions for extending, automating, or refining the 3D scene.
 
