@@ -11,7 +11,7 @@ export const TransformSchema = z.object({
 export type Transform = z.infer<typeof TransformSchema>;
 
 export const ObjectKindSchema = z.enum([
-  'cube', 'sphere', 'cylinder', 'cone', 'plane', 'text', 'blend_asset', 'camera', 'area_light', 'point_light', 'sun_light',
+  'cube', 'sphere', 'cylinder', 'cone', 'plane', 'text', 'audio', 'blend_asset', 'camera', 'area_light', 'point_light', 'sun_light',
 ]);
 export type ObjectKind = z.infer<typeof ObjectKindSchema>;
 
@@ -23,15 +23,31 @@ export type AnimProperty = z.infer<typeof AnimPropertySchema>;
 export const KeyframeValueSchema = z.union([Vec3Schema, z.boolean(), z.string(), z.number()]);
 export type KeyframeValue = z.infer<typeof KeyframeValueSchema>;
 
+export function isValidAnimationValue(property: string, value: unknown): value is KeyframeValue {
+  if (property === 'position' || property === 'rotation' || property === 'scale') {
+    return Array.isArray(value) && value.length === 3
+      && value.every((component) => typeof component === 'number' && Number.isFinite(component)
+        && (property !== 'scale' || component > 0));
+  }
+  if (property === 'visibility') return typeof value === 'boolean';
+  if (property === 'text') return typeof value === 'string';
+  return property === 'lens' && typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 export const KeyframeSchema = z.object({
   id: z.string().uuid(),
   frame: z.number().int().positive(),
   property: AnimPropertySchema,
   value: KeyframeValueSchema,
   interpolation: InterpolationSchema,
+  holdFrames: z.number().int().nonnegative().optional(),
   source: z.enum(['user', 'ai']).default('user'),
   purpose: z.enum(['snapshot', 'motion']).optional(),
   commentIds: z.array(z.string().uuid()).default([]),
+}).superRefine((key, ctx) => {
+  if (!isValidAnimationValue(key.property, key.value)) {
+    ctx.addIssue({ code: 'custom', path: ['value'], message: `Valore non valido per ${key.property}` });
+  }
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 
@@ -52,6 +68,17 @@ export const SceneObjectSchema = z.object({
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }),
+  audio: z.object({
+    duration: z.number().finite().nonnegative().default(0),
+    volume: z.number().finite().min(0).max(1).default(1),
+    muted: z.boolean().default(false),
+    loop: z.boolean().default(false),
+    trimStart: z.number().finite().nonnegative().default(0),
+    trimEnd: z.number().finite().nonnegative().default(0),
+    fadeIn: z.number().finite().nonnegative().default(0),
+    fadeOut: z.number().finite().nonnegative().default(0),
+    waveform: z.array(z.number().finite().min(0).max(1)).max(256).default([]),
+  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] }),
   screenSpace: z.boolean().default(false),
   sceneIds: z.array(z.string().uuid()).default([]),
   screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
@@ -184,7 +211,7 @@ export const emptyTransform = (): Transform => ({ position: [0, 0, 0], rotation:
 
 export function createSceneObject(kind: ObjectKind, index: number): SceneObject {
   const labels: Record<ObjectKind, string> = {
-    cube: 'Cubo', sphere: 'Sfera', cylinder: 'Cilindro', cone: 'Cono', plane: 'Piano', text: 'Testo', blend_asset: 'Asset Blender',
+    cube: 'Cubo', sphere: 'Sfera', cylinder: 'Cilindro', cone: 'Cono', plane: 'Piano', text: 'Testo', audio: 'Audio', blend_asset: 'Asset Blender',
     camera: 'Camera', area_light: 'Luce area', point_light: 'Luce punto', sun_light: 'Sole',
   };
   const transform = emptyTransform();
@@ -197,13 +224,15 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   }
   if (kind.includes('light')) transform.position = [4, -4, 6];
   const professionalColors: Record<ObjectKind, string> = {
-    cube: '#7e8c94', sphere: '#899084', cylinder: '#887f76', cone: '#827b74', plane: '#717b78', text: '#718292',
+    cube: '#7e8c94', sphere: '#899084', cylinder: '#887f76', cone: '#827b74', plane: '#717b78', text: '#718292', audio: '#d1a12a',
     blend_asset: '#777984', camera: '#d1a12a', area_light: '#f2dfac', point_light: '#f2dfac', sun_light: '#f2dfac',
   };
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
-    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }, screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
+    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 },
+    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] },
+    screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }
 

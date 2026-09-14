@@ -9,6 +9,8 @@ import { validatePlan } from '../src/domain/animation';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
 import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
+import { hydratePortableProject, projectForStorage } from './project-storage';
+import { exportScreenLayers } from './export-screen-layers';
 
 type Settings = { apiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
 const defaults: Settings = { reasoning: 'medium' };
@@ -16,7 +18,7 @@ let mainWindow: BrowserWindow | null = null;
 let previewWindow: BrowserWindow | null = null;
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 let latestPreviewState: PreviewState | null = null;
-type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings' | 'toggle-theme';
+type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings';
 
 function sendMenuCommand(command: MenuCommand) {
   mainWindow?.webContents.send('menu:command', command);
@@ -50,8 +52,6 @@ function installApplicationMenu() {
     { label: 'Vista', submenu: [
       { label: 'Apri finestra inquadratura', accelerator: 'CmdOrCtrl+Shift+P', click: () => openPreviewWindow() },
       { type: 'separator' },
-      { label: 'Cambia tema chiaro/scuro', click: () => sendMenuCommand('toggle-theme') },
-      { type: 'separator' },
       { role: 'togglefullscreen', label: 'Schermo intero' },
     ] },
     { label: 'Finestra', submenu: [
@@ -59,7 +59,7 @@ function installApplicationMenu() {
       { role: 'close', label: 'Chiudi' },
     ] },
     { label: 'Aiuto', submenu: [
-      { label: 'Informazioni su Abaco Animatic', click: () => dialog.showMessageBox(mainWindow!, { type: 'info', title: 'Abaco Animatic', message: 'Abaco Animatic', detail: `Versione ${app.getVersion()}\nEditor locale per animatic 3D.` }) },
+      { label: 'Informazioni su Scene', click: () => dialog.showMessageBox(mainWindow!, { type: 'info', title: 'Scene', message: 'Scene', detail: `Versione ${app.getVersion()}\nEditor locale per animatic 3D.` }) },
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -74,7 +74,7 @@ async function openPreviewWindow() {
   }
   previewWindow = new BrowserWindow({
     width: 1100, height: 700, minWidth: 480, minHeight: 320,
-    backgroundColor: '#090909', title: 'Inquadratura — Abaco Animatic',
+    backgroundColor: '#090909', title: 'Inquadratura — Scene',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
@@ -106,7 +106,7 @@ async function writeSettings(settings: Settings) {
 }
 
 async function atomicWrite(filePath: string, contents: string) {
-  const temp = `${filePath}.${process.pid}.tmp`;
+  const temp = `${filePath}.${crypto.randomUUID()}.tmp`;
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(temp, contents, 'utf8');
   await fs.rename(temp, filePath);
@@ -115,10 +115,6 @@ async function atomicWrite(filePath: string, contents: string) {
 const portablePath = (value: string) => value.split(path.sep).join('/');
 const safeAssetName = (value: string) => value.normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'asset';
 const isDataUrl = (value: string) => value.startsWith('data:');
-const isInside = (root: string, value: string) => {
-  const relative = path.relative(root, value);
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
-};
 async function fileExists(filePath: string) {
   try { await fs.access(filePath); return true; } catch { return false; }
 }
@@ -130,6 +126,17 @@ async function imageFileDataUrl(filePath: string) {
   const scale = Math.min(1, maxSide / Math.max(size.width, size.height));
   const preview = scale < 1 ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), quality: 'good' }) : image;
   return preview.toDataURL();
+}
+const mediaMimeTypes: Record<string, string> = {
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+};
+async function mediaFileDataUrl(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+  const mime = mediaMimeTypes[extension];
+  if (!mime) throw new Error(`Formato audio non supportato: ${extension || 'sconosciuto'}`);
+  const buffer = await fs.readFile(filePath);
+  return `data:${mime};base64,${buffer.toString('base64')}`;
 }
 function dataUrlBuffer(value: string) {
   const match = value.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
@@ -156,10 +163,12 @@ async function makePortableProject(project: AbacoProject, root: string) {
     return relative;
   };
   for (const object of portable.objects) {
-    if (object.kind === 'blend_asset') {
+    if (object.kind === 'audio' && object.asset.sourcePath) {
+      object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'audio', object.id);
+    } else if (object.kind === 'blend_asset') {
       if (object.asset.sourcePath) object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'modelli', object.id);
       if (object.asset.proxyPath) object.asset.proxyPath = await copyAsset(object.asset.proxyPath, 'anteprime', `${object.id}-preview`);
-    } else if (object.screenSpace && (object.asset.sourcePath || object.asset.proxyPath)) {
+    } else if (object.screenSpace && object.kind !== 'text' && (object.asset.sourcePath || object.asset.proxyPath)) {
       const relative = await copyAsset(object.asset.sourcePath, 'immagini', object.id, object.asset.proxyPath);
       object.asset.sourcePath = relative;
       object.asset.proxyPath = relative;
@@ -170,34 +179,6 @@ async function makePortableProject(project: AbacoProject, root: string) {
   }
   return ProjectSchema.parse(portable);
 }
-function projectForStorage(project: AbacoProject, filePath: string) {
-  const stored = structuredClone(project);
-  const root = path.dirname(filePath);
-  const relativeIfBundled = (value: string) => value && !isDataUrl(value) && path.isAbsolute(value) && isInside(root, value) ? portablePath(path.relative(root, value)) : value;
-  for (const object of stored.objects) {
-    object.asset.sourcePath = relativeIfBundled(object.asset.sourcePath);
-    if (object.screenSpace && object.asset.sourcePath && !isDataUrl(object.asset.sourcePath)) object.asset.proxyPath = object.asset.sourcePath;
-    else object.asset.proxyPath = relativeIfBundled(object.asset.proxyPath);
-  }
-  for (const scene of stored.cameraCuts) scene.background.path = relativeIfBundled(scene.background.path);
-  return stored;
-}
-async function hydratePortableProject(project: AbacoProject, filePath: string) {
-  const hydrated = structuredClone(project);
-  const root = path.dirname(filePath);
-  const resolveAsset = (value: string) => value && !isDataUrl(value) && !path.isAbsolute(value) ? path.resolve(root, value) : value;
-  for (const object of hydrated.objects) {
-    object.asset.sourcePath = resolveAsset(object.asset.sourcePath);
-    object.asset.proxyPath = resolveAsset(object.asset.proxyPath);
-    if (object.screenSpace && !isDataUrl(object.asset.proxyPath)) {
-      const imagePath = object.asset.sourcePath || object.asset.proxyPath;
-      if (imagePath) object.asset.proxyPath = await imageFileDataUrl(imagePath);
-    }
-  }
-  for (const scene of hydrated.cameraCuts) scene.background.path = resolveAsset(scene.background.path);
-  return ProjectSchema.parse(hydrated);
-}
-
 function compactProject(project: AbacoProject) {
   const round = (value: unknown): unknown => {
     if (typeof value === 'number') return Number(value.toFixed(4));
@@ -297,7 +278,7 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1500, height: 960, minWidth: 640, minHeight: 480, backgroundColor: '#101319',
-    title: 'Abaco Animatic',
+    title: 'Scene',
     titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
     autoHideMenuBar: false,
@@ -323,9 +304,11 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('activate', () => { if (!mainWindow) createWindow(); });
 
 ipcMain.on('preview:project', (_event, payload: PreviewState) => {
-  const project = ProjectSchema.parse(payload.project);
+  const parsed = ProjectSchema.safeParse(payload?.project);
+  if (!parsed.success) return;
+  const project = parsed.data;
   const frame = Math.max(project.settings.frameStart, Math.min(project.settings.frameEnd, Math.round(Number(payload.frame) || project.settings.frameStart)));
-  latestPreviewState = { project, frame, theme: payload.theme === 'light' ? 'light' : 'dark' };
+  latestPreviewState = { project, frame, theme: 'dark' };
   if (previewWindow && !previewWindow.isDestroyed()) previewWindow.webContents.send('preview:state', latestPreviewState);
 });
 ipcMain.on('preview:frame', (_event, incomingFrame: number) => {
@@ -338,7 +321,7 @@ ipcMain.on('preview:frame', (_event, incomingFrame: number) => {
 ipcMain.handle('preview:get', () => latestPreviewState);
 
 ipcMain.handle('project:open', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile', 'openDirectory'], title: 'Apri progetto o cartella Abaco', filters: [{ name: 'Abaco Animatic', extensions: ['json'] }] });
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile', 'openDirectory'], title: 'Apri progetto o cartella Scene', filters: [{ name: 'Scene', extensions: ['json'] }] });
   if (result.canceled || !result.filePaths[0]) return null;
   let filePath = result.filePaths[0];
   if ((await fs.stat(filePath)).isDirectory()) {
@@ -350,7 +333,7 @@ ipcMain.handle('project:open', async () => {
     filePath = path.join(filePath, projectFile);
   }
   const stored = ProjectSchema.parse(JSON.parse(await fs.readFile(filePath, 'utf8')));
-  const project = await hydratePortableProject(stored, filePath);
+  const project = await hydratePortableProject(stored, filePath, imageFileDataUrl);
   return { project, path: filePath };
 });
 
@@ -358,7 +341,7 @@ ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; 
   const project = ProjectSchema.parse({ ...payload.project, updatedAt: new Date().toISOString() });
   let filePath = payload.path;
   if (!filePath) {
-    const result = await dialog.showSaveDialog(mainWindow!, { defaultPath: 'scene.abaco.json', filters: [{ name: 'Abaco Animatic', extensions: ['json'] }] });
+    const result = await dialog.showSaveDialog(mainWindow!, { defaultPath: 'scene.abaco.json', filters: [{ name: 'Scene', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
     filePath = result.filePath;
   }
@@ -391,9 +374,20 @@ ipcMain.handle('background:choose', async (_event, kind: 'image' | 'model') => {
 
 ipcMain.handle('asset:load', async (_event, filePath: string) => {
   const extension = path.extname(filePath).toLowerCase();
+  if (extension in mediaMimeTypes) return mediaFileDataUrl(filePath);
   if (extension !== '.glb') return imageFileDataUrl(filePath);
   const buffer = await fs.readFile(filePath);
   return `data:model/gltf-binary;base64,${buffer.toString('base64')}`;
+});
+
+ipcMain.handle('audio:choose', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openFile'], title: 'Aggiungi audio',
+    filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const sourcePath = path.resolve(result.filePaths[0]);
+  return { sourcePath, name: path.basename(sourcePath, path.extname(sourcePath)) };
 });
 
 ipcMain.handle('blendAsset:choose', async () => {
@@ -462,15 +456,19 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
     const planPath = path.join(tempDir, 'plan.json');
     const scriptPath = path.join(tempDir, 'build_scene.py');
     const blendPath = path.join(tempDir, `scene_${version}.blend`);
+    const audioPath = path.join(tempDir, `audio_${version}.wav`);
     await fs.writeFile(projectBundlePath, JSON.stringify(portableProject, null, 2));
-    await fs.writeFile(inputPath, JSON.stringify(portableProject, null, 2));
+    await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project) }, null, 2));
     await fs.writeFile(planPath, JSON.stringify(plan, null, 2));
     await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);
     const invocation = await blenderCommand([tempDir]);
-    const output = await runProcess(invocation.command, [...invocation.prefix, '--background', '--python', scriptPath, '--', inputPath, planPath, blendPath], tempDir);
+    const output = await runProcess(invocation.command, [...invocation.prefix, '--background', '--python-exit-code', '1', '--python', scriptPath, '--', inputPath, planPath, blendPath, audioPath], tempDir);
+    if (!output.includes('ABACO_ANIMATIC_COMPLETE') || !(await fs.stat(blendPath)).size) {
+      throw new Error('Blender non ha generato un file completo.');
+    }
     await fs.writeFile(path.join(tempDir, 'blender.log'), output);
     await fs.rename(tempDir, finalDir);
-    return { version, directory: finalDir, blendPath: path.join(finalDir, `scene_${version}.blend`) };
+    return { version, directory: finalDir, blendPath: path.join(finalDir, `scene_${version}.blend`), audioPath: project.objects.some((object) => object.kind === 'audio') ? path.join(finalDir, `audio_${version}.wav`) : undefined };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: true });
     throw error;

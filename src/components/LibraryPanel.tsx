@@ -8,7 +8,7 @@ const thumbnailCacheKey = (projectId: string, sceneId: string) => `abaco-thumb:$
 
 function ScenePreview({ frame, number, thumbnail, aspect }: { frame: number; number: number; thumbnail?: string; aspect: number }) {
   const objects = useEditor((state) => state.project.objects);
-  const visible = objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).slice(0, 9);
+  const visible = objects.filter((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).slice(0, 9);
   return <div className={`slide-preview ${thumbnail ? 'has-camera-thumbnail' : ''}`} style={{ aspectRatio: String(aspect) }}>{thumbnail && <img className="slide-camera-thumbnail" src={thumbnail} alt="" draggable={false} />}{!thumbnail && visible.map((object) => {
     const transform = evaluateTransform(object, frame);
     const size = Math.max(8, Math.min(32, ((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 13));

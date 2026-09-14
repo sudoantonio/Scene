@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageSquare, MessageSquarePlus, Minimize2, MoveRight, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
+import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageCircle, Minimize2, MoveRight, Music2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
+import { objectPresenceRange } from '../domain/presence';
 import type { SceneComment, SceneObject, TimelineCommentScope, Transform } from '../domain/schema';
 import { useEditor } from '../store/editor';
 
@@ -14,19 +15,10 @@ type DeleteTarget =
   | { kind: 'motion'; objectId: string; sceneId: string }
   | { kind: 'keyframe'; objectId: string; keyframeId: string };
 let copiedTimelineObjectIds: string[] = [];
-const objectPresenceRange = (object: SceneObject, sceneStart: number, sceneEnd: number): [number, number] | undefined => {
-  let first = -1, last = -1;
-  for (let candidate = sceneStart; candidate < sceneEnd; candidate += 1) {
-    if (evaluateProperty(object, 'visibility', candidate)) {
-      if (first < 0) first = candidate;
-      last = candidate;
-    } else if (first >= 0) break;
-  }
-  return first < 0 ? undefined : [first, last + 1];
-};
 function ElementThumbnail({ object, compact = false }: { object: SceneObject; compact?: boolean }) {
-  const size = compact ? 11 : 12;
+  const size = compact ? 12 : 14;
   const icon = object.kind === 'text' ? <Type size={size} />
+    : object.kind === 'audio' ? <Music2 size={size} />
     : object.screenSpace ? <Image size={size} />
       : object.kind === 'blend_asset' || object.kind === 'cube' ? <Box size={size} />
         : object.kind === 'sphere' ? <Circle size={size} />
@@ -36,6 +28,10 @@ function ElementThumbnail({ object, compact = false }: { object: SceneObject; co
                 : object.kind === 'camera' ? <Video size={size} />
                   : <Lightbulb size={size} />;
   return <span className={`element-thumbnail ${object.kind} ${compact ? 'compact' : ''}`} style={{ '--element-color': object.color } as React.CSSProperties} aria-label={object.kind}>{icon}</span>;
+}
+function AudioWaveform({ values }: { values: number[] }) {
+  const samples = values.length ? values : Array.from({ length: 64 }, (_, index) => .18 + Math.abs(Math.sin(index * 1.73)) * .35);
+  return <svg className="audio-waveform" viewBox={`0 0 ${samples.length} 1`} preserveAspectRatio="none" aria-hidden="true">{samples.map((value, index) => <rect key={index} x={index + .16} y={(1 - value) / 2} width=".68" height={value} rx=".12" />)}</svg>;
 }
 export default function Timeline({ collapsed, viewportFullscreen, onToggleCollapse, onToggleViewportFullscreen }: { collapsed?: boolean; viewportFullscreen?: boolean; onToggleCollapse?(): void; onToggleViewportFullscreen?(): void }) {
   const project = useEditor((state) => state.project);
@@ -66,6 +62,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const deleteObjectFromScene = useEditor((state) => state.deleteObjectFromScene);
   const deleteMotionFromScene = useEditor((state) => state.deleteMotionFromScene);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
+  const addShot = useEditor((state) => state.addShot);
   const [transitionDraft, setTransitionDraft] = useState<{ fromId: string; toId: string; label: string; text: string }>();
   const [selectedTrack, setSelectedTrack] = useState<TrackSelection>();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
@@ -80,16 +77,26 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
   const start = project.settings.frameStart, end = project.settings.frameEnd;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-  const selectedSubject = project.objects.find((object) => object.id === selectedId && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
-  const framingSubject = selectedSubject ?? project.objects.find((object) => object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
+  const selectedSubject = project.objects.find((object) => object.id === selectedId && object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
+  const framingSubject = selectedSubject ?? project.objects.find((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
   const timelineObjects = project.objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light'));
   const time = (frame - start) / project.settings.fps;
   const durationSeconds = Math.max(1, (end - start + 1) / project.settings.fps);
+  const rulerSeconds = Array.from({ length: Math.floor(durationSeconds) + 1 }, (_, second) => second);
+  const formatRulerTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const timecode = `${String(Math.floor(time / 60)).padStart(2, '0')}:${String(Math.floor(time % 60)).padStart(2, '0')}:${String(frame % project.settings.fps).padStart(2, '0')}`;
   const left = (value: number) => `${((value - start) / Math.max(1, end - start)) * 100}%`;
   const seek = (event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setFrame(start + ((event.clientX - rect.left) / rect.width) * (end - start));
+  };
+  const seekFromEmptyTimeline = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    const track = event.currentTarget.querySelector('.scene-track') as HTMLElement | null;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right) return;
+    setFrame(start + ((event.clientX - rect.left) / Math.max(1, rect.width)) * (end - start));
   };
   const activeSceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? end + 1));
   const activeScene = scenes[activeSceneIndex] ?? scenes[0];
@@ -114,6 +121,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     });
     select(objectId);
     selectMotion(undefined);
+    if (project.objects.find((object) => object.id === objectId)?.kind === 'audio') window.dispatchEvent(new Event('abaco:edit-audio'));
   };
   const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;
   const subjectTransform = framingSubject ? evaluateTransform(framingSubject, frame) : undefined;
@@ -175,8 +183,8 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     const update = (clientX: number) => {
       const delta = Math.round((clientX - startX) * framesPerPixel);
       preview = edge === 'start'
-        ? { ...preview, start: Math.max(sceneStart, Math.min(range[1] - 1, range[0] + delta)), end: range[1] }
-        : { ...preview, start: range[0], end: Math.max(range[0] + 1, Math.min(sceneEnd, range[1] + delta)) };
+        ? { ...preview, start: Math.max(start, Math.min(range[1] - 1, range[0] + delta)), end: range[1] }
+        : { ...preview, start: range[0], end: Math.max(range[0] + 1, Math.min(end + 1, range[1] + delta)) };
       setPresencePreview(preview);
     };
     const move = (pointer: PointerEvent) => update(pointer.clientX);
@@ -204,14 +212,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     setTransitionDraft(undefined);
     setCommentDraft({ ...selection, text: findTrackComment(selection)?.text ?? '' });
   };
-  const currentCommentTarget = () => {
-    if (selectedTrack) return selectedTrack;
-    if (!activeScene) return undefined;
-    const selectedObject = project.objects.find((object) => object.id === selectedId && object.kind !== 'camera' && !object.kind.includes('light'));
-    return selectedObject
-      ? { scope: 'object' as const, sceneId: activeScene.id, objectId: selectedObject.id, label: `${selectedObject.name} · ${activeScene.name ?? 'Scena'}` }
-      : { scope: 'scene' as const, sceneId: activeScene.id, label: activeScene.name ?? 'Scena' };
-  };
   const saveComment = () => {
     if (!commentDraft || !commentDraft.text.trim()) return;
     setTimelineComment(commentDraft.scope, commentDraft.sceneId, commentDraft.text, commentDraft.objectId);
@@ -225,7 +225,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const noteBadge = (selection: TrackSelection, className = '') => {
     const note = findTrackComment(selection);
     if (!note) return null;
-    return <span className={`timeline-comment-badge ${className}`} title={note.text} aria-label={`Modifica commento: ${note.text}`} role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); openComment(selection); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openComment(selection); } }}><MessageSquare size={11} /></span>;
+    return <span className={`timeline-comment-badge ${className}`} title={note.text} aria-label={`Modifica commento: ${note.text}`} role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); openComment(selection); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openComment(selection); } }}><MessageCircle size={11} /></span>;
   };
   const zoomTimelineFromWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (!event.ctrlKey && !event.metaKey) return;
@@ -252,7 +252,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       marker.style.translate = `${delta}px 0`;
     };
     const finish = (pointer: PointerEvent) => {
-      const deltaFrames = Math.round(((pointer.clientX - startX) / pixels) * (end - start));
+      const deltaFrames = Math.round(((pointer.clientX - startX) / pixels) * (end - start + 1));
       const nextFrame = Math.max(sceneFrame, Math.min(sceneEnd - 1, keyframeFrame + deltaFrames));
       marker.style.translate = '';
       window.removeEventListener('pointermove', move);
@@ -318,7 +318,12 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         setDeleteTarget({ kind: 'motion', objectId: motionObject.id, sceneId: scene.id });
         setCommentDraft(undefined);
         setTransitionDraft(undefined);
-      }}><span className="motion-resize-handle start" role="separator" aria-label="Ridimensiona inizio movimento" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} /><MoveRight className="timeline-motion-icon" size={13} /><span>Movimento</span><small>{realPoints.length} punti</small><span className="motion-key-ticks">{realPoints.map((key) => <span key={key.id} role="button" tabIndex={0} title={`Vai al frame ${key.frame}`} aria-label={`Punto movimento al frame ${key.frame}`} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span><span className="motion-resize-handle end" role="separator" aria-label="Ridimensiona fine movimento" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} /></button>];
+      }}>
+        <span className="motion-resize-handle start" role="separator" aria-label="Ridimensiona inizio movimento" title="Trascina per ridimensionare l’inizio" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} />
+        <span className="motion-clip-caption"><MoveRight className="timeline-motion-icon" size={11} /><span>Movimento</span><small>{realPoints.length} punti</small></span>
+        <span className="motion-key-ticks">{realPoints.map((key, index) => <span key={key.id} role="button" tabIndex={0} title={`Vai al frame ${key.frame}`} aria-label={`Punto movimento al frame ${key.frame}`} data-edge={index === 0 ? 'start' : index === realPoints.length - 1 ? 'end' : undefined} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span>
+        <span className="motion-resize-handle end" role="separator" aria-label="Ridimensiona fine movimento" title="Trascina per ridimensionare la fine" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} />
+      </button>];
     });
     if (!clips.length) return null;
     return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy">{camera ? <Video size={13} /> : <MoveRight size={13} />}Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
@@ -330,7 +335,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       event.stopPropagation();
       setCommentDraft(undefined);
       setTransitionDraft({ fromId: from.id, toId: scene.id, label: `${from.name ?? `Scena ${index + 1}`} → ${scene.name ?? `Scena ${index + 2}`}`, text: note?.text ?? '' });
-    }}>{note ? <MessageSquare size={10} /> : <Plus size={11} />}</button>;
+    }}>{note ? <MessageCircle size={11} /> : <Plus size={12} />}</button>;
   });
   useEffect(() => {
     const selectScene = (event: Event) => {
@@ -419,7 +424,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
         <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
         <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
-        <button className="timeline-comment-button" disabled={!currentCommentTarget()} title="Aggiungi un commento all’elemento selezionato" onClick={() => { const target = currentCommentTarget(); if (target) openComment(target); }}><MessageSquarePlus size={14} /><span>Commento</span></button>
         <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
       </div>
       <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={viewportFullscreen ? 'Ripristina pannelli' : 'Inquadratura a schermo intero'} onClick={onToggleViewportFullscreen}>{viewportFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
@@ -434,29 +438,28 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       <textarea autoFocus placeholder="Descrivi la transizione" value={transitionDraft.text} onChange={(event) => setTransitionDraft({ ...transitionDraft, text: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveTransition(); if (event.key === 'Escape') setTransitionDraft(undefined); }} />
       <div className="comment-popover-actions"><button className="subtle" onClick={() => setTransitionDraft(undefined)}>Annulla</button><button className="primary" disabled={!transitionDraft.text.trim()} onClick={saveTransition}><Check size={14} /> Salva</button></div>
     </div></div>}
-    <div className="timeline-scroll" onWheelCapture={zoomTimelineFromWheel} style={{ '--timeline-content-width': `${Math.round(durationSeconds * timelineZoom)}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
-      <div className="ruler-label">Elementi</div>
-      <div className="ruler elements-ruler" onClick={seek}><span style={{ left: left(start) }}>{start}</span><span style={{ left: left(Math.round((start + end) / 2)) }}>{Math.round((start + end) / 2)}</span><span style={{ left: left(end) }}>{end}</span><i style={{ left: left(frame) }} /></div>
+    <div className="timeline-scroll" onClick={seekFromEmptyTimeline} onWheelCapture={zoomTimelineFromWheel} style={{ '--timeline-content-width': `${Math.round(durationSeconds * timelineZoom)}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
+      <div className="ruler-label">Tempo</div>
+      <div className="ruler timeline-ruler" onClick={seek}>{rulerSeconds.map((second) => <span key={second} style={{ left: left(start + second * project.settings.fps) }}>{formatRulerTime(second)}</span>)}<i style={{ left: left(frame) }} /></div>
       <div className="track-label scene-label locked-label"><b><Video size={12} /> Scene</b><LockKeyhole size={12} /></div>
       <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
         const nextFrame = scenes[index + 1]?.frame ?? end + 1;
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
-        const insetLeft = index > 0 ? 4 : 0, insetRight = index < scenes.length - 1 ? 4 : 1;
         const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scena ${index + 1}` };
-        return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: `calc(${left(scene.frame)} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }}>
+        return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }}>
           <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(scene.frame); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
-            <span className="clip-title">{scene.name ?? `Scena ${index + 1}`}{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
+            <span className="clip-title"><span className="clip-title-text">{scene.name ?? `Scena ${index + 1}`}</span>{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
           </button>
           <span className="clip-resize-handle" onPointerDown={(event) => beginResize(index, event)} />
         </div>;
-      })}{transitionMarkers}<i style={{ left: left(frame) }} /></div>
+      })}{transitionMarkers}<button className="timeline-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={16} /></button><i style={{ left: left(frame) }} /></div>
       {renderMotionTrack(undefined, true)}
-      {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedTimelineObjectIds.has(object.id) || selectedId === object.id ? 'active' : ''}`}>
+      {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; const audioRange = object.kind === 'audio' ? objectPresenceRange(object, start, end + 1) : undefined; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedTimelineObjectIds.has(object.id) || selectedId === object.id ? 'active' : ''}`}>
         <div className="track-label timeline-object-label" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/abaco-object', object.id); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData('text/abaco-object'); if (sourceId) reorderObjects(sourceId, object.id); }}>
           <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={(event) => { selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Nascondi' : 'Mostra'} aria-label={objectVisible ? `Nascondi ${displayName}` : `Mostra ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Elimina" aria-label={`Elimina ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
         </div>
         <div className="track presence-track" onClick={seek}>
-          {scenes.map((scene, index) => {
+          {object.kind === 'audio' ? audioRange && <button className={`presence-segment audio-layer ${selectedId === object.id ? 'selected-block' : ''}`} style={{ left: left(audioRange[0]), width: `${((audioRange[1] - audioRange[0]) / Math.max(1, end - start + 1)) * 100}%` }} title={`${displayName} · ${(object.audio.duration).toFixed(1)} s`} onClick={(event) => { event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); setTransitionDraft(undefined); setCommentDraft(undefined); }}><AudioWaveform values={object.audio.waveform} /><span className="audio-clip-label"><Music2 size={11} />{displayName}</span></button> : scenes.map((scene, index) => {
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`}` };
@@ -466,15 +469,13 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
             const range = preview ? [preview.start, preview.end] as const : storedRange;
             if (!range) return null;
             const width = ((range[1] - range[0]) / Math.max(1, end - start + 1)) * 100;
-            const insetLeft = range[0] === scene.frame && index > 0 ? 4 : 0;
-            const insetRight = range[1] === clipEnd && index < scenes.length - 1 ? 4 : 1;
-            return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${preview ? 'resizing' : ''} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: `calc(${left(range[0])} + ${insetLeft}px)`, width: `calc(${width}% - ${insetLeft + insetRight}px)` }} title={`${displayName} · frame ${range[0]}–${range[1] - 1}`} onClick={(event) => {
+            return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${preview ? 'resizing' : ''} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: left(range[0]), width: `${width}%` }} title={`${displayName} · frame ${range[0]}–${range[1] - 1}`} onClick={(event) => {
               event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
             }}><span className="presence-resize-handle start" role="separator" aria-label="Ridimensiona inizio elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Ridimensiona fine elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
           })}
           <i style={{ left: left(frame) }} />
         </div>
-      </div>{renderMotionTrack(object)}</Fragment>})}
+      </div>{object.kind !== 'audio' && renderMotionTrack(object)}</Fragment>})}
     </div>
   </section>;
 }

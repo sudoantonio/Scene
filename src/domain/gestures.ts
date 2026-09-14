@@ -2,12 +2,12 @@ export const TRACKPAD_PAN_SENSITIVITY = 0.08;
 export const TRACKPAD_ROTATE_SENSITIVITY = 0.001;
 export const TRACKPAD_PINCH_SENSITIVITY = 0.0012;
 
-// I delta wheel del trackpad descrivono lo scorrimento, non il gesto fisico.
-// Li invertiamo affinché la scena segua la direzione delle dita.
+// Lo spostamento segue il gesto fisico del trackpad: trascinare a destra o in
+// alto deve portare la visuale nella stessa direzione percepita dall'utente.
 export function trackpadCameraOffset(deltaX: number, deltaY: number) {
   return {
-    horizontal: deltaX * TRACKPAD_PAN_SENSITIVITY,
-    vertical: -deltaY * TRACKPAD_PAN_SENSITIVITY,
+    horizontal: -deltaX * TRACKPAD_PAN_SENSITIVITY,
+    vertical: deltaY * TRACKPAD_PAN_SENSITIVITY,
   };
 }
 

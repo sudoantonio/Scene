@@ -609,7 +609,7 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .camera-hint-close:hover { color: #252622; background: rgba(80,80,76,.1); }
 .live-camera-preview { position: absolute; z-index: 5; right: 12px; bottom: 12px; width: clamp(150px, 24%, 236px); padding: 0; overflow: hidden; color: #eee; background: #171817; border: 1px solid #777973; border-radius: 7px; box-shadow: 0 8px 24px rgba(0,0,0,.28); text-align: left; }
 .live-camera-preview:hover { border-color: #a9aaa5; transform: translateY(-1px); }
-.live-camera-preview-canvas { display: block; width: 100%; aspect-ratio: var(--project-aspect, 16 / 9); background: #202220; pointer-events: none; }
+.live-camera-preview-canvas { position: relative; display: block; width: 100%; aspect-ratio: var(--project-aspect, 16 / 9); overflow: hidden; background: #202220; pointer-events: none; }
 .live-camera-preview-canvas > div, .live-camera-preview-canvas canvas { width: 100% !important; height: 100% !important; display: block; pointer-events: none !important; }
 .live-camera-preview-label { height: 25px; padding: 0 8px; display: flex; align-items: center; gap: 5px; color: #cacbc7; background: #262725; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .viewport-tools { height: 30px; padding: 2px; display: flex; align-items: center; gap: 1px; background: rgba(255,255,255,.9); }
@@ -651,8 +651,8 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .panel-resizer:hover::after { opacity: 1; }
 .panel-resizer.vertical { width: 5px; cursor: ew-resize; }
 .panel-resizer.vertical::after { top: 0; bottom: 0; left: 2px; width: 1px; }
-.panel-resizer.horizontal { height: 5px; cursor: ns-resize; }
-.panel-resizer.horizontal::after { left: 0; right: 0; top: 2px; height: 1px; }
+.panel-resizer.horizontal { height: 10px; cursor: ns-resize; }
+.panel-resizer.horizontal::after { left: 0; right: 0; top: 5px; height: 1px; }
 .left-panel, .inspector { border: 0; }
 
 .camera-mode .canvas-stage { width: auto; height: auto; }
@@ -1640,6 +1640,8 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .screen-space-layer { position: absolute; z-index: 1; width: max-content; max-width: none; cursor: move; touch-action: none; user-select: none; transform-origin: center; pointer-events: auto; }
 .screen-layer-content > span { display: block; padding: 2px 5px; font-size: calc(34px * var(--layer-scale)); font-weight: 650; line-height: 1.08; white-space: pre-wrap; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
 .screen-layer-content > img { width: calc(260px * var(--layer-scale)); min-width: 36px; max-width: none; display: block; object-fit: contain; pointer-events: none; }
+.screen-image-missing { width: calc(260px * var(--layer-scale)); min-width: 36px; aspect-ratio: 16 / 9; display: grid; place-items: center; color: #aaa; background: repeating-linear-gradient(135deg, #292929 0 8px, #333 8px 16px); border: 1px solid rgba(255,255,255,.12); }
+.screen-image-missing svg { width: 16%; min-width: 14px; height: auto; }
 .screen-space-layer.selected { outline: 1px solid #72a7d9; outline-offset: 3px; }
 .screen-resize-handle, .screen-rotate-handle { position: absolute; z-index: 3; width: 9px; height: 9px; padding: 0; background: #f5f5f5; border: 1px solid #477ba7; border-radius: 1px; cursor: nwse-resize; }
 .screen-resize-handle.nw { left: -7px; top: -7px; }.screen-resize-handle.ne { right: -7px; top: -7px; cursor: nesw-resize; }.screen-resize-handle.se { right: -7px; bottom: -7px; }.screen-resize-handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
@@ -1662,8 +1664,40 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .camera-movement-label, .theme-dark .camera-movement-track { color: #b9d5ef; background: #253d54; border-color: #3e617f; }
 .presence-segment.text-layer { color: #ead8f3; background: #664879; border-color: #936bab; }
 .presence-segment.image-layer { color: #d4edf7; background: #35647c; border-color: #5791ad; }
+.presence-segment.audio-layer { color: #f3e5b1; background: #6b5724; border-color: #a98734; }
 .theme-light .presence-segment.text-layer { color: #4f345f; background: #d9c2e5; border-color: #a985bb; }
 .theme-light .presence-segment.image-layer { color: #234d61; background: #badbe8; border-color: #76aabd; }
+.theme-light .presence-segment.audio-layer { color: #51400f; background-color: #dfc56d; border-color: #ad8d2c; }
+
+.audio-panel { display: flex; flex-direction: column; gap: 12px; }
+.audio-panel > section { padding: 14px; background: var(--ui-surface, #202020); border: 1px solid var(--line); border-radius: 10px; }
+.audio-panel .section-heading { margin-bottom: 10px; }
+.audio-panel .section-heading h2 { margin: 0; color: var(--text); font-size: 13px; }
+.sound-list { display: flex; flex-direction: column; gap: 5px; }
+.sound-list > button, .audio-empty-add { width: 100%; min-height: 42px; padding: 7px 9px; display: flex; align-items: center; gap: 9px; color: var(--muted); background: #1b1b1b; border: 1px solid #353535; border-radius: 7px; text-align: left; }
+.sound-list > button.active { color: #f4e7bc; background: #41371f; border-color: #9d7b24; }
+.sound-list > button span { min-width: 0; display: flex; flex: 1; flex-direction: column; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound-list small { color: #8f8f8b; font-size: 9px; }
+.audio-title { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.audio-title input { min-width: 0; flex: 1; padding: 7px 9px; color: var(--text); background: #292929; border: 1px solid #3b3b3b; border-radius: 6px; }
+.audio-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; color: var(--muted); font-size: 11px; }
+.audio-range > span { display: inline-flex; align-items: center; gap: 5px; }
+.audio-range input { grid-column: 1 / -1; width: 100%; }
+.audio-switches { margin: 12px 0; display: flex; gap: 14px; }
+.audio-switches label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
+.audio-number-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.audio-number-grid label { position: relative; display: grid; grid-template-columns: 1fr 16px; gap: 2px; color: var(--muted); font-size: 9px; }
+.audio-number-grid label span { grid-column: 1 / -1; }
+.audio-number-grid input { min-width: 0; padding: 6px; color: var(--text); background: #292929; border: 1px solid #3b3b3b; border-radius: 5px; }
+.audio-number-grid small { align-self: center; }
+.sound-resources { display: flex; flex-direction: column; gap: 6px; }
+.sound-resources a { padding: 8px; display: flex; align-items: center; justify-content: space-between; color: var(--text); background: #1b1b1b; border: 1px solid #353535; border-radius: 6px; text-decoration: none; }
+.sound-resources a span { display: flex; flex-direction: column; font-size: 10px; }
+.sound-resources a small { color: var(--muted); font-size: 8px; }
+.audio-controls-simple { margin: 0; }
+.audio-waveform { position: absolute; z-index: 0; inset: 4px 7px; width: calc(100% - 14px); height: calc(100% - 8px); overflow: visible; opacity: .62; }
+.audio-waveform rect { fill: #f0d36f; }
+.audio-clip-label { position: relative; z-index: 1; max-width: 55%; padding: 2px 5px; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; color: #fff4cb; background: rgba(53,42,13,.72); border-radius: 3px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Stato REC finale: resta sopra alla maschera del frame e alla palette del tema. */
 .recording-motion.camera-mode .camera-frame-guide {
@@ -1725,14 +1759,8 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .app-shell .timeline-record.active { border-radius: var(--radius-control) !important; }
 .preview-monitor-frame { border-radius: var(--radius-panel); }
 
-/* Geometria editoriale: il frame resta preciso, le clip appena smussate. */
-.app-shell :is(.viewport, .canvas-stage, .camera-frame-guide, .live-camera-preview, .slide-preview) {
-  border-radius: 0 !important;
-}
+/* Il monitor esterno conserva il rettangolo esatto del video esportato. */
 .preview-monitor-frame { border-radius: 0 !important; }
-.app-shell :is(.scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment) {
-  border-radius: 3px !important;
-}
 
 /* I pannelli strutturali sinistro e timeline non hanno cornici esterne. */
 .app-shell :is(.left-panel, .timeline) {
@@ -1740,10 +1768,6 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   box-shadow: none !important;
 }
 
-/* Le barre di montaggio sono rettangoli netti; le scene restano separate da un piccolo respiro. */
-.app-shell :is(.scene-clip, .scene-image, .presence-segment, .recorded-motion-segment, .motion-segment) {
-  border-radius: 0 !important;
-}
 .timeline .scene-image {
   background-position: center;
   background-repeat: no-repeat;

@@ -36,6 +36,35 @@ describe('AbacoSceneV1', () => {
     expect(ProjectSchema.parse(project).objects.at(-1)?.asset.previewScale).toBe(.5);
   });
 
+  it('recupera un piano con una scala corrotta senza coprire la scena', () => {
+    const project = createProject();
+    const plane = createSceneObject('plane', 1);
+    plane.transform.scale = [500, 300, 80];
+    plane.keyframes.push({ id: crypto.randomUUID(), frame: 1, property: 'scale', value: [800, 900, 40], interpolation: 'constant', source: 'user', commentIds: [] });
+    project.objects.push(plane);
+    useEditor.getState().loadProject(project, '/tmp/piano.abaco.json');
+    const recovered = useEditor.getState().project.objects.find((object) => object.id === plane.id)!;
+    expect(recovered.transform.scale).toEqual([12, 12, 1]);
+    expect(recovered.keyframes[0].value).toEqual([12, 12, 1]);
+  });
+
+  it('chiude i piccoli vuoti artificiali degli elementi al confine tra scene', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const damaged = structuredClone(useEditor.getState().project);
+    const secondScene = damaged.cameraCuts.slice().sort((a, b) => a.frame - b.frame)[1];
+    const cube = damaged.objects.find((object) => object.id === cubeId)!;
+    const boundaryKey = cube.keyframes.find((key) => key.property === 'visibility' && key.frame === secondScene.frame)!;
+    boundaryKey.value = false;
+    cube.keyframes.push({ id: crypto.randomUUID(), frame: secondScene.frame + 2, property: 'visibility', value: true, interpolation: 'constant', source: 'user', commentIds: [] });
+    useEditor.getState().loadProject(damaged, '/tmp/transizione.abaco.json');
+    const repaired = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateProperty(repaired, 'visibility', secondScene.frame)).toBe(true);
+    expect(repaired.keyframes.some((key) => key.property === 'visibility' && key.frame === secondScene.frame + 2)).toBe(false);
+  });
+
   it('interpola una posizione lineare', () => {
     const object = createSceneObject('cube', 1);
     object.keyframes = [
@@ -43,6 +72,29 @@ describe('AbacoSceneV1', () => {
       { id: crypto.randomUUID(), frame: 11, property: 'position', value: [10, 0, 0], interpolation: 'linear', source: 'user', commentIds: [] },
     ];
     expect(evaluateTransform(object, 6).position).toEqual([5, 0, 0]);
+  });
+
+  it('attraversa i punti fluidi senza azzerare la velocità', () => {
+    const object = createSceneObject('cube', 1);
+    object.keyframes = [1, 11, 21].map((frame, index) => ({
+      id: crypto.randomUUID(), frame, property: 'position' as const, value: [index * 10, 0, 0] as [number, number, number],
+      interpolation: 'bezier' as const, source: 'user' as const, purpose: 'motion' as const, commentIds: [],
+    }));
+    const before = (evaluateProperty(object, 'position', 11) as [number, number, number])[0] - (evaluateProperty(object, 'position', 10) as [number, number, number])[0];
+    const after = (evaluateProperty(object, 'position', 12) as [number, number, number])[0] - (evaluateProperty(object, 'position', 11) as [number, number, number])[0];
+    expect(before).toBeGreaterThan(.5);
+    expect(after).toBeGreaterThan(.5);
+  });
+
+  it('mantiene un punto per la sosta configurata e poi riparte', () => {
+    const object = createSceneObject('cube', 1);
+    object.keyframes = [
+      { id: crypto.randomUUID(), frame: 1, property: 'position', value: [0, 0, 0], interpolation: 'linear', holdFrames: 3, source: 'user', purpose: 'motion', commentIds: [] },
+      { id: crypto.randomUUID(), frame: 11, property: 'position', value: [10, 0, 0], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] },
+    ];
+    expect(evaluateProperty(object, 'position', 4)).toEqual([0, 0, 0]);
+    expect((evaluateProperty(object, 'position', 5) as [number, number, number])[0]).toBeCloseTo(10 / 7);
+    expect(evaluateProperty(object, 'position', 11)).toEqual([10, 0, 0]);
   });
 });
 
@@ -89,7 +141,7 @@ describe('versioni export', () => {
 describe('gesture viewport', () => {
   it('inverte i delta del trackpad e ne riduce la sensibilità', () => {
     expect(TRACKPAD_PAN_SENSITIVITY).toBeLessThan(0.5);
-    expect(trackpadCameraOffset(100, 100)).toEqual({ horizontal: 8, vertical: -8 });
+    expect(trackpadCameraOffset(100, 100)).toEqual({ horizontal: -8, vertical: 8 });
     expect(TRACKPAD_ROTATE_SENSITIVITY).toBeLessThan(.002);
   });
 
@@ -324,6 +376,21 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(cube, 25).position).toEqual([4, 2, 1]);
   });
 
+  it('imposta la sosta sull’intera posa del punto e la limita al punto seguente', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 20], scale: [1.2, 1.2, 1.2] });
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    const point = cube.keyframes.find((key) => key.property === 'position' && key.frame === 1)!;
+    useEditor.getState().setMotionPointHold(cubeId, point.id, 999);
+    const keys = useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.filter((key) => key.frame === 1 && key.purpose === 'motion');
+    expect(keys.map((key) => key.holdFrames)).toEqual([23, 23, 23]);
+  });
+
   it('elimina soltanto il blocco movimento della scena', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
@@ -498,6 +565,21 @@ describe('scene indipendenti', () => {
     expect(evaluateProperty(cube, 'visibility', 24)).toBe(true);
     expect(evaluateProperty(cube, 'visibility', 25)).toBe(false);
     expect(() => ProjectSchema.parse(useEditor.getState().project)).not.toThrow();
+  });
+
+  it('estende la presenza di un elemento nelle scene successive trascinando il rettangolo', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
+    useEditor.getState().addShot();
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(scenes[0].frame);
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    useEditor.getState().resizeObjectPresence(cubeId, scenes[0].id, scenes[0].frame, scenes[1].frame + 12);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(cube.sceneIds).toEqual(expect.arrayContaining([scenes[0].id, scenes[1].id]));
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(true);
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame + 11)).toBe(true);
+    expect(evaluateProperty(cube, 'visibility', scenes[1].frame + 12)).toBe(false);
   });
 
   it('REC usa come fine il bordo visibile di un elemento accorciato', () => {

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('abaco', {
   chooseBlender: () => ipcRenderer.invoke('settings:chooseBlender'),
   chooseBackground: (kind: 'image' | 'model') => ipcRenderer.invoke('background:choose', kind),
   loadAsset: (path: string) => ipcRenderer.invoke('asset:load', path),
+  chooseAudio: () => ipcRenderer.invoke('audio:choose'),
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),

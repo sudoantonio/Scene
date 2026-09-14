@@ -18,10 +18,13 @@ export default function BackgroundPanel() {
   const ratio = project.settings.resolutionX / project.settings.resolutionY;
   const format = formats.find((item) => Math.abs(item.width / item.height - ratio) < .01)?.label ?? 'custom';
   const choose = async (kind: 'image' | 'model') => {
+    const projectId = project.id;
+    const sceneId = cut?.id;
     try {
       setError('');
-      const selected = await window.abaco?.chooseBackground(kind);
-      if (selected) updateBackground({ kind, ...selected });
+      if (!window.abaco) throw new Error('L’importazione dello sfondo è disponibile nell’app desktop.');
+      const selected = await window.abaco.chooseBackground(kind);
+      if (selected && sceneId && useEditor.getState().project.id === projectId) updateBackground({ kind, ...selected }, sceneId);
     } catch (reason) { setError((reason as Error).message || 'Impossibile caricare lo sfondo.'); }
   };
   return <section className="background-panel">

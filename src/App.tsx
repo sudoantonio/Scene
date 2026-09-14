@@ -4,11 +4,11 @@ import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
 import ElementsPanel from './components/ElementsPanel';
-import LibraryPanel from './components/LibraryPanel';
 import PlanReview from './components/PlanReview';
 import SettingsModal from './components/SettingsModal';
 import Timeline from './components/Timeline';
 import Viewport, { captureContactSheet } from './components/Viewport';
+import AudioPlayback from './components/AudioPlayback';
 import { useEditor } from './store/editor';
 import headerLogo from './assets/abaco-scene-header.png';
 
@@ -16,10 +16,9 @@ const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary:
 const initialLayout = () => {
   try {
     const saved = JSON.parse(localStorage.getItem('abaco-layout-v1') ?? '{}');
-    return { left: Number(saved.left) || 158, right: Number(saved.right) || 310, timeline: Number(saved.timeline) || 270 };
-  } catch { return { left: 158, right: 310, timeline: 270 }; }
+    return { right: Number(saved.right) || 310, timeline: Number(saved.timeline) || 270 };
+  } catch { return { right: 310, timeline: 270 }; }
 };
-const initialTheme = (): 'light' | 'dark' => localStorage.getItem('abaco-theme') === 'dark' ? 'dark' : 'light';
 
 export default function App() {
   const project = useEditor((state) => state.project);
@@ -38,32 +37,50 @@ export default function App() {
   const redo = useEditor((state) => state.redo);
   const acceptPlan = useEditor((state) => state.acceptPlan);
   const [plan, setPlan] = useState<BlenderPlan>();
+  const planProjectRef = useRef<ReturnType<typeof useEditor.getState>['project'] | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
-  const [collapsed, setCollapsed] = useState({ left: false, right: false, timeline: false });
+  const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
   const [viewportFullscreen, setViewportFullscreen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(initialTheme);
+  const theme: 'dark' = 'dark';
   const shellRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error' | 'info'; text: string }>();
+  // File writes must finish in order, and their results must never replace edits
+  // made while the native save operation was still running.
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   const notify = (type: 'ok' | 'error' | 'info', text: string) => { setMessage({ type, text }); window.setTimeout(() => setMessage(undefined), 6500); };
   const requireDesktop = () => { if (!window.abaco) { notify('error', 'Questa funzione richiede l’app desktop Electron.'); return false; } return true; };
 
   const save = async (path = projectPath) => {
     if (!requireDesktop()) return null;
-    const result = await window.abaco!.saveProject(useEditor.getState().project, path);
-    if (result) markSaved(result.project, result.path);
-    return result;
+    const snapshot = useEditor.getState().project;
+    const operation = saveQueue.current.catch(() => undefined).then(async () => {
+      if (useEditor.getState().project.id !== snapshot.id) return null;
+      const result = await window.abaco!.saveProject(snapshot, path ?? useEditor.getState().projectPath);
+      const current = useEditor.getState();
+      if (current.project.id !== snapshot.id) return null;
+      if (result && current.project.id === snapshot.id) {
+        if (current.project === snapshot) markSaved(result.project, result.path);
+        else useEditor.setState({ projectPath: result.path });
+      }
+      return result;
+    });
+    saveQueue.current = operation;
+    return operation;
   };
   const open = async () => {
     if (!requireDesktop()) return;
-    const result = await window.abaco!.openProject();
-    if (result) { loadProject(result.project, result.path); notify('ok', `Aperto ${result.project.name}`); }
+    if (useEditor.getState().dirty && !window.confirm('Il progetto contiene modifiche non salvate. Aprire comunque un altro progetto?')) return;
+    try {
+      const result = await window.abaco!.openProject();
+      if (result) { loadProject(result.project, result.path); notify('ok', `Aperto ${result.project.name}`); }
+    } catch (error) { notify('error', error instanceof Error ? error.message : 'Impossibile aprire il progetto.'); }
   };
   const createNew = () => {
     if (!dirty || window.confirm('Il progetto contiene modifiche non salvate. Creare comunque un nuovo progetto?')) newProject();
@@ -74,29 +91,43 @@ export default function App() {
       setBusy(true); notify('info', 'Preparo scena, commenti e fotogrammi per Astra…');
       const saved = await save();
       if (!saved) return;
-      const current = useEditor.getState().project;
+      const current = saved.project;
       if (!current.comments.some((comment) => comment.status === 'pending')) {
         const output = await window.abaco!.buildBlender(current, emptyPlan(), saved.path);
-        notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
+        notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
         return;
       }
       const frames = [useEditor.getState().currentFrame, ...current.comments.filter((comment) => comment.status === 'pending').flatMap((comment) => [comment.startFrame, comment.endFrame]), ...current.cameraCuts.map((cut) => cut.frame)];
       const sheet = await captureContactSheet(frames);
       const response = await window.abaco!.generatePlan(current, sheet);
+      if (useEditor.getState().project !== current) {
+        notify('error', 'Il progetto è cambiato durante la generazione. Genera di nuovo il piano sul progetto aggiornato.');
+        return;
+      }
+      planProjectRef.current = current;
       setPlan(response); setMessage(undefined);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
   const approve = async () => {
     if (!plan || !projectPath || !window.abaco) return;
+    if (useEditor.getState().project !== planProjectRef.current) {
+      setPlan(undefined);
+      notify('error', 'Il progetto è cambiato dopo la generazione. Genera di nuovo il piano prima di applicarlo.');
+      return;
+    }
     try {
       setBusy(true);
       const next = applyPlan(useEditor.getState().project, plan);
       const output = await window.abaco.buildBlender(next, plan, projectPath);
+      if (useEditor.getState().project !== planProjectRef.current) {
+        setPlan(undefined);
+        notify('info', `Esportazione creata in ${output.directory}. Il progetto è stato modificato nel frattempo: il piano non è stato applicato alle nuove modifiche.`);
+        return;
+      }
       acceptPlan(plan);
-      const saved = await window.abaco.saveProject(useEditor.getState().project, projectPath);
-      if (saved) markSaved(saved.project, saved.path);
-      setPlan(undefined); notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
+      await save(projectPath);
+      setPlan(undefined); notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
@@ -106,24 +137,24 @@ export default function App() {
       setBusy(true);
       const saved = await save();
       if (!saved) return;
-      const output = await window.abaco!.buildBlender(useEditor.getState().project, emptyPlan(), saved.path);
-      notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset e file Blender.`);
+      const output = await window.abaco!.buildBlender(saved.project, emptyPlan(), saved.path);
+      notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
-  const beginResize = (part: 'left' | 'right' | 'timeline', event: React.PointerEvent<HTMLDivElement>) => {
+  const beginResize = (part: 'right' | 'timeline', event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const origin = { x: event.clientX, y: event.clientY, value: layout[part] };
     let finalValue = origin.value;
     const valueFromPointer = (pointer: PointerEvent) => {
-      const delta = part === 'left' ? pointer.clientX - origin.x : part === 'right' ? origin.x - pointer.clientX : origin.y - pointer.clientY;
-      const limits = part === 'timeline' ? [150, 520] : part === 'left' ? [96, 360] : [240, 500];
+      const delta = part === 'right' ? origin.x - pointer.clientX : origin.y - pointer.clientY;
+      const limits = part === 'timeline' ? [150, 520] : [240, 500];
       return Math.max(limits[0], Math.min(limits[1], origin.value + delta));
     };
     const move = (pointer: PointerEvent) => {
       finalValue = valueFromPointer(pointer);
-      if (part === 'timeline' && shellRef.current) shellRef.current.style.gridTemplateRows = `40px minmax(0,1fr) 5px ${finalValue}px`;
-      else if (workspaceRef.current) workspaceRef.current.style.gridTemplateColumns = `minmax(0,${part === 'left' ? finalValue : layout.left}px) 5px minmax(0,1fr) 5px minmax(0,${part === 'right' ? finalValue : layout.right}px)`;
+      if (part === 'timeline' && shellRef.current) shellRef.current.style.gridTemplateRows = `40px minmax(0,1fr) 10px ${finalValue}px`;
+      else if (workspaceRef.current) workspaceRef.current.style.gridTemplateColumns = `minmax(0,1fr) 10px minmax(0,${finalValue}px)`;
     };
     const finish = () => {
       window.removeEventListener('pointermove', move);
@@ -154,17 +185,13 @@ export default function App() {
 
   useEffect(() => {
     if (!dirty || !projectPath || !window.abaco) return;
-    const timer = window.setTimeout(() => window.abaco!.saveProject(useEditor.getState().project, projectPath).then((result) => { if (result) markSaved(result.project, result.path); }).catch(() => undefined), 900);
+    const timer = window.setTimeout(() => { void save(projectPath).catch((error) => notify('error', error instanceof Error ? error.message : 'Salvataggio automatico non riuscito.')); }, 900);
     return () => window.clearTimeout(timer);
   }, [dirty, project, projectPath, markSaved]);
 
   useEffect(() => {
     try { localStorage.setItem('abaco-layout-v1', JSON.stringify(layout)); } catch { /* preferenze non disponibili */ }
   }, [layout]);
-
-  useEffect(() => {
-    localStorage.setItem('abaco-theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     window.abaco?.syncPreviewProject({ project, frame: currentFrame, theme });
@@ -189,25 +216,26 @@ export default function App() {
   }, [addOpen]);
 
   useEffect(() => {
-    document.title = `${project.name}${dirty ? ' •' : ''} — Abaco Animatic`;
+    document.title = `${project.name}${dirty ? ' •' : ''} — Scene`;
   }, [dirty, project.name]);
 
   useEffect(() => {
     const openMotionEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
+    const openAudioEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
     window.addEventListener('abaco:edit-motion', openMotionEditor);
-    return () => window.removeEventListener('abaco:edit-motion', openMotionEditor);
+    window.addEventListener('abaco:edit-audio', openAudioEditor);
+    return () => { window.removeEventListener('abaco:edit-motion', openMotionEditor); window.removeEventListener('abaco:edit-audio', openAudioEditor); };
   }, []);
 
   useEffect(() => window.abaco?.onMenuCommand((command) => {
     if (command === 'new') createNew();
     else if (command === 'open') open();
-    else if (command === 'save') save();
+    else if (command === 'save') void save().catch((error) => notify('error', error instanceof Error ? error.message : 'Salvataggio non riuscito.'));
     else if (command === 'undo') undo();
     else if (command === 'redo') redo();
     else if (command === 'export-astra') generate();
     else if (command === 'export-direct') exportDirect();
     else if (command === 'settings') setSettingsOpen(true);
-    else if (command === 'toggle-theme') setTheme((value) => value === 'light' ? 'dark' : 'light');
   }), [dirty, projectPath]);
 
   useEffect(() => {
@@ -222,23 +250,21 @@ export default function App() {
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [setGizmoMode, setPlaying]);
 
-  const leftWidth = collapsed.left ? 32 : layout.left;
   const rightWidth = collapsed.right ? 32 : layout.right;
-  const timelineHeight = collapsed.timeline ? 43 : layout.timeline;
+  const timelineHeight = collapsed.timeline ? 36 : layout.timeline;
   const toggleViewportFullscreen = () => {
     setViewportFullscreen((value) => {
       if (!value) setCameraView(true);
       return !value;
     });
   };
-  return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 5px ${timelineHeight}px` }}>
+  return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px` }}>
+    <AudioPlayback />
     <div className="slim-headbar">
-      <img className="headbar-logo" src={headerLogo} alt="Abaco Scene" draggable={false} />
+      <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
     </div>
-    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,${leftWidth}px) 5px minmax(0,1fr) 5px minmax(0,${rightWidth}px)` }}>
-      <LibraryPanel collapsed={collapsed.left} onToggleCollapse={() => setCollapsed((value) => ({ ...value, left: !value.left }))} />
-      <div className="panel-resizer vertical" title="Ridimensiona pannello sinistro" onPointerDown={(event) => { if (!collapsed.left) beginResize('left', event); }} />
+    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
       <Viewport dark={theme === 'dark'} />
       <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
       <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />

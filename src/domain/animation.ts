@@ -1,4 +1,4 @@
-import { defaultBackground, defaultCameraFraming, defaultLighting, type AbacoProject, type AnimProperty, type BlenderPlan, type Keyframe, type KeyframeValue, type SceneObject, type Transform, type Vec3 } from './schema';
+import { defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, type AbacoProject, type AnimProperty, type BlenderPlan, type Keyframe, type KeyframeValue, type SceneObject, type Transform, type Vec3 } from './schema';
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const ease = (t: number, mode: Keyframe['interpolation']) => mode === 'constant' ? 0 : mode === 'bezier' ? t * t * (3 - 2 * t) : t;
@@ -19,7 +19,15 @@ export function evaluateProperty(object: SceneObject, property: AnimProperty, fr
   if (nextIndex < 0) return keys[keys.length - 1].value;
   const previous = keys[nextIndex - 1];
   const next = keys[nextIndex];
-  const t = ease(clamp01((frame - previous.frame) / (next.frame - previous.frame)), previous.interpolation);
+  const holdUntil = Math.min(next.frame, previous.frame + (previous.holdFrames ?? 0));
+  if (frame <= holdUntil) return previous.value;
+  const segmentT = clamp01((frame - holdUntil) / Math.max(1, next.frame - holdUntil));
+  // Catmull-Rom already supplies a continuous tangent through motion points.
+  // Applying smoothstep too would force velocity to zero at every keyframe.
+  const t = property === 'position' && previous.interpolation === 'bezier'
+    && (previous.purpose === 'motion' || next.purpose === 'motion')
+    ? segmentT
+    : ease(segmentT, previous.interpolation);
   if (typeof previous.value === 'number' && typeof next.value === 'number') return mix(previous.value, next.value, t);
   if (!Array.isArray(previous.value) || !Array.isArray(next.value)) return previous.value;
   const previousVector = previous.value as Vec3;
@@ -62,6 +70,7 @@ export function validatePlan(project: AbacoProject, plan: BlenderPlan): string[]
     if (op.type === 'set_keyframe') {
       try {
         const value = planValue(op);
+        if (!isValidAnimationValue(op.property, value)) errors.push(`${op.id}: valore non valido per ${op.property}`);
         if (op.property === 'scale' && (!Array.isArray(value) || value.some((n) => n <= 0))) errors.push(`${op.id}: scala non positiva`);
         if (op.property === 'lens' && (typeof value !== 'number' || value <= 0)) errors.push(`${op.id}: obiettivo non positivo`);
       } catch (error) { errors.push((error as Error).message); }

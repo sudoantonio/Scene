@@ -9,8 +9,13 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 input_path = Path(argv[0])
 plan_path = Path(argv[1])
 output_path = Path(argv[2])
+audio_output_path = Path(argv[3]) if len(argv) > 3 else output_path.with_suffix(".wav")
 project = json.loads(input_path.read_text(encoding="utf-8"))
 plan = json.loads(plan_path.read_text(encoding="utf-8"))
+
+def asset_path(value):
+    source = Path(value)
+    return source if source.is_absolute() else input_path.parent / source
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -109,6 +114,8 @@ def set_interpolation(obj, frame, mode):
             if abs(point.co.x - frame) < 0.001: point.interpolation = interpolation_name(mode)
 
 def apply_animation(obj, data):
+    obj.hide_render = not data.get("visible", True)
+    obj.hide_viewport = obj.hide_render
     for key in sorted(data.get("keyframes", []), key=lambda item: item["frame"]):
         frame, prop, value = key["frame"], key["property"], key["value"]
         if prop == "position": obj.location = value; obj.keyframe_insert("location", frame=frame)
@@ -119,11 +126,20 @@ def apply_animation(obj, data):
             obj.keyframe_insert("hide_render", frame=frame); obj.keyframe_insert("hide_viewport", frame=frame)
         elif prop == "lens" and obj.type == "CAMERA":
             obj.data.lens = value; obj.data.keyframe_insert("lens", frame=frame)
-        set_interpolation(obj, frame, key.get("interpolation", "bezier"))
+        mode = key.get("interpolation", "bezier")
+        hold = max(0, int(key.get("holdFrames", 0)))
+        set_interpolation(obj, frame, "constant" if hold else mode)
+        if hold and prop in ("position", "rotation", "scale", "lens"):
+            hold_frame = frame + hold
+            if prop == "position": obj.location = value; obj.keyframe_insert("location", frame=hold_frame)
+            elif prop == "rotation": obj.rotation_euler = [math.radians(v) for v in value]; obj.keyframe_insert("rotation_euler", frame=hold_frame)
+            elif prop == "scale": obj.scale = value; obj.keyframe_insert("scale", frame=hold_frame)
+            elif prop == "lens" and obj.type == "CAMERA": obj.data.lens = value; obj.data.keyframe_insert("lens", frame=hold_frame)
+            set_interpolation(obj, hold_frame, mode)
 
 def create_blend_asset(data):
     asset = data.get("asset", {})
-    source_path = Path(asset.get("sourcePath", ""))
+    source_path = asset_path(asset.get("sourcePath", ""))
     if not source_path.is_file():
         raise RuntimeError("Asset Blender non trovato: " + str(source_path))
     with bpy.data.libraries.load(str(source_path), link=False) as (data_from, data_to):
@@ -171,7 +187,9 @@ def create_blend_asset(data):
 
 objects = {}
 for data in project["objects"]:
-    if data["kind"] in ("area_light", "point_light", "sun_light"):
+    if data["kind"] in ("audio", "area_light", "point_light", "sun_light"):
+        continue
+    if data.get("screenSpace", False):
         continue
     if data["kind"] == "blend_asset":
         obj, imported_objects = create_blend_asset(data)
@@ -231,21 +249,21 @@ def visibility_window(obj, start, end):
 cuts = sorted(project.get("cameraCuts", []), key=lambda item: item["frame"])
 for cut_index, cut in enumerate(cuts):
     background = cut.get("background", {"kind": "none", "path": ""})
-    asset_path = Path(background.get("path", ""))
-    if background.get("kind") == "none" or not asset_path.is_file():
+    background_path = asset_path(background.get("path", ""))
+    if background.get("kind") == "none" or not background_path.is_file():
         continue
     start = cut["frame"]
     end = cuts[cut_index + 1]["frame"] if cut_index + 1 < len(cuts) else settings["frameEnd"] + 1
-    if background["kind"] == "model" and asset_path.suffix.lower() == ".glb":
+    if background["kind"] == "model" and background_path.suffix.lower() == ".glb":
         before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=str(asset_path))
+        bpy.ops.import_scene.gltf(filepath=str(background_path))
         for imported in set(bpy.data.objects) - before:
             imported["abaco_background_scene"] = cut["id"]
             visibility_window(imported, start, end)
     elif background["kind"] == "image":
         camera = objects.get(cut["cameraId"])
         if not camera: continue
-        image = bpy.data.images.load(str(asset_path), check_existing=True)
+        image = bpy.data.images.load(str(background_path), check_existing=True)
         mesh = bpy.data.meshes.new("ABACO • Sfondo")
         mesh.from_pydata([(-1,-1,0), (1,-1,0), (1,1,0), (-1,1,0)], [], [(0,1,2,3)])
         panel = bpy.data.objects.new("ABACO • Sfondo • " + str(cut_index + 1), mesh)
@@ -268,6 +286,111 @@ for cut_index, cut in enumerate(cuts):
         mesh.materials.append(material)
         panel["abaco_background_scene"] = cut["id"]
         visibility_window(panel, start, end)
+
+def overlay_material(name, color, image=None):
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    nodes.clear()
+    output = nodes.new("ShaderNodeOutputMaterial")
+    emission = nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = hex_color(color)
+    emission.inputs["Strength"].default_value = 1
+    if image is None:
+        links.new(emission.outputs[0], output.inputs["Surface"])
+    else:
+        texture = nodes.new("ShaderNodeTexImage")
+        texture.image = image
+        transparent = nodes.new("ShaderNodeBsdfTransparent")
+        mix = nodes.new("ShaderNodeMixShader")
+        links.new(texture.outputs["Color"], emission.inputs["Color"])
+        links.new(texture.outputs["Alpha"], mix.inputs[0])
+        links.new(transparent.outputs[0], mix.inputs[1])
+        links.new(emission.outputs[0], mix.inputs[2])
+        links.new(mix.outputs[0], output.inputs["Surface"])
+        if hasattr(material, "surface_render_method"):
+            material.surface_render_method = "DITHERED"
+        elif hasattr(material, "blend_method"):
+            material.blend_method = "BLEND"
+    return material
+
+def screen_layer_object(data, name, body=None):
+    if data["kind"] == "text":
+        curve = bpy.data.curves.new(name, "FONT")
+        curve.body = body
+        curve.align_x = "CENTER"
+        curve.align_y = "CENTER"
+        curve.space_line = 1.08
+        curve.size = 1
+        curve.extrude = 0
+        obj = bpy.data.objects.new(name, curve)
+        curve.materials.append(overlay_material(name, data["color"]))
+        aspect = 1
+    else:
+        image = bpy.data.images.load(str(asset_path(data["asset"]["sourcePath"])), check_existing=True)
+        aspect = image.size[1] / max(1, image.size[0])
+        top, right, bottom, left = data.get("screenCrop", [0, 0, 0, 0])
+        corners = [(left, bottom), (1 - right, bottom), (1 - right, 1 - top), (left, 1 - top)]
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata([(x - .5, (y - .5) * aspect, 0) for x, y in corners], [], [(0, 1, 2, 3)])
+        uv = mesh.uv_layers.new(name="UVMap")
+        for polygon in mesh.polygons:
+            for loop_index in polygon.loop_indices:
+                uv.data[loop_index].uv = corners[mesh.loops[loop_index].vertex_index]
+        obj = bpy.data.objects.new(name, mesh)
+        mesh.materials.append(overlay_material(name, "#ffffff", image))
+    scene.collection.objects.link(obj)
+    obj["abaco_id"] = data["id"]
+    obj["abaco_screen_space"] = True
+    obj.rotation_mode = "XYZ"
+    if hasattr(obj, "visible_shadow"): obj.visible_shadow = False
+    return obj
+
+def overlay_visibility(obj, frame, visible):
+    obj.hide_render = not visible
+    obj.hide_viewport = not visible
+    obj.keyframe_insert("hide_render", frame=frame)
+    obj.keyframe_insert("hide_viewport", frame=frame)
+
+# Screen layers use camera-local coordinates and remain the same fraction of
+# the image after camera moves, lens changes and scene cuts. Each frame is baked
+# from the editor evaluator; the resulting .blend needs no Python handlers.
+screen_data = {data["id"]: data for data in project["objects"] if data.get("screenSpace", False)}
+screen_layers = project.get("screenLayers", [])
+for layer_index, layer in enumerate(screen_layers):
+    data = screen_data[layer["objectId"]]
+    for cut_index, cut in enumerate(cuts):
+        camera = objects.get(cut["cameraId"])
+        if camera is None: continue
+        start = max(settings["frameStart"], cut["frame"])
+        end = cuts[cut_index + 1]["frame"] if cut_index + 1 < len(cuts) else settings["frameEnd"] + 1
+        samples = [sample for sample in layer["frames"] if start <= sample["frame"] < end]
+        bodies = list(dict.fromkeys(sample["text"] for sample in samples)) if data["kind"] == "text" else [None]
+        for variant_index, body in enumerate(bodies):
+            name = data["name"] + " • schermo %d.%d" % (cut_index + 1, variant_index + 1)
+            obj = screen_layer_object(data, name, body)
+            obj.parent = camera
+            obj["abaco_camera_id"] = cut["cameraId"]
+            obj["abaco_scene_id"] = cut["id"]
+            depth = max(camera.data.clip_start * 1.1, .11) + (len(screen_layers) - layer_index) * .0001
+            if start > settings["frameStart"]: overlay_visibility(obj, settings["frameStart"], False)
+            for sample in samples:
+                frame = sample["frame"]
+                scene.frame_set(frame)
+                corners = camera.data.view_frame(scene=scene)
+                width = (max(v.x / -v.z for v in corners) - min(v.x / -v.z for v in corners)) * depth
+                height = (max(v.y / -v.z for v in corners) - min(v.y / -v.z for v in corners)) * depth
+                obj.location = (sample["x"] * width / 2, sample["y"] * height / 2, -depth)
+                obj.rotation_euler = (0, 0, -math.radians(sample["rotation"]))
+                size = width * (34 if data["kind"] == "text" else 260) / 1280 * sample["scale"]
+                obj.scale = (size, size, size)
+                obj.keyframe_insert("location", frame=frame)
+                obj.keyframe_insert("rotation_euler", frame=frame)
+                obj.keyframe_insert("scale", frame=frame)
+                overlay_visibility(obj, frame, sample["visible"] and (body is None or sample["text"] == body))
+            if end <= settings["frameEnd"]: overlay_visibility(obj, end, False)
+            for curve in action_fcurves(obj):
+                for point in curve.keyframe_points: point.interpolation = "CONSTANT"
 
 # Abaco usa due luci tecniche controllate dai preset di ogni scena. Le vecchie
 # lampade presenti nei progetti rimangono nei dati, ma non vengono più create.
@@ -324,12 +447,75 @@ for cut in sorted(project.get("cameraCuts", []), key=lambda item: item["frame"])
         marker.camera = camera
         if scene.camera is None: scene.camera = camera
 
+# Audio is kept in the Video Sequence Editor and mixed to a separate WAV next
+# to the .blend. Visibility keys define the editable clip ranges in the timeline.
+def audio_ranges(data):
+    keys = sorted([key for key in data.get("keyframes", []) if key["property"] == "visibility"], key=lambda item: item["frame"])
+    ranges, active, start = [], bool(data.get("visible", True)), settings["frameStart"]
+    for key in keys:
+        frame, value = int(key["frame"]), bool(key["value"])
+        if value and not active: start, active = frame, True
+        elif not value and active:
+            if frame > start: ranges.append((start, frame))
+            active = False
+    if active: ranges.append((start, settings["frameEnd"] + 1))
+    allowed = set(data.get("sceneIds", []))
+    if not allowed: return ranges
+    clipped = []
+    ordered_cuts = sorted(project.get("cameraCuts", []), key=lambda item: item["frame"])
+    for index, cut in enumerate(ordered_cuts):
+        if cut["id"] not in allowed: continue
+        scene_end = ordered_cuts[index + 1]["frame"] if index + 1 < len(ordered_cuts) else settings["frameEnd"] + 1
+        for begin, end in ranges:
+            left, right = max(begin, cut["frame"]), min(end, scene_end)
+            if right > left: clipped.append((left, right))
+    return clipped
+
+audio_objects = [data for data in project["objects"] if data.get("kind") == "audio" and data.get("asset", {}).get("sourcePath")]
+if audio_objects:
+    editor = scene.sequence_editor_create()
+    sequences = getattr(editor, "sequences", getattr(editor, "strips", None))
+    channel = 1
+    for data in audio_objects:
+        source = asset_path(data["asset"]["sourcePath"])
+        if not source.is_file(): raise RuntimeError("Audio non trovato: " + str(source))
+        controls = data.get("audio", {})
+        trim_start = max(0.0, float(controls.get("trimStart", 0)))
+        source_end = float(controls.get("trimEnd", 0)) or float(controls.get("duration", 0))
+        source_frames = max(1, int(round(max(0.01, source_end - trim_start) * settings["fps"])))
+        for clip_index, (begin, end) in enumerate(audio_ranges(data)):
+            cursor = begin
+            while cursor < end:
+                segment_end = min(end, cursor + source_frames)
+                strip = sequences.new_sound(data["name"] + " • %d" % (clip_index + 1), str(source), channel=channel, frame_start=cursor)
+                if hasattr(strip, "animation_offset_start"): strip.animation_offset_start = int(round(trim_start * settings["fps"]))
+                strip.frame_final_end = segment_end
+                volume = 0.0 if controls.get("muted", False) else max(0.0, min(1.0, float(controls.get("volume", 1))))
+                strip.volume = volume
+                fade_in = min(segment_end - cursor, int(round(max(0.0, float(controls.get("fadeIn", 0))) * settings["fps"])))
+                fade_out = min(segment_end - cursor, int(round(max(0.0, float(controls.get("fadeOut", 0))) * settings["fps"])))
+                if fade_in:
+                    strip.volume = 0; strip.keyframe_insert("volume", frame=cursor)
+                    strip.volume = volume; strip.keyframe_insert("volume", frame=cursor + fade_in)
+                if fade_out:
+                    strip.volume = volume; strip.keyframe_insert("volume", frame=segment_end - fade_out)
+                    strip.volume = 0; strip.keyframe_insert("volume", frame=segment_end)
+                if not controls.get("loop", False): break
+                cursor = segment_end
+            channel += 1
+
 plan_text = bpy.data.texts.new("ABACO_PLAN.json")
 plan_text.write(json.dumps(plan, ensure_ascii=False, indent=2))
 scene["abaco_project_id"] = project["id"]
 scene["abaco_schema"] = project["schemaVersion"]
 scene.frame_set(settings["frameStart"])
 output_path.parent.mkdir(parents=True, exist_ok=True)
+# Export folders are renamed after this process finishes; textures must not
+# retain dependencies on that temporary path or the original imported files.
+bpy.ops.file.pack_all()
 bpy.ops.wm.save_as_mainfile(filepath=str(output_path))
+if audio_objects:
+    audio_output_path.parent.mkdir(parents=True, exist_ok=True)
+    bpy.ops.sound.mixdown(filepath=str(audio_output_path), container="WAV", codec="PCM", accuracy=1024)
 print("ABACO_ANIMATIC_COMPLETE", output_path)
 `;

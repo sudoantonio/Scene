@@ -1,9 +1,9 @@
 {
   "name": "abaco-animatic",
-  "version": "0.56.8",
+  "version": "0.57.39",
   "private": true,
   "author": "Abaco Animation",
-  "desktopName": "Abaco Animatic",
+  "desktopName": "Scene",
   "description": "Editor desktop locale per bozze 3D assistite da GPT-6 Astra e Blender",
   "main": "dist-electron/main.cjs",
   "type": "module",
@@ -48,7 +48,7 @@
   },
   "build": {
     "appId": "com.abaco.animatic",
-    "productName": "Abaco Animatic",
+    "productName": "Scene",
     "directories": {
       "output": "release"
     },
@@ -63,13 +63,13 @@
       "category": "Graphics",
       "icon": "build/icon.png",
       "syncDesktopName": true,
-      "artifactName": "Abaco-Animatic-${version}.${ext}"
+      "artifactName": "Scene-${version}.${ext}"
     },
     "mac": {
       "target": "zip",
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.png",
-      "artifactName": "Abaco-Animatic-${version}-mac-${arch}.${ext}"
+      "artifactName": "Scene-${version}-mac-${arch}.${ext}"
     }
   }
 }

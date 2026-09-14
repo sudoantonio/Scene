@@ -5,3 +5,6 @@ release/
 *.log
 *.tsbuildinfo
 .smoke-test/
+.DS_Store
+build/icon-*-backup.png
+build/icon-with-black-corners.png

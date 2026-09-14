@@ -1,0 +1,486 @@
+/* Unified editor chrome. No effects on canvas contents, timing or export geometry. */
+.app-shell {
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --editor-gutter: 14px;
+  --timeline-left-gutter: var(--editor-gutter);
+  --timeline-right-gutter: var(--editor-gutter);
+  --ui-text: #ececec;
+  --ui-muted: #a2a2a2;
+  --ui-surface: #202020;
+  --ui-raised: #2b2b2b;
+  --ui-hover: #353535;
+  --ui-edge: rgba(255, 255, 255, .08);
+  --ui-subsection: color-mix(in srgb, var(--ui-raised) 25%, var(--ui-surface));
+  padding: 10px var(--editor-gutter) 12px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell.theme-dark {
+  --timeline-label-base: #171717;
+  --bg: #0d0d0d;
+  --panel: var(--ui-surface);
+  --panel-2: var(--ui-raised);
+  --line: #343434;
+  --muted: var(--ui-muted);
+  color: var(--ui-text);
+  background: var(--bg);
+}
+.app-shell.theme-light {
+  --timeline-label-base: #555650;
+  --ui-text: #292929;
+  --ui-muted: #707070;
+  --ui-surface: #fafafa;
+  --ui-raised: #f0f0f0;
+  --ui-hover: #e6e6e6;
+  --ui-edge: rgba(0, 0, 0, .09);
+  --bg: #e9e9e9;
+  --panel: var(--ui-surface);
+  --panel-2: var(--ui-raised);
+}
+
+/* A quiet shell with small gutters; resizers retain their full hit areas. */
+.app-shell .workspace { padding-top: 8px; padding-inline: 0; }
+.app-shell .timeline {
+  --timeline-row-height: 34px;
+  --timeline-clip-inset: 2px;
+  --timeline-track-padding: 5px;
+  --timeline-ruler-height: 22px;
+  width: auto;
+  min-width: 0;
+  margin-left: 0;
+  margin-right: 0;
+  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  box-sizing: border-box;
+}
+.app-shell .timeline.collapsed { grid-template-rows: 34px; }
+.app-shell .slim-headbar {
+  color: var(--ui-text);
+  background: var(--bg);
+  border-bottom: 0 !important;
+}
+.app-shell .slim-add {
+  min-height: 28px;
+  padding: 0 14px;
+  color: var(--ui-text);
+  background: var(--ui-raised);
+  font-size: 11px;
+  font-weight: 550;
+  border-radius: 9px !important;
+}
+.app-shell .slim-add:hover,
+.app-shell .quick-add-menu:has(.quick-add-popover) .slim-add { background: var(--ui-hover); }
+.app-shell :is(.left-panel, .inspector) { border: 0; }
+.app-shell .inspector { background: var(--ui-surface); border: 1px solid rgba(255, 255, 255, .14) !important; box-shadow: none; }
+.app-shell.theme-dark .left-panel { background: #191919; }
+.app-shell.theme-light .left-panel { background: #f3f3f3; }
+.app-shell.theme-dark :is(.inspector, .simple-inspector .right-tabs, .inspector-scroll) { background: #191919; }
+.app-shell.theme-light :is(.inspector, .simple-inspector .right-tabs, .inspector-scroll) { background: #f3f3f3; }
+.app-shell .panel-resizer::after { border-radius: 2px; background: #787878; }
+.app-shell :is(.viewport, .canvas-stage) { border-radius: var(--radius-panel) !important; }
+.app-shell :is(.camera-frame-guide, .live-camera-preview) { border-radius: var(--radius-control) !important; }
+
+/* Inspector tabs are a single inset segmented control, with no underline. */
+.app-shell .simple-inspector .right-tabs {
+  height: 44px;
+  margin: 0;
+  padding: 8px 8px 0;
+  grid-template-columns: 30px repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 6px;
+  background: var(--ui-surface);
+  border-bottom: 0 !important;
+}
+.app-shell .simple-inspector .right-tabs button {
+  height: 30px;
+  min-height: 30px;
+  align-self: start;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--ui-muted);
+  border: 1px solid var(--ui-edge) !important;
+  border-radius: var(--radius-control);
+  font-size: 10px;
+  font-weight: 500;
+}
+.app-shell .simple-inspector .right-tabs button:hover { color: var(--ui-text); background: var(--ui-raised) !important; }
+.app-shell .simple-inspector .right-tabs button.active {
+  color: var(--ui-text);
+  background: var(--ui-hover) !important;
+  font-weight: 600;
+}
+.app-shell .simple-inspector .right-tabs button.active::after { display: none; }
+.app-shell .simple-inspector .right-tabs .inspector-collapse-tab { width: 30px; padding: 0; color: var(--ui-muted); }
+.app-shell .simple-inspector .right-tabs .inspector-collapse-tab:hover { color: var(--ui-text); }
+.app-shell .name-row { grid-template-columns: minmax(0, 1fr) 28px; }
+.app-shell .simple-inspector section { padding: 16px; border-color: var(--ui-edge); }
+.app-shell :is(.edit-group, .motion-controls, .object-transform-sliders) { border-color: var(--ui-edge); border-radius: 0 !important; }
+.app-shell :is(.group-title > span, .transform-slider-title, .motion-controls-heading > span) {
+  color: var(--ui-muted);
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: .025em;
+}
+.app-shell :is(.camera-sliders label, .visible-compact, .eyebrow, .group-label) { color: var(--ui-muted); }
+.app-shell :is(input:not([type='range']):not([type='checkbox']):not([type='color']), textarea, select, .object-card .object-name) {
+  color: var(--ui-text);
+  background: var(--ui-raised);
+  border: 1px solid transparent;
+}
+.app-shell :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--premiere-accent, #dfab01);
+  outline-offset: 2px;
+}
+.app-shell :is(.secondary, .subtle, .lighting-presets button, .background-actions button, .replace-object-menu button) {
+  color: var(--ui-text);
+  background: var(--ui-raised);
+  border-color: transparent !important;
+}
+.app-shell :is(.secondary, .subtle, .lighting-presets button, .background-actions button, .replace-object-menu button):hover { background: var(--ui-hover); }
+.app-shell .lighting-presets button.active { background: var(--ui-hover); color: var(--premiere-accent, #dfab01); }
+.app-shell :is(.replace-object-control > summary, .scenography-comment-row, .scenography-comment-control.compact) { border-color: var(--ui-edge); }
+.app-shell :is(.icon, .panel-collapse, .panel-collapsed button) { color: var(--ui-muted); }
+.app-shell :is(.icon, .panel-collapse, .panel-collapsed button):hover { color: var(--ui-text); background: var(--ui-hover); border-color: transparent; }
+.app-shell button:focus-visible { outline: 2px solid var(--premiere-accent, #dfab01); outline-offset: 2px; }
+
+/* Slides stay centered; rounding clips only the preview's outer corners. */
+.app-shell .slides-only { padding: 0 8px 10px; }
+.app-shell .slides-list { gap: 8px; }
+.app-shell .slide-button { padding: 4px; border: 1px solid transparent !important; }
+.app-shell .slide-button:hover { background: var(--ui-raised); }
+.app-shell .slide-button.active { background: var(--ui-hover); border-color: transparent !important; box-shadow: none !important; }
+.app-shell .slide-preview { border: 0; border-radius: 7px !important; }
+.app-shell .slide-number { border-radius: 4px; }
+.app-shell .slide-button.active .slide-number { color: #191919; background: var(--premiere-accent, #dfab01); }
+.app-shell .add-slide { color: var(--ui-muted); border: 0; background: transparent; }
+.app-shell .add-slide:hover { color: var(--ui-text); background: var(--ui-raised); }
+
+/* Track colors carry meaning. Timeline chrome shares the inspector subsection surface. */
+.app-shell :is(.timeline, .timeline-toolbar, .timeline-scroll) { background: var(--ui-subsection); }
+.app-shell .timeline-toolbar { border-bottom: 1px solid var(--ui-edge) !important; }
+.app-shell .timeline-scroll {
+  grid-area: 2 / 1;
+  padding-top: var(--timeline-track-padding);
+  grid-template-rows: var(--timeline-ruler-height) var(--timeline-row-height);
+  grid-auto-rows: var(--timeline-row-height);
+  background: linear-gradient(90deg, var(--timeline-label-base) 0 180px, var(--ui-subsection) 180px 100%);
+}
+.app-shell .timeline .timecode { color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.app-shell.theme-dark .timeline :is(.track, .ruler) { background-color: #222; border-color: #2c2c2c !important; }
+.app-shell .timeline .track { background-color: transparent !important; border: 0 !important; }
+.app-shell.theme-dark .timeline .track-pair.active .track { background-color: #292929; }
+.app-shell .timeline .track-pair.active .track { background-color: transparent !important; }
+.app-shell.theme-dark .timeline :is(.track-label, .ruler-label) { border-color: #232323 !important; }
+.app-shell .timeline :is(.scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment) { border-radius: 2px !important; }
+.app-shell .timeline .scene-clip { top: var(--timeline-clip-inset); bottom: var(--timeline-clip-inset); }
+.app-shell .timeline .scene-image { border-radius: inherit; }
+.app-shell .timeline .scene-clip.active { box-shadow: none !important; filter: brightness(1.08); }
+.app-shell .timeline :is(.scene-clip, .scene-image, .presence-segment, .recorded-motion-segment, .motion-segment) { border: 0 !important; }
+.app-shell .timeline :is(.scene-image, .presence-segment, .recorded-motion-segment, .motion-segment).selected-block {
+  box-shadow: inset 0 0 0 2px var(--premiere-accent, #dfab01) !important;
+  filter: brightness(1.12);
+}
+.app-shell .timeline-record { animation: none; }
+.app-shell .timeline-record.active { background: #a93636; }
+.app-shell :is(.motion-key-tick, .key-marker, .screen-resize-handle) { border-radius: 1px !important; }
+.app-shell .timeline { position: relative; }
+/* It belongs to the scene track and follows the end of the final clip. */
+.app-shell .timeline-add-scene { position: absolute; left: calc(100% + 6px); top: var(--timeline-clip-inset); z-index: 60; width: 18px; height: calc(var(--timeline-row-height) - 2 * var(--timeline-clip-inset)); min-height: 0; padding: 0; display: grid; place-items: center; color: #191919; background: var(--premiere-accent, #dfab01); border: 0; border-radius: 2px !important; }
+.app-shell .timeline-add-scene:hover { color: #191919; background: #f0bc1b; }
+.app-shell .timeline.collapsed .timeline-add-scene { display: none; }
+
+/* Notes use one compact circular language. Scene-boundary actions sit in the
+   dedicated gap between clips and keep the accent colour in every theme. */
+.app-shell .timeline .timeline-comment-badge,
+.app-shell .timeline .transition-marker.has-note {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  color: #171717;
+  background: #e3e2dc !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .24);
+}
+.app-shell .timeline .timeline-comment-badge svg,
+.app-shell .timeline .transition-marker.has-note svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.app-shell .timeline .timeline-comment-badge:is(:hover, :focus-visible),
+.app-shell .timeline .transition-marker.has-note:is(:hover, :focus-visible) {
+  color: #080808;
+  background: #f0efe9 !important;
+}
+.app-shell .timeline .scene-track .transition-marker {
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #171717;
+  background: #e3e2dc !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 2px var(--ui-subsection), 0 1px 3px rgba(0, 0, 0, .38);
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+.app-shell .timeline .scene-track .transition-marker:hover {
+  color: #080808;
+  background: #f0efe9 !important;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+.app-shell .timeline .scene-track .transition-marker.has-note {
+  height: 18px;
+  width: 18px;
+  min-width: 18px;
+  min-height: 18px;
+}
+.app-shell .timeline .transition-marker.has-note::after { display: none; }
+.app-shell .timeline .scene-image .clip-title {
+  padding-right: 21px;
+  overflow: visible;
+}
+.app-shell .timeline .scene-image .clip-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-shell .timeline .scene-image .clip-comment {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+/* Floating surfaces: restrained depth, no animated blur or canvas filters. */
+.app-shell :is(.view-toggle, .center-shot, .viewport-tools) {
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-edge);
+}
+.app-shell .view-toggle { width: auto; min-width: 30px; padding: 0 9px; gap: 6px; opacity: 1; }
+.app-shell .view-toggle > span { font-size: 10px; font-weight: 500; }
+.app-shell .viewport-tools { padding: 3px; gap: 3px; }
+.app-shell .viewport-tools button:disabled,
+.app-shell .viewport-tools button:disabled.active { color: var(--ui-muted); opacity: .38; background: transparent !important; }
+.app-shell :is(.quick-add-popover, .header-popover, .export-popover, .timeline-comment-popover, .modal, .toast) {
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-edge) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 38px rgba(0,0,0,.24) !important;
+}
+.app-shell :is(.shape-button, .asset-button, .quick-add button) { color: var(--ui-text); background: var(--ui-raised); border-color: transparent; }
+.app-shell :is(.shape-button, .asset-button, .quick-add button):hover { background: var(--ui-hover); transform: none; }
+.app-shell :is(button, input, select, textarea) { transition: background-color 120ms ease, color 120ms ease; }
+.app-shell :is(.scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment, .motion-key-tick) { transition: none; }
+.app-shell *::-webkit-scrollbar { width: 7px; height: 7px; }
+.app-shell *::-webkit-scrollbar-track { background: transparent; }
+.app-shell *::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 6px; background: #555; background-clip: padding-box; }
+.app-shell *::-webkit-scrollbar-thumb:hover { background-color: #777; }
+
+/* The panel shell clips rounded corners; only its body owns vertical scrolling. */
+.app-shell .simple-inspector { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.app-shell .simple-inspector > .right-tabs { flex: 0 0 44px; position: relative; }
+.app-shell .inspector-scroll { flex: 1 1 0; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; outline: none; }
+.app-shell .inspector-scroll { padding-bottom: 26px; scroll-padding-bottom: 26px; }
+.app-shell .inspector-scroll:focus-visible { box-shadow: inset 0 0 0 1px var(--ui-muted); }
+.app-shell .left-panel:not(.panel-collapsed) { overflow-x: hidden; overflow-y: auto; }
+.app-shell .inspector-scroll > :is(.object-section, .camera-edit-panel, .scenography-content) { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px; border: 0; }
+.app-shell .inspector-context { display: flex; flex-direction: column; gap: 4px; padding: 4px 4px 10px; }
+.app-shell .camera-edit-panel > .inspector-context { flex-direction: row; align-items: baseline; gap: 7px; }
+.app-shell .scenography-context-header { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; column-gap: 7px; padding: 7px 4px; white-space: nowrap; }
+.app-shell .scenography-context-header > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.app-shell .inspector-context strong { color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.app-shell :is(.inspector-context > span, .inspector-kind) { color: var(--ui-muted); font-size: 10px; line-height: 1.4; }
+.app-shell .inspector-identity { padding: 2px 2px 8px; }
+.app-shell .inspector-kind { display: block; margin: 0 0 7px 2px; }
+.app-shell .inspector-identity .object-name { font-size: 13px; min-height: 33px; }
+.app-shell .inspector-identity .field { margin-top: 10px; }
+.app-shell .inspector-identity textarea { font-size: 12px; }
+.app-shell .inspector-identity .replace-object-control { margin-top: 7px; }
+.app-shell .inspector-identity .replace-object-control > summary { width: fit-content; border: 0; color: var(--ui-muted); font-size: 10px; }
+.app-shell .inspector-identity .replace-object-control > summary:hover { background: var(--ui-raised); color: var(--ui-text); }
+.app-shell .inspector-group { flex: none; margin: 0; border: 1px solid var(--ui-edge); border-radius: 10px !important; background: var(--ui-subsection); }
+.app-shell .inspector-group > summary { min-height: 36px; padding: 0 11px; display: flex; align-items: center; gap: 7px; color: var(--ui-text); cursor: pointer; list-style: none; font-size: 11px; font-weight: 550; }
+.app-shell .inspector-group-fixed > .inspector-group-summary { min-height: 36px; padding: 0 11px; display: flex; align-items: center; gap: 7px; color: var(--ui-text); font-size: 11px; font-weight: 550; }
+.app-shell .inspector-group > summary::-webkit-details-marker { display: none; }
+.app-shell .inspector-group > summary > .inspector-group-chevron { color: var(--ui-muted); flex: none; transition: transform 120ms ease; }
+.app-shell .inspector-group[open] > summary > .inspector-group-chevron { transform: rotate(90deg); }
+.app-shell .inspector-group-icon { width: 17px; height: 17px; display: grid; place-items: center; flex: none; color: color-mix(in srgb, var(--ui-text) 72%, var(--ui-muted)); font-style: normal; }
+.app-shell .inspector-group > summary > small { margin-left: auto; font-size: 9px; font-weight: 400; color: var(--ui-muted); }
+.app-shell .inspector-group-fixed > .inspector-group-summary > small { margin-left: auto; font-size: 9px; font-weight: 400; color: var(--ui-muted); }
+.app-shell .inspector-group > summary:hover { background: var(--ui-raised); }
+.app-shell .inspector-group > summary:focus-visible { outline: 2px solid var(--premiere-accent, #dfab01); outline-offset: -2px; }
+.app-shell .inspector-group-body { padding: 3px 12px 13px; }
+.app-shell .inspector-group .camera-sliders { margin: 0; gap: 10px; }
+.app-shell .inspector-group .camera-sliders label { font-size: 11px; gap: 4px 8px; }
+.app-shell .inspector-group .camera-sliders strong,
+.app-shell .inspector-group .size-control strong { min-width: 51px; padding: 3px 6px; border-radius: 5px; color: var(--ui-text); background: var(--ui-raised); text-align: right; font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 450; }
+.app-shell .inspector-group .camera-sliders input[type='range'] { height: 14px; min-height: 14px; }
+.app-shell .inspector-group .size-control { margin: 13px 0 0; }
+.app-shell .inspector-group .size-control > div { align-items: center; }
+.app-shell .inspector-group .size-control > div > span { color: var(--ui-muted); font-size: 11px; text-transform: none; letter-spacing: 0; }
+.app-shell .inspector-group .group-title > span { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.app-shell .inspector-group .style-row { flex-wrap: wrap; height: auto; gap: 7px; padding: 4px 0; }
+.app-shell .inspector-group .camera-reset { margin-top: 13px; font-size: 10px; }
+.app-shell .inspector-motion-action { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.app-shell .inspector-motion-action > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text); font-size: 11px; }
+.app-shell .inspector-motion-action small { display: block; margin-top: 3px; color: var(--ui-muted); font-size: 9px; }
+.app-shell .inspector-motion-action .motion-create { flex: none; min-height: 29px; padding: 0 9px; border: 0; background: var(--ui-raised); color: var(--ui-text); font-size: 10px; }
+.app-shell .inspector-motion-action .motion-create:hover { background: var(--ui-hover); }
+.app-shell .inspector-group .motion-mode-field { margin-top: 12px; gap: 10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+.app-shell .inspector-group .motion-mode-field > span { color: var(--ui-muted); font-size: 10px; }
+.app-shell .inspector-group .motion-mode-field select { min-height: 29px; }
+.app-shell .inspector-help { margin: 9px 0 0; color: var(--ui-muted); font-size: 10px; line-height: 1.5; }
+.app-shell .inspector-group .vector-row:first-child { margin-top: 0; }
+.app-shell .inspector-group .background-panel { padding: 0 !important; border: 0; }
+.app-shell .inspector-group .background-panel .scene-subtitle { display: none; }
+.app-shell .inspector-group .background-actions { gap: 4px; }
+.app-shell .inspector-group .background-actions button { padding: 0 7px; gap: 4px; min-width: 0; }
+
+/* Scenography reads as notes, not another wall of controls. */
+.app-shell .scenography-content .scene-elements-section { padding: 0 !important; border: 0; min-height: 0; }
+.app-shell .inspector-list-heading { margin: 12px 3px 9px; display: flex; align-items: center; gap: 7px; color: var(--ui-muted); font-size: 11px; font-weight: 500; }
+.app-shell .inspector-list-heading > span { font-size: 10px; color: var(--ui-muted); }
+.app-shell .scenography-context-comments { margin: 0; padding: 0; border: 0; gap: 10px; }
+.app-shell :is(.scenography-note-card, .scenography-object) { display: block; padding: 10px; background: color-mix(in srgb, var(--ui-raised) 30%, var(--ui-surface)); border: 1px solid var(--ui-edge); border-radius: 10px !important; overflow: visible; }
+.app-shell .scenography-note-title { display: flex; align-items: center; gap: 8px; padding: 1px 2px 7px; color: var(--ui-text); }
+.app-shell .scenography-note-title strong { font-size: 11px; font-weight: 550; }
+.app-shell .scenography-note-title svg { color: var(--ui-muted); }
+.app-shell .scenography-outliner { margin: 0; gap: 7px; }
+.app-shell .scenography-object.selected { background: var(--ui-raised); border-color: color-mix(in srgb, var(--ui-muted) 30%, transparent); }
+.app-shell .scenography-object .outliner-item { display: flex; gap: 8px; padding: 0 2px; min-height: 24px; margin-bottom: 6px; font-size: 11px; font-weight: 500; color: var(--ui-text); border: 0; }
+.app-shell .scenography-object .outliner-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .scenography-object .outliner-item svg { color: var(--ui-muted); flex: none; }
+.app-shell :is(.scenography-add-comment, .scenography-comment-preview) { min-height: 27px; padding: 5px 6px; align-items: flex-start; font-size: 11px; line-height: 1.5; color: var(--ui-muted); background: transparent; }
+.app-shell :is(.scenography-add-comment, .scenography-comment-preview) > svg { flex: none; margin-top: 2px; }
+.app-shell :is(.scenography-add-comment, .scenography-comment-preview):hover { color: var(--ui-text); background: var(--ui-raised); }
+.app-shell .scenography-comment-preview { color: var(--ui-text); }
+.app-shell .scenography-comment-preview span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-shell .scenography-comment-editor { padding: 0; background: transparent; }
+.app-shell .scenography-comment-editor textarea { min-height: 90px; padding: 9px; font-size: 12px; line-height: 1.5; background: var(--ui-surface); border: 1px solid var(--ui-edge); }
+.app-shell .scenography-comment-editor .subtle { font-size: 10px; min-height: 28px; }
+.app-shell .scenography-comment-editor .comment-cancel { background: transparent; }
+.app-shell .scenography-comment-editor .comment-save { color: var(--ui-text); background: var(--ui-hover); }
+
+/* Clip edges occupy the upper lane; keyframe hit targets occupy the lower lane.
+   Endpoints face inward so neither the diamond nor its click area is clipped. */
+.app-shell .recorded-motion-segment { display: block; padding: 0; }
+.app-shell .motion-clip-caption { position: absolute; inset: 0 12px auto; height: 13px; display: flex; align-items: center; gap: 5px; pointer-events: none; overflow: hidden; white-space: nowrap; font-size: 8px; }
+.app-shell .motion-clip-caption small { margin-left: auto; font-size: 8px; }
+.app-shell .motion-key-ticks { inset: 14px 0 0; }
+.app-shell .motion-resize-handle { top: 0; bottom: auto; height: 12px; width: 11px; }
+.app-shell .motion-resize-handle::after { content: ''; position: absolute; top: 2px; bottom: 2px; left: 4px; width: 2px; border-radius: 1px; background: currentColor; opacity: .65; }
+.app-shell .motion-key-tick,
+.app-shell .motion-key-tick.selected { width: 16px; height: 14px; top: 50%; display: grid; place-items: center; transform: translate(-50%, -50%); background: transparent; border: 0; box-shadow: none; }
+.app-shell .motion-key-tick[data-edge='start'] { transform: translate(0, -50%); }
+.app-shell .motion-key-tick[data-edge='end'] { transform: translate(-100%, -50%); }
+.app-shell .motion-key-tick::before { content: ''; width: 7px; height: 7px; border: 1px solid #ffc7c7; border-radius: 1px; background: #ff7777; transform: rotate(45deg); }
+.app-shell .motion-key-tick:is(:hover, :focus-visible, .selected)::before { background: #fff; border-color: #fff; }
+.app-shell .motion-key-tick:focus-visible { outline: 1px solid #fff; outline-offset: -1px; }
+
+/* The time scale and playhead must remain readable above every clip. */
+.app-shell .timeline-ruler {
+  min-height: var(--timeline-ruler-height);
+  cursor: crosshair;
+  background-color: var(--ui-subsection) !important;
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--ui-muted) 42%, transparent) 1px, transparent 1px);
+  background-position: left bottom;
+  background-repeat: repeat-x;
+  background-size: var(--timeline-second-width) 7px;
+}
+.app-shell .timeline-ruler span { top: 3px; color: var(--ui-muted); font-size: 8px; font-variant-numeric: tabular-nums; }
+.app-shell .timeline :is(.track, .ruler) > i {
+  z-index: 80;
+  width: 2px;
+  transform: translateX(-1px);
+  background: #f0c547;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .22), 0 0 5px rgba(240, 197, 71, .32);
+}
+.app-shell .motion-point-hold { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--ui-edge); }
+.app-shell .motion-point-hold label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 8px; color: var(--ui-muted); font-size: 10px; }
+.app-shell .motion-point-hold label strong { color: var(--ui-text); font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 500; }
+.app-shell .motion-point-hold input { grid-column: 1 / -1; width: 100%; }
+.app-shell .motion-point-hold .subtle { margin-top: 7px; }
+.app-shell .motion-point-hold > small { display: block; margin-top: 7px; color: var(--ui-muted); font-size: 9px; }
+
+/* One continuous element column, with a quiet rounded selection per row. */
+.app-shell .timeline :is(.track-label, .ruler-label) { margin: 0; min-height: 100%; align-self: stretch; padding-right: 9px; border: 0 !important; border-radius: 0 !important; background: var(--timeline-label-base) !important; color: var(--ui-text); }
+.app-shell .timeline .ruler-label { padding-left: 10px; font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: .01em; color: var(--ui-muted); }
+.app-shell .timeline .track-pair.active .track-label { background: var(--ui-hover) !important; }
+.app-shell .timeline .scene-label { padding-left: 10px; box-shadow: none !important; }
+.app-shell .timeline .scene-label b { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 550; }
+.app-shell .timeline .scene-label > svg { color: var(--ui-muted); }
+.app-shell .timeline .movement-label { padding-left: 25px; }
+.app-shell .timeline .movement-hierarchy { color: var(--ui-muted); gap: 7px; font-size: 10px; }
+.app-shell .timeline .timeline-object-label { padding-left: 5px; gap: 6px; }
+.app-shell .timeline-object-label .row-grip { color: var(--ui-muted); opacity: .3; width: 10px; }
+.app-shell .timeline-object-label:hover .row-grip { opacity: .8; }
+.app-shell .timeline .track-label .row-name { font-size: 11px; font-weight: 450; color: var(--ui-text); }
+.app-shell.theme-light .timeline .element-thumbnail { color: var(--ui-text) !important; }
+.app-shell .timeline-object-label .row-action { width: 22px; color: var(--ui-muted); }
+.app-shell .timeline-object-label .row-action:hover { color: var(--ui-text); background: var(--ui-raised); }
+.app-shell .timeline-object-label .row-action.danger:hover { color: #ff8585; }
+
+/* Frame selection and the two WASD targets form one segmented control. */
+.app-shell .free-view-switch { position: absolute; z-index: 4; top: 12px; left: 12px; display: flex; gap: 2px; padding: 3px; color: var(--ui-text); background: color-mix(in srgb, var(--ui-surface) 94%, transparent); border: 1px solid var(--ui-edge); border-radius: 9px; box-shadow: 0 5px 18px rgba(0,0,0,.14); }
+.app-shell .free-view-switch button { min-height: 27px; padding: 0 9px; display: flex; align-items: center; gap: 5px; color: var(--ui-muted); background: transparent; border: 0; border-radius: 6px; font-size: 10px; }
+.app-shell .free-view-switch button:hover { color: var(--ui-text); background: var(--ui-raised); }
+.app-shell .free-view-switch button.active { color: var(--ui-text); background: var(--ui-hover); }
+.app-shell .free-view-switch button.active svg { color: var(--premiere-accent, #dfab01); }
+
+/* Camera preview is image-only and can collapse to a single unobtrusive icon. */
+.app-shell .live-camera-preview { overflow: visible; }
+.app-shell .live-camera-preview-open { width: 100%; padding: 0; display: block; overflow: hidden; background: transparent; border: 0; border-radius: inherit; }
+.app-shell .live-camera-preview-label { display: none !important; }
+.app-shell .live-camera-preview-find { position: absolute; z-index: 2; top: 5px; left: 5px; width: 25px; height: 25px; min-height: 0; padding: 0; display: grid; place-items: center; color: #ddd; background: rgba(20,20,20,.72); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; }
+.app-shell .live-camera-preview-find:hover { color: #191919; background: var(--premiere-accent, #dfab01); }
+.app-shell .live-camera-preview-collapse { position: absolute; z-index: 2; top: 5px; right: 5px; width: 25px; height: 25px; min-height: 0; padding: 0; display: grid; place-items: center; color: #ddd; background: rgba(20,20,20,.72); border: 0; border-radius: 6px; opacity: 0; }
+.app-shell .live-camera-preview:hover .live-camera-preview-collapse,
+.app-shell .live-camera-preview-collapse:focus-visible { opacity: 1; }
+.app-shell .live-camera-preview-collapse:hover { color: #fff; background: rgba(20,20,20,.92); }
+.app-shell .live-camera-preview-collapsed { position: absolute; z-index: 5; right: 12px; bottom: 12px; width: 34px; height: 34px; min-height: 0; padding: 0; display: grid; place-items: center; color: var(--ui-text); background: var(--ui-surface); border: 1px solid var(--ui-edge); border-radius: 9px; box-shadow: 0 5px 18px rgba(0,0,0,.18); }
+.app-shell .live-camera-preview-collapsed:hover { background: var(--ui-hover); color: var(--premiere-accent, #dfab01); }
+
+/* In modalità Frame i controlli restano ancorati ai bordi interni. */
+.app-shell .camera-mode .view-toggle {
+  left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
+  top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+}
+.app-shell .camera-mode .viewport-top-right {
+  left: auto;
+  right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
+  top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+}
+.app-shell .camera-mode .viewport-bottom-left {
+  left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
+  bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+}
+
+/* Define the two work surfaces without making the editor feel boxed-in. */
+.app-shell :is(.viewport, .timeline) {
+  border: 1px solid var(--ui-edge) !important;
+  box-shadow: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell :is(button, input, select, textarea) { transition: none; }
+}
+@media (max-width: 820px) {
+  .app-shell { --editor-gutter: 3px; padding-bottom: 3px; }
+  .app-shell .simple-inspector .right-tabs { gap: 3px; padding: 8px 6px 0; }
+  .app-shell .simple-inspector .right-tabs button { gap: 3px; padding: 0 2px; }
+}

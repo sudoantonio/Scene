@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
-import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, ProjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
+import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from '../domain/animation';
 
 type RecordingSession = {
@@ -42,6 +42,7 @@ type EditorState = {
   setGizmoMode(value: 'translate' | 'rotate' | 'scale'): void;
   addObject(kind: ObjectKind): void;
   addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
+  addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number }): void;
   replaceObject(id: string, replacement: { kind: ObjectKind; name?: string; text?: string; screenSpace?: boolean; asset?: SceneObject['asset'] }): void;
   addShot(): void;
@@ -58,7 +59,7 @@ type EditorState = {
   setSceneNote(id: string, text: string): void;
   updateSettings(patch: Partial<AbacoProject['settings']>): void;
   updateLighting(patch: Partial<LightingSettings>): void;
-  updateBackground(background: BackgroundSettings): void;
+  updateBackground(background: BackgroundSettings, sceneId?: string): void;
   resetFraming(): void;
   setCameraFraming(sceneId: string, position: Vec3, rotation: Vec3, target: Vec3): void;
   reorderObjects(sourceId: string, targetId: string): void;
@@ -70,6 +71,7 @@ type EditorState = {
   setTransform(id: string, transform: Transform): void;
   keyPose(id: string): void;
   updateMotionPoint(objectId: string, keyframeId: string, position: Vec3): void;
+  setMotionPointHold(objectId: string, keyframeId: string, holdFrames: number): void;
   moveMotionPoint(objectId: string, keyframeId: string, frame: number): void;
   resizeMotionRange(objectId: string, sceneId: string, startFrame: number, endFrame: number): void;
   deleteMotionPoint(objectId: string, keyframeId: string): void;
@@ -84,6 +86,50 @@ type EditorState = {
 };
 
 const snapshot = (project: AbacoProject) => structuredClone(project);
+const normalizeProjectData = (project: AbacoProject) => {
+  const next = snapshot(project);
+  for (const object of next.objects) {
+    if (object.kind === 'audio') {
+      object.audio.muted = false;
+      object.audio.loop = false;
+      object.audio.trimStart = 0;
+      object.audio.trimEnd = object.audio.duration;
+      object.audio.fadeIn = 0;
+      object.audio.fadeOut = 0;
+      const firstAudible = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).sort((a, b) => a.frame - b.frame)[0]?.frame ?? next.settings.frameStart;
+      const audioEnd = firstAudible + Math.max(1, Math.round(object.audio.duration * next.settings.fps));
+      object.sceneIds = [];
+      object.visible = false;
+      object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility');
+      if (firstAudible > next.settings.frameStart) putKey(object, next.settings.frameStart, 'visibility', false, 'constant');
+      putKey(object, firstAudible, 'visibility', true, 'constant');
+      putKey(object, audioEnd, 'visibility', false, 'constant');
+      next.settings.frameEnd = Math.max(next.settings.frameEnd, audioEnd - 1);
+      continue;
+    }
+    if (object.kind !== 'plane') continue;
+    object.transform.scale = [THREE.MathUtils.clamp(object.transform.scale[0], .05, 12), THREE.MathUtils.clamp(object.transform.scale[1], .05, 12), 1];
+    for (const key of object.keyframes) {
+      if (key.property === 'scale' && Array.isArray(key.value)) key.value = [THREE.MathUtils.clamp(key.value[0], .05, 12), THREE.MathUtils.clamp(key.value[1], .05, 12), 1];
+    }
+  }
+  const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+  for (let index = 1; index < scenes.length; index += 1) {
+    const boundary = scenes[index].frame;
+    for (const object of next.objects) {
+      if (object.kind === 'camera' || object.kind.includes('light')) continue;
+      const spansBoundary = !object.sceneIds.length || (object.sceneIds.includes(scenes[index - 1].id) && object.sceneIds.includes(scenes[index].id));
+      if (!spansBoundary || !evaluateProperty(object, 'visibility', boundary - 1) || evaluateProperty(object, 'visibility', boundary)) continue;
+      const resume = object.keyframes
+        .filter((key) => key.property === 'visibility' && key.frame > boundary && key.frame <= boundary + 2 && key.value === true)
+        .sort((a, b) => a.frame - b.frame)[0];
+      if (!resume) continue;
+      object.keyframes = object.keyframes.filter((key) => !(key.property === 'visibility' && key.frame === boundary && key.value === false));
+      resume.frame = boundary;
+    }
+  }
+  return next;
+};
 const LOCAL_DRAFT_KEY = 'abaco-animatic-project-v1';
 const flushPendingCameraEdit = () => {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('abaco:flush-camera-edit'));
@@ -91,7 +137,7 @@ const flushPendingCameraEdit = () => {
 const initialProject = () => {
   try {
     const saved = typeof localStorage === 'undefined' ? null : localStorage.getItem(LOCAL_DRAFT_KEY);
-    return saved ? ProjectSchema.parse(JSON.parse(saved)) : createProject();
+    return saved ? normalizeProjectData(ProjectSchema.parse(JSON.parse(saved))) : createProject();
   } catch {
     return createProject();
   }
@@ -291,7 +337,7 @@ export const useEditor = create<EditorState>((set, get) => {
   return {
     project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
     newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
-    loadProject: (project, projectPath) => set({ project, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, currentFrame: project.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }),
+    loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
     select: (selectedId) => set((state) => ({
       selectedId,
@@ -365,6 +411,27 @@ export const useEditor = create<EditorState>((set, get) => {
       next.objects.push(object);
       commit(next);
       set({ selectedId: object.id });
+    },
+    addAudio: (asset) => {
+      const state = get();
+      const object = createSceneObject('audio', state.project.objects.filter((item) => item.kind === 'audio').length + 1);
+      object.name = asset.name;
+      object.asset.sourcePath = asset.sourcePath;
+      object.audio.duration = Math.max(0, asset.duration);
+      object.audio.waveform = asset.waveform.slice(0, 256);
+      const next = snapshot(state.project);
+      const clipStart = Math.max(next.settings.frameStart, state.currentFrame);
+      const audioFrames = Math.max(1, Math.round(asset.duration * next.settings.fps));
+      const clipEnd = clipStart + audioFrames;
+      object.sceneIds = [];
+      object.visible = false;
+      if (clipStart > next.settings.frameStart) putKey(object, next.settings.frameStart, 'visibility', false, 'constant');
+      putKey(object, clipStart, 'visibility', true, 'constant');
+      putKey(object, clipEnd, 'visibility', false, 'constant');
+      next.settings.frameEnd = Math.max(next.settings.frameEnd, clipEnd - 1);
+      next.objects.push(object);
+      commit(next);
+      set({ selectedId: object.id, selectedMotion: undefined });
     },
     addBlendAsset: (asset) => {
       const state = get();
@@ -506,8 +573,12 @@ export const useEditor = create<EditorState>((set, get) => {
       const duration = sceneEnd - scene.frame;
       next.cameraCuts = next.cameraCuts.filter((cut) => cut.id !== id);
       if (!next.cameraCuts.some((cut) => cut.cameraId === scene.cameraId)) next.objects = next.objects.filter((object) => object.id !== scene.cameraId);
+      // An empty sceneIds list means globally present. Remove objects local
+      // only to the deleted scene before pruning their membership.
+      next.objects = next.objects.filter((object) => !(object.sceneIds.length === 1 && object.sceneIds[0] === id));
       for (const cut of next.cameraCuts) if (cut.frame >= sceneEnd) cut.frame -= duration;
       for (const object of next.objects) {
+        object.sceneIds = object.sceneIds.filter((sceneId) => sceneId !== id);
         object.keyframes = object.keyframes
           .filter((key) => key.frame < scene.frame || key.frame >= sceneEnd)
           .map((key) => key.frame >= sceneEnd ? { ...key, frame: key.frame - duration } : key);
@@ -517,6 +588,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       next.comments = next.comments
         .filter((comment) => comment.sceneId !== id && comment.fromSceneId !== id && comment.toSceneId !== id)
+        .filter((comment) => comment.targetIds.every((targetId) => next.objects.some((object) => object.id === targetId)))
         .map((comment) => comment.startFrame >= sceneEnd
           ? { ...comment, startFrame: comment.startFrame - duration, endFrame: comment.endFrame - duration }
           : comment.endFrame >= scene.frame
@@ -690,10 +762,15 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     updateSettings: (patch) => {
       const next = snapshot(get().project);
-      next.settings = { ...next.settings, ...patch };
+      for (const property of ['fps', 'frameStart', 'frameEnd', 'resolutionX', 'resolutionY'] as const) {
+        const value = patch[property];
+        if (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0
+          && (property !== 'fps' || value <= 120)) next.settings[property] = value;
+      }
       next.settings.frameEnd = Math.max(next.settings.frameStart, next.settings.frameEnd);
+      if (JSON.stringify(next.settings) === JSON.stringify(get().project.settings)) return;
       commit(next);
-      set((state) => ({ currentFrame: Math.min(state.currentFrame, next.settings.frameEnd) }));
+      set((state) => ({ currentFrame: Math.max(next.settings.frameStart, Math.min(state.currentFrame, next.settings.frameEnd)) }));
     },
     updateLighting: (patch) => {
       const state = get();
@@ -704,10 +781,10 @@ export const useEditor = create<EditorState>((set, get) => {
       scene.lighting = { ...scene.lighting, ...patch };
       commit(next);
     },
-    updateBackground: (background) => {
+    updateBackground: (background, sceneId) => {
       const state = get();
       const next = snapshot(state.project);
-      const scene = next.cameraCuts.find((cut) => cut.frame === activeSceneStart(next, state.currentFrame));
+      const scene = next.cameraCuts.find((cut) => sceneId ? cut.id === sceneId : cut.frame === activeSceneStart(next, state.currentFrame));
       if (!scene) return;
       scene.background = structuredClone(background);
       commit(next);
@@ -773,16 +850,29 @@ export const useEditor = create<EditorState>((set, get) => {
     resizeObjectPresence: (objectId, sceneId, requestedStart, requestedEnd) => {
       const next = snapshot(get().project);
       const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
-      const range = sceneRange(next, sceneId);
-      if (!object || !range) return;
+      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+      const sourceIndex = scenes.findIndex((scene) => scene.id === sceneId);
+      if (!object || sourceIndex < 0) return;
       ensureSceneSnapshots(next);
-      const startFrame = Math.max(range.scene.frame, Math.min(range.end - 1, Math.round(requestedStart)));
-      const endFrame = Math.max(startFrame + 1, Math.min(range.end, Math.round(requestedEnd)));
-      object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility' || key.frame < range.scene.frame || key.frame >= range.end);
-      putKey(object, range.scene.frame, 'visibility', startFrame === range.scene.frame, 'constant');
-      if (startFrame > range.scene.frame) putKey(object, startFrame, 'visibility', true, 'constant');
-      if (endFrame < range.end) putKey(object, endFrame, 'visibility', false, 'constant');
-      if (object.sceneIds.length && !object.sceneIds.includes(sceneId)) object.sceneIds.push(sceneId);
+      const projectStart = next.settings.frameStart;
+      const projectEnd = next.settings.frameEnd + 1;
+      const startFrame = Math.max(projectStart, Math.min(projectEnd - 1, Math.round(requestedStart)));
+      const endFrame = Math.max(startFrame + 1, Math.min(projectEnd, Math.round(requestedEnd)));
+      const sceneIndexAt = (frame: number) => scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? projectEnd));
+      const firstIndex = Math.min(sourceIndex, Math.max(0, sceneIndexAt(startFrame)));
+      const lastIndex = Math.max(sourceIndex, Math.max(0, sceneIndexAt(endFrame - 1)));
+      for (let index = firstIndex; index <= lastIndex; index += 1) {
+        const scene = scenes[index];
+        const sceneEnd = scenes[index + 1]?.frame ?? projectEnd;
+        const visibleStart = Math.max(startFrame, scene.frame);
+        const visibleEnd = Math.min(endFrame, sceneEnd);
+        if (visibleStart >= visibleEnd) continue;
+        object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility' || key.frame < scene.frame || key.frame >= sceneEnd);
+        putKey(object, scene.frame, 'visibility', visibleStart === scene.frame, 'constant');
+        if (visibleStart > scene.frame) putKey(object, visibleStart, 'visibility', true, 'constant');
+        if (visibleEnd < sceneEnd) putKey(object, visibleEnd, 'visibility', false, 'constant');
+        if (object.sceneIds.length && !object.sceneIds.includes(scene.id)) object.sceneIds.push(scene.id);
+      }
       commit(next);
     },
     deleteObjectFromScene: (objectId, sceneId) => {
@@ -895,6 +985,7 @@ export const useEditor = create<EditorState>((set, get) => {
       });
     },
     setTransform: (id, transform) => {
+      if (!recordingProperties.every((property) => isValidAnimationValue(property, transform[property]))) return;
       const state = get();
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
@@ -903,9 +994,10 @@ export const useEditor = create<EditorState>((set, get) => {
       let object = next.objects.find((item) => item.id === id);
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object) return;
+      if (object.kind === 'plane') transform = { ...transform, scale: [THREE.MathUtils.clamp(transform.scale[0], .05, 12), THREE.MathUtils.clamp(transform.scale[1], .05, 12), 1] };
       const motionActive = state.recordingMotion?.objectId === id && state.recordingMotion.sceneId === scene?.id;
       const session = scene && state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
-      const sessionActive = Boolean(session) && !object.kind.includes('light');
+      const sessionActive = Boolean(session) && object.kind !== 'audio' && !object.kind.includes('light');
       const range = scene ? sceneRange(next, scene.id) : undefined;
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
@@ -967,6 +1059,23 @@ export const useEditor = create<EditorState>((set, get) => {
       key.value = structuredClone(position);
       key.purpose = 'motion';
       key.source = 'user';
+      commit(next);
+    },
+    setMotionPointHold: (objectId, keyframeId, requestedHoldFrames) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === objectId);
+      const reference = object?.keyframes.find((item) => item.id === keyframeId && item.property === 'position');
+      if (!object || !reference) return;
+      const referenceScene = next.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((scene) => scene.frame <= reference.frame);
+      const referenceSceneEnd = next.cameraCuts.filter((scene) => scene.frame > (referenceScene?.frame ?? reference.frame)).sort((a, b) => a.frame - b.frame)[0]?.frame ?? next.settings.frameEnd + 1;
+      const followingFrame = object.keyframes
+        .filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame > reference.frame && key.frame < referenceSceneEnd)
+        .sort((a, b) => a.frame - b.frame)[0]?.frame;
+      const maximum = followingFrame === undefined ? 0 : Math.max(0, followingFrame - reference.frame - 1);
+      const holdFrames = Math.max(0, Math.min(maximum, Math.round(requestedHoldFrames)));
+      for (const key of object.keyframes) {
+        if (key.frame === reference.frame && key.purpose === 'motion') key.holdFrames = holdFrames;
+      }
       commit(next);
     },
     moveMotionPoint: (objectId, keyframeId, requestedFrame) => {
@@ -1119,12 +1228,12 @@ export const useEditor = create<EditorState>((set, get) => {
     undo: () => set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;
-      return { project: previous, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
+      return { project: previous, currentFrame: Math.max(previous.settings.frameStart, Math.min(previous.settings.frameEnd, state.currentFrame)), selectedId: previous.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedMotion: undefined, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
     redo: () => set((state) => {
       const next = state.future[0];
       if (!next) return state;
-      return { project: next, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
+      return { project: next, currentFrame: Math.max(next.settings.frameStart, Math.min(next.settings.frameEnd, state.currentFrame)), selectedId: next.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedMotion: undefined, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
   };
 });

@@ -1,4 +1,4 @@
-import { Box, ChevronRight, Circle, Cone, Cylinder, FileBox, Image, KeyRound, Palette, PanelRightClose, PanelRightOpen, RefreshCw, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -6,17 +6,19 @@ import type { Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import ElementsPanel from './ElementsPanel';
 import LightingPanel from './LightingPanel';
+import AudioPanel from './AudioPanel';
 import BackgroundPanel from './BackgroundPanel';
+import InspectorGroup from './InspectorGroup';
 
 type InspectorPanel = 'edit' | 'scene' | 'light';
 const motionNames = { constant: 'Stacco', bezier: 'Fluido', linear: 'Lineare' } as const;
 
-function NumberField({ value, onChange, label }: { value: number; onChange(value: number): void; label: string }) {
-  return <label className="number-field"><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(3))} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+function NumberField({ value, onChange, label, name }: { value: number; onChange(value: number): void; label: string; name: string }) {
+  return <label className="number-field"><span>{label}</span><input aria-label={name} type="number" step="0.1" value={Number(value.toFixed(3))} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
 
 function VectorFields({ label, value, onChange }: { label: string; value: Vec3; onChange(value: Vec3): void }) {
-  return <div className="vector-row"><span>{label}</span><div>{(['X', 'Y', 'Z'] as const).map((axis, index) => <NumberField key={axis} label={axis} value={value[index]} onChange={(number) => { const next = [...value] as Vec3; next[index] = number; onChange(next); }} />)}</div></div>;
+  return <div className="vector-row"><span>{label}</span><div>{(['X', 'Y', 'Z'] as const).map((axis, index) => <NumberField key={axis} label={axis} name={`${label} ${axis}`} value={value[index]} onChange={(number) => { const next = [...value] as Vec3; next[index] = number; onChange(next); }} />)}</div></div>;
 }
 
 const styleColors = ['#2f3437', '#9cabb8', '#d97373', '#dfab01', '#448361', '#337ea9', '#9065b0'];
@@ -33,10 +35,12 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const startMotion = useEditor((state) => state.startMotion);
   const keyPose = useEditor((state) => state.keyPose);
   const setTransitionMode = useEditor((state) => state.setTransitionMode);
+  const setMotionPointHold = useEditor((state) => state.setMotionPointHold);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
   const resetFraming = useEditor((state) => state.resetFraming);
   const removeSelected = useEditor((state) => state.removeSelected);
-  const object = project.objects.find((item) => item.id === selectedId && item.kind !== 'camera' && !item.kind.includes('light'));
+  const selectedAudio = project.objects.find((item) => item.id === selectedId && item.kind === 'audio');
+  const object = project.objects.find((item) => item.id === selectedId && item.kind !== 'audio' && item.kind !== 'camera' && !item.kind.includes('light'));
   const transform = object ? evaluateTransform(object, frame) : undefined;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1));
@@ -48,11 +52,14 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const positionControls: Array<[string, 0 | 1 | 2, number, number]> = object?.screenSpace
     ? [['Orizzontale', 0, -1.6, 1.6], ['Verticale', 2, -1.6, 1.6]]
     : [['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20]];
-  const motionObject = object ?? camera;
+  const motionObject = selectedAudio ? undefined : object ?? camera;
   const motionMode = motionObject && activeScene
     ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= activeScene.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0]?.interpolation ?? 'constant'
     : 'constant';
   const motionActive = Boolean(motionObject && activeScene && selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === activeScene.id);
+  const selectedMotionPoint = motionActive ? motionObject?.keyframes.find((key) => key.property === 'position' && key.purpose === 'motion' && key.frame === frame) : undefined;
+  const nextMotionPoint = selectedMotionPoint ? motionObject?.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame > selectedMotionPoint.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0] : undefined;
+  const maximumHoldFrames = selectedMotionPoint && nextMotionPoint ? Math.max(0, nextMotionPoint.frame - selectedMotionPoint.frame - 1) : 0;
   const createMotionHere = () => {
     if (!motionObject || !activeScene) return;
     if (!motionActive) startMotion(motionObject.id, activeScene.id);
@@ -105,16 +112,28 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     } catch (error) { window.alert(error instanceof Error ? error.message : 'Sostituzione Blender non riuscita.'); }
   };
 
+  const motionControls = motionObject && activeScene && <InspectorGroup title="Movimento" icon={<Route size={13} />} defaultOpen>
+    <div className="inspector-motion-action"><span>{object ? object.name : 'Camera'}<small>{activeScene.name ?? 'Scena'}</small></span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div>
+    <label className="motion-mode-field"><span>Interpolazione</span><select disabled={!motionActive} aria-label={`Tipo movimento ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label>
+    {selectedMotionPoint && nextMotionPoint && <div className="motion-point-hold">
+      <label><span>Sosta al punto</span><strong>{((selectedMotionPoint.holdFrames ?? 0) / project.settings.fps).toFixed(2)} s</strong><input aria-label="Durata sosta al punto" type="range" min="0" max={maximumHoldFrames} step="1" value={Math.min(maximumHoldFrames, selectedMotionPoint.holdFrames ?? 0)} onChange={(event) => setMotionPointHold(motionObject.id, selectedMotionPoint.id, Number(event.target.value))} /></label>
+      <button className="subtle compact" disabled={!selectedMotionPoint.holdFrames} onClick={() => setMotionPointHold(motionObject.id, selectedMotionPoint.id, 0)}>Nessuna sosta</button>
+      <small>0,00 s attraversa il punto senza fermarsi.</small>
+    </div>}
+    {motionActive && !selectedMotionPoint && <p className="inspector-help">Seleziona un punto nella barra per regolarne la sosta.</p>}
+    {!motionActive && <p className="inspector-help">Seleziona un movimento nella timeline o crea un punto qui.</p>}
+  </InspectorGroup>;
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className="inspector simple-inspector">
-    {(panel !== 'edit' || !object) && <button className="panel-collapse panel-collapse-right" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>}
-    <nav className="right-tabs" aria-label="Sezioni pannello destro">{([
+    <nav className="right-tabs" aria-label="Sezioni pannello destro"><button className="inspector-collapse-tab" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
       ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <><BackgroundPanel /><ElementsPanel mode="scene" /></> : <>
-      {object && transform ? <section className="object-section edit-stack">
-        <div className="edit-group identity-group">
-          <div className="name-row"><input aria-label="Nome elemento" className="object-name" value={object.name} onChange={(event) => updateObject(object.id, { name: event.target.value || object.name })} /><button className="icon collapse-inline" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={14} /></button><button className="icon danger" title="Elimina" onClick={removeSelected}><Trash2 size={14} /></button></div>
+    <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : 'Controlli luce'} tabIndex={0}>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
+      {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
+        <div className="inspector-identity">
+          <span className="inspector-kind">{object.kind === 'text' ? 'Testo · 2D' : object.screenSpace ? 'Immagine · 2D' : 'Elemento · 3D'}</span>
+          <div className="name-row"><input aria-label="Nome elemento" className="object-name" value={object.name} onChange={(event) => updateObject(object.id, { name: event.target.value || object.name })} /><button className="icon danger" title="Elimina" onClick={removeSelected}><Trash2 size={14} /></button></div>
           {object.kind === 'text' && <label className="field"><span>Testo</span><textarea value={evaluateProperty(object, 'text', frame) as string} onChange={(event) => updateObject(object.id, { text: event.target.value })} /></label>}
           <details className="replace-object-control"><summary><RefreshCw size={13} /> Sostituisci</summary><div className="replace-object-menu">
             {!object.screenSpace && <>{([['cube', 'Cubo', Box], ['sphere', 'Sfera', Circle], ['cylinder', 'Cilindro', Cylinder], ['cone', 'Cono', Cone], ['plane', 'Piano', SquareDashed]] as const).map(([kind, label, Icon]) => <button key={kind} onClick={(event) => { replaceObject(object.id, { kind, name: label }); (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); }}><Icon size={13} />{label}</button>)}<button onClick={replaceWithBlendAsset}><FileBox size={13} />Asset Blender</button></>}
@@ -122,33 +141,31 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
           </div></details>
         </div>
 
-        <div className="edit-group compact-style">
-          <div className="group-title"><span><Palette size={13} /> Stile</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visibile</label></div>
-          <div className="style-row"><label className="color-picker" title="Scegli un colore"><input aria-label="Colore personalizzato" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Colore ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div>
-          <div className="size-control"><div><span>Dimensione</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Dimensione elemento" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
-        </div>
-
-        <div className="camera-sliders object-transform-sliders">
-          <div className="transform-slider-title">{object.screenSpace ? 'Posizione nel frame' : cameraView ? 'Posizione nella vista camera' : 'Posizione'}</div>
+        <InspectorGroup title="Posizione e dimensione" icon={<Move3d size={13} />} defaultOpen hint={object.screenSpace ? '2D' : cameraView ? 'Camera' : 'Spazio'}>
+          <div className="camera-sliders">
           {positionControls.map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Verticale' : label}</span><strong>{object.screenSpace ? `${Math.round(positionValues![axis] * 100)}%` : `${positionValues![axis].toFixed(1)} m`}</strong><input aria-label={`${label} elemento`} title={cameraView && axis === 1 ? 'Aumenta per allontanare il personaggio dalla camera' : undefined} type="range" min={cameraView && axis === 1 && !object.screenSpace ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step={object.screenSpace ? '.01' : '0.1'} value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
-          <div className="transform-slider-title rotation-title">Rotazione</div>
+          </div>
+          <div className="size-control"><div><span>Dimensione</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Dimensione elemento" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
+        </InspectorGroup>
+
+        <InspectorGroup title="Rotazione" icon={<Rotate3d size={13} />}><div className="camera-sliders">
           {([
             ['Inclina X', 0], ['Inclina Y', 1], ['Gira', 2],
           ] as const).map(([label, axis]) => <label key={`rotation-${axis}`}><span>{label}</span><strong>{transform.rotation[axis].toFixed(0)}°</strong><input aria-label={`${label} elemento`} type="range" min="-180" max="180" step="1" value={transform.rotation[axis]} onChange={(event) => changeTransformAxis('rotation', axis, Number(event.target.value))} /></label>)}
-          {object.screenSpace && <><div className="transform-slider-title rotation-title">Ritaglio</div>{(['Alto', 'Destra', 'Basso', 'Sinistra'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Ritaglio ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</>}
-        </div>
-
-        {motionObject && activeScene && <div className="motion-controls"><div className="motion-controls-heading"><span>Movimento</span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div><small className="motion-subject">{object ? object.name : 'Camera'} · {activeScene.name ?? 'Scena'}</small><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label={`Tipo movimento ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}
-
-        <details className="advanced-panel"><summary><ChevronRight size={14} /> Precisione</summary><div>
+        </div></InspectorGroup>
+        <InspectorGroup title="Aspetto" icon={<Palette size={13} />}><div className="group-title"><span>Colore</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visibile</label></div><div className="style-row"><label className="color-picker" title="Scegli un colore"><input aria-label="Colore personalizzato" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Colore ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
+        {object.screenSpace && <InspectorGroup title="Ritaglio" icon={<Crop size={13} />}><div className="camera-sliders">{(['Alto', 'Destra', 'Basso', 'Sinistra'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Ritaglio ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
+        {motionControls}
+        <InspectorGroup title="Valori numerici" icon={<Braces size={13} />}>
           <VectorFields label="Posizione" value={transform.position} onChange={(value) => changeTransform('position', value)} />
           <VectorFields label="Rotazione°" value={transform.rotation} onChange={(value) => changeTransform('rotation', value)} />
           <VectorFields label="Scala" value={transform.scale} onChange={(value) => changeTransform('scale', value.map((n) => Math.max(.001, n)) as Vec3)} />
-        </div></details>
-      </section> : <div className="empty-panel compact-empty camera-edit-panel"><div className="camera-edit-heading"><div><strong>Camera</strong><small>{activeScene?.name ?? 'Scena'}</small></div><button className="subtle camera-reset" onClick={resetFraming}>Ripristina</button></div>{activeScene && cameraTransform && <div className="camera-sliders"><label><span>Zoom</span><strong>{activeScene.framing.distance.toFixed(1)} m</strong><input aria-label="Zoom camera" type="range" min="0.5" max="30" step="0.1" value={Math.min(30, activeScene.framing.distance)} onChange={(event) => setCameraZoom(Number(event.target.value))} /></label>{([
+        </InspectorGroup>
+      </section> : <div className="camera-edit-panel"><header className="inspector-context"><strong>Camera</strong><span>{activeScene?.name ?? 'Scena'}</span></header>{activeScene && cameraTransform && <InspectorGroup title="Inquadratura" icon={<Frame size={13} />} defaultOpen><div className="camera-sliders"><label><span>Distanza</span><strong>{activeScene.framing.distance.toFixed(1)} m</strong><input aria-label="Zoom camera" type="range" min="0.5" max="30" step="0.1" value={Math.min(30, activeScene.framing.distance)} onChange={(event) => setCameraZoom(Number(event.target.value))} /></label>{([
         ['Orizzontale', 0, -20, 20], ['Profondità', 1, -20, 20], ['Altezza', 2, -5, 20],
-      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={min} max={max} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div>}{motionObject && activeScene && <div className="motion-controls camera-motion-controls"><div className="motion-controls-heading"><span>Movimento camera</span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Crea qui</button></div><label className="motion-mode-field"><span>Tipo</span><select disabled={!motionActive} aria-label="Tipo movimento camera" value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label></div>}</div>}
+      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={Math.min(min, cameraTransform.position[axis])} max={Math.max(max, cameraTransform.position[axis])} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div><button className="subtle camera-reset" onClick={resetFraming}><RefreshCw size={12} /> Ripristina camera</button></InspectorGroup>}{motionControls}</div>}
 
     </>}
+    </div>
   </aside>;
 }

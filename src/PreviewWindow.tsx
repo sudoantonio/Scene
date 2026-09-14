@@ -1,36 +1,15 @@
 import { Canvas } from '@react-three/fiber';
 import { Grid, Line } from '@react-three/drei';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import * as THREE from 'three';
-import { evaluateProperty, evaluateTransform } from './domain/animation';
-import type { AbacoProject, SceneObject } from './domain/schema';
-import { SceneBackground, ShotCamera, ThumbnailItem } from './components/Viewport';
+import type { AbacoProject } from './domain/schema';
+import { ReadonlyScreenLayers, SceneBackground, ShotCamera, ThumbnailItem, WebGLContextGuard } from './components/Viewport';
 
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 
-function PreviewLayers({ objects, frame }: { objects: SceneObject[]; frame: number }) {
-  return <div className="preview-screen-layers">
-    {objects.filter((object) => object.screenSpace && evaluateProperty(object, 'visibility', frame)).map((object) => {
-      const transform = evaluateTransform(object, frame);
-      const crop = object.screenCrop;
-      const style = {
-        left: `${(transform.position[0] + 1) * 50}%`,
-        top: `${(1 - transform.position[2]) * 50}%`,
-        transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`,
-        '--layer-scale': String(Math.max(.1, transform.scale[0])),
-      } as CSSProperties;
-      return <div key={object.id} className="preview-screen-layer" style={style}>
-        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>
-          {object.kind === 'text'
-            ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span>
-            : <img src={object.asset.proxyPath} alt="" draggable={false} />}
-        </div>
-      </div>;
-    })}
-  </div>;
-}
-
 function CameraOutput({ state }: { state: PreviewState }) {
+  const [rendererGeneration, setRendererGeneration] = useState(0);
+  const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
   const { project, frame, theme } = state;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const scene = scenes.filter((item) => item.frame <= frame).at(-1) ?? scenes[0];
@@ -43,7 +22,8 @@ function CameraOutput({ state }: { state: PreviewState }) {
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
   return <div className="preview-monitor-frame" style={{ '--preview-aspect': String(aspect) } as CSSProperties}>
-    <Canvas shadows dpr={[1, 2]} gl={{ antialias: true }}>
+    <Canvas key={rendererGeneration} shadows dpr={[1, 2]} gl={{ antialias: true }}>
+      <WebGLContextGuard onLost={recoverRenderer} />
       <color attach="background" args={[theme === 'dark' ? '#3d3d3d' : '#f1f1ef']} />
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
@@ -54,18 +34,30 @@ function CameraOutput({ state }: { state: PreviewState }) {
       {project.objects.filter((object) => !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
       <ShotCamera object={camera} aspect={aspect} frame={frame} />
     </Canvas>
-    <PreviewLayers objects={project.objects} frame={frame} />
+    <ReadonlyScreenLayers objects={project.objects} frame={frame} />
   </div>;
 }
 
 export default function PreviewWindow() {
   const [state, setState] = useState<PreviewState | null>(null);
   useEffect(() => {
-    document.title = 'Inquadratura — Abaco Animatic';
-    const removeState = window.abaco?.onPreviewState(setState);
-    const removeFrame = window.abaco?.onPreviewFrame((frame) => setState((current) => current ? { ...current, frame } : current));
-    window.abaco?.getPreviewState().then((current) => { if (current) setState(current); }).catch(() => undefined);
-    return () => { removeState?.(); removeFrame?.(); };
+    document.title = 'Inquadratura — Scene';
+    let active = true;
+    let receivedState = false;
+    let latestFrame: number | undefined;
+    const removeState = window.abaco?.onPreviewState((current) => {
+      receivedState = true;
+      latestFrame = current.frame;
+      setState({ ...current, theme: 'dark' });
+    });
+    const removeFrame = window.abaco?.onPreviewFrame((frame) => {
+      latestFrame = frame;
+      setState((current) => current ? { ...current, frame } : current);
+    });
+    window.abaco?.getPreviewState().then((current) => {
+      if (active && current && !receivedState) setState({ ...current, frame: latestFrame ?? current.frame, theme: 'dark' });
+    }).catch(() => undefined);
+    return () => { active = false; removeState?.(); removeFrame?.(); };
   }, []);
   return <main className={`preview-monitor theme-${state?.theme ?? 'dark'}`}>
     {state ? <CameraOutput state={state} /> : <div className="preview-empty">In attesa dell’inquadratura…</div>}
