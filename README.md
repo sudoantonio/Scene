@@ -84,6 +84,8 @@ Packages are generated in `release/`: AppImage for Linux and ZIP for Apple Silic
 
 Scene is experimental and under active development. Its current feature set is intentionally small and focused on ABACO's internal workflow. Bug reports, adaptations, and integrations are welcome, provided they preserve an experience that remains simple and understandable for people who do not regularly work with 3D software.
 
+> **Development time:** two days. Blender has had a bit of a head start.
+
 ## License
 
 Scene is released under the [MIT License](LICENSE). You may use, modify, and distribute it under the terms of that license.
