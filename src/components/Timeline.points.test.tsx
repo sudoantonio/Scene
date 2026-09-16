@@ -44,6 +44,27 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().currentFrame).toBe(37);
   });
 
+  it('al secondo clic su una scena torna al suo inizio', () => {
+    render(<Timeline />);
+    const scene = screen.getByTitle('Scena 1');
+    vi.spyOn(scene, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
+    fireEvent.click(scene, { clientX: 360 });
+    expect(useEditor.getState().currentFrame).toBe(37);
+    fireEvent.click(scene, { clientX: 360 });
+    expect(useEditor.getState().currentFrame).toBe(1);
+  });
+
+  it('al secondo clic sul rettangolo di un elemento torna all’inizio della scena', () => {
+    useEditor.getState().addObject('cube');
+    render(<Timeline />);
+    const segment = screen.getByTitle(/Cubo 1 · frame/);
+    vi.spyOn(segment, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
+    fireEvent.click(segment, { clientX: 360 });
+    expect(useEditor.getState().currentFrame).toBe(37);
+    fireEvent.click(segment, { clientX: 360 });
+    expect(useEditor.getState().currentFrame).toBe(1);
+  });
+
   it.each([1, 72])('il punto al frame %s seleziona quel fotogramma senza ridimensionare', (frame) => {
     render(<Timeline />);
     const point = screen.getByRole('button', { name: `Punto movimento al frame ${frame}` });

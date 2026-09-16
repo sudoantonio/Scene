@@ -67,7 +67,8 @@ export const SceneObjectSchema = z.object({
     collectionName: z.string().default(''),
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
-  }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 }),
+    groundOffset: z.number().finite().nonnegative().default(1),
+  }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 }),
   audio: z.object({
     duration: z.number().finite().nonnegative().default(0),
     volume: z.number().finite().min(0).max(1).default(1),
@@ -87,9 +88,22 @@ export const SceneObjectSchema = z.object({
 });
 export type SceneObject = z.infer<typeof SceneObjectSchema>;
 
+export const DirectionPresetSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9-]*$/), label: z.string().min(1),
+  category: z.enum(['emotion', 'movement', 'camera']), version: z.number().int().positive(),
+  prompt: z.string().min(1).max(20000),
+});
+export type DirectionPreset = z.infer<typeof DirectionPresetSchema>;
+export const AnimationStandardSchema = z.object({
+  name: z.string().min(1).max(255), content: z.string().trim().min(1).max(500000),
+  attachedAt: z.string(),
+});
+export type AnimationStandard = z.infer<typeof AnimationStandardSchema>;
+
 export const CommentSchema = z.object({
   id: z.string().uuid(),
   text: z.string().min(1),
+  presets: z.array(DirectionPresetSchema).max(64).optional(),
   targetIds: z.array(z.string().uuid()),
   startFrame: z.number().int().positive(),
   endFrame: z.number().int().positive(),
@@ -157,6 +171,8 @@ export const ProjectSchema = z.object({
     resolutionY: z.number().int().positive(),
     units: z.literal('meters'),
   }),
+  animationStandard: AnimationStandardSchema.optional(),
+  animationBrief: z.string().optional(),
   objects: z.array(SceneObjectSchema),
   comments: z.array(CommentSchema),
   cameraCuts: z.array(CameraCutSchema),
@@ -230,7 +246,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
-    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1 },
+    asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 },
     audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] },
     screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };

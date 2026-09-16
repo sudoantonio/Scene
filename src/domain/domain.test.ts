@@ -30,7 +30,7 @@ describe('AbacoSceneV1', () => {
   it('mantiene un asset Blender come singolo oggetto validato', () => {
     const asset = createSceneObject('blend_asset', 1);
     asset.name = 'Personaggio';
-    asset.asset = { sourcePath: '/tmp/personaggio.blend', proxyPath: '/tmp/personaggio.glb', collectionName: 'Character', boundsCenter: [0, 0, 1.5], previewScale: .5 };
+    asset.asset = { sourcePath: '/tmp/personaggio.blend', proxyPath: '/tmp/personaggio.glb', collectionName: 'Character', boundsCenter: [0, 0, 1.5], previewScale: .5, groundOffset: .75 };
     const project = createProject();
     project.objects.push(asset);
     expect(ProjectSchema.parse(project).objects.at(-1)?.asset.previewScale).toBe(.5);
@@ -165,7 +165,7 @@ describe('scene indipendenti', () => {
     useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
     const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
     const positions = cube.keyframes.filter((key) => key.property === 'position').sort((a, b) => a.frame - b.frame);
-    expect(positions.map((key) => [key.frame, key.purpose])).toEqual([[1, 'snapshot'], [25, 'motion'], [40, 'motion']]);
+    expect(positions.map((key) => [key.frame, key.purpose])).toEqual([[1, 'motion'], [25, 'motion'], [40, 'motion']]);
     expect(evaluateTransform(cube, 25).position).toEqual([2, 0, 1]);
     expect(evaluateTransform(cube, 40).position).toEqual([6, 0, 1]);
   });
@@ -445,11 +445,21 @@ describe('scene indipendenti', () => {
 
   it('aggiunge un asset Blender con snapshot indipendenti', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
-    useEditor.getState().addBlendAsset({ sourcePath: '/tmp/personaggio.blend', proxyPath: '/tmp/personaggio.glb', collectionName: 'Character', name: 'Personaggio', boundsCenter: [0, 0, 1], previewScale: .8 });
+    useEditor.getState().addBlendAsset({ sourcePath: '/tmp/personaggio.blend', proxyPath: '/tmp/personaggio.glb', collectionName: 'Character', name: 'Personaggio', boundsCenter: [0, 0, 1], previewScale: .8, groundOffset: .8 });
     const asset = useEditor.getState().project.objects.find((object) => object.kind === 'blend_asset')!;
     expect(asset.name).toBe('Personaggio');
     expect(asset.keyframes.map((key) => key.property)).toEqual(['position', 'rotation', 'scale', 'visibility']);
+    expect(evaluateTransform(asset, 1).position[2]).toBeCloseTo(.8, 4);
     expect(evaluateTransform(asset, 1).rotation[2]).toBeCloseTo(45, 3);
+    useEditor.getState().setTransform(asset.id, { ...evaluateTransform(asset, 1), position: [2, 3, 5] });
+    useEditor.getState().alignObjectToGround(asset.id);
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === asset.id)!, 1).position).toEqual([2, 3, .8]);
+  });
+
+  it('seleziona un nuovo elemento con lo strumento sposta', () => {
+    useEditor.setState({ project: createProject(), gizmoMode: 'scale', selectedId: undefined, past: [], future: [] });
+    useEditor.getState().addObject('cube');
+    expect(useEditor.getState().gizmoMode).toBe('translate');
   });
 
   it('sostituisce un soggetto mantenendo identità, posizione, dimensione e movimento', () => {

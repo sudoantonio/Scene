@@ -7,7 +7,15 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1:]
 output_path = Path(argv[0])
 supported = {"MESH", "CURVE", "SURFACE", "META", "FONT"}
-source_objects = [obj for obj in bpy.context.scene.objects if obj.type in supported and not obj.hide_render]
+def explicitly_excluded(obj):
+    labels = [obj.name, *[collection.name for collection in obj.users_collection]]
+    normalized = " ".join(labels).casefold()
+    return "esclus" in normalized or "copia mesh" in normalized or obj.name.casefold().startswith("studio |")
+
+visible_objects = [obj for obj in bpy.context.scene.objects if obj.type in supported and not obj.hide_render and obj.visible_get()]
+source_objects = [obj for obj in visible_objects if not explicitly_excluded(obj)]
+if not source_objects:
+    source_objects = visible_objects
 if not source_objects:
     raise RuntimeError("Il file non contiene oggetti 3D visibili")
 
@@ -46,6 +54,7 @@ maximum = Vector((max(point.x for point in points), max(point.y for point in poi
 center = (minimum + maximum) * 0.5
 largest = max(maximum.x - minimum.x, maximum.y - minimum.y, maximum.z - minimum.z, 0.001)
 preview_scale = 2.0 / largest
+ground_offset = max(0.0, (center.z - minimum.z) * preview_scale)
 
 bpy.ops.object.select_all(action="DESELECT")
 for obj in preview_objects:
@@ -59,6 +68,7 @@ bpy.ops.export_scene.gltf(
 metadata = {
     "boundsCenter": [round(center.x, 6), round(center.y, 6), round(center.z, 6)],
     "previewScale": round(preview_scale, 8),
+    "groundOffset": round(ground_offset, 8),
     "meshCount": len(preview_objects),
 }
 print("ABACO_BLEND_ASSET=" + json.dumps(metadata))

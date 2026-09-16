@@ -1,3 +1,4 @@
+import { prepareAnimationProject, buildAnimationBrief } from '../src/domain/animation-handoff';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -186,7 +187,7 @@ function compactProject(project: AbacoProject) {
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, round(item)]));
     return value;
   };
-  const copy = structuredClone(project);
+  const copy = prepareAnimationProject(project);
   copy.objects.sort((a, b) => a.id.localeCompare(b.id));
   copy.objects.forEach((object) => {
     object.keyframes.sort((a, b) => a.frame - b.frame || a.property.localeCompare(b.property));
@@ -230,13 +231,13 @@ async function blenderCommand(extraFlatpakPermissions: string[] = []) {
   return { command: 'blender', prefix: [] as string[] };
 }
 
-type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; meshCount?: number };
+type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; meshCount?: number };
 const blendProxyJobs = new Map<string, Promise<BlendProxyMetadata>>();
 
 async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false): Promise<BlendProxyMetadata> {
   const resolvedSource = path.resolve(sourcePath);
   const resolvedProxy = path.resolve(proxyPath);
-  const markerPath = `${resolvedProxy}.v2.json`;
+  const markerPath = `${resolvedProxy}.v3.json`;
   const sourceStats = await fs.stat(resolvedSource);
   if (!force) {
     try {
@@ -338,7 +339,7 @@ ipcMain.handle('project:open', async () => {
 });
 
 ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; path?: string }) => {
-  const project = ProjectSchema.parse({ ...payload.project, updatedAt: new Date().toISOString() });
+  const project = ProjectSchema.parse(prepareAnimationProject({ ...payload.project, updatedAt: new Date().toISOString() }));
   let filePath = payload.path;
   if (!filePath) {
     const result = await dialog.showSaveDialog(mainWindow!, { defaultPath: 'scene.abaco.json', filters: [{ name: 'Scene', extensions: ['json'] }] });
@@ -404,7 +405,7 @@ ipcMain.handle('blendAsset:choose', async () => {
   return {
     sourcePath, proxyPath, collectionName: 'Scena Blender',
     name: path.basename(sourcePath, path.extname(sourcePath)),
-    boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale,
+    boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale, groundOffset: metadata.groundOffset,
   };
 });
 
@@ -414,7 +415,7 @@ ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: str
 });
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {
-  const project = ProjectSchema.parse(payload.project);
+  const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
   if (!project.comments.some((comment) => comment.status === 'pending')) {
     return { schemaVersion: 'BlenderPlanV1', summary: 'Esportazione della scena corrente senza istruzioni Astra.', assumptions: [], warnings: ['Nessun commento pending: sono state preservate scena, camera e animazioni esistenti.'], operations: [] };
   }
@@ -437,7 +438,7 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
 });
 
 ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {
-  const project = ProjectSchema.parse(payload.project);
+  const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
   const plan = BlenderPlanSchema.parse(payload.plan);
   const errors = validatePlan(project, plan);
   if (errors.length) throw new Error(errors.join('\n'));
@@ -459,6 +460,8 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
     const audioPath = path.join(tempDir, `audio_${version}.wav`);
     await fs.writeFile(projectBundlePath, JSON.stringify(portableProject, null, 2));
     await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project) }, null, 2));
+    await fs.writeFile(path.join(tempDir, 'ISTRUZIONI_ANIMAZIONE.md'), buildAnimationBrief(portableProject));
+    if (portableProject.animationStandard) await fs.writeFile(path.join(tempDir, 'STANDARD_ANIMAZIONE_ALLEGATO.md'), portableProject.animationStandard.content);
     await fs.writeFile(planPath, JSON.stringify(plan, null, 2));
     await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);
     const invocation = await blenderCommand([tempDir]);

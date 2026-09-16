@@ -1567,7 +1567,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .scenography-comment-editor { padding: 5px 6px 6px; background: rgba(169,130,32,.06); }
 .scenography-comment-control.compact .scenography-comment-editor { position: absolute; z-index: 4; right: 8px; width: min(280px, calc(100vw - 48px)); margin-top: 3px; border: .5px solid rgba(80,80,76,.3); box-shadow: 0 8px 20px rgba(0,0,0,.16); }
 .scenography-comment-editor textarea { width: 100%; min-height: 58px; padding: 6px 7px; resize: vertical; font-size: 10px; }
-.scenography-comment-editor > div { margin-top: 5px; display: flex; justify-content: flex-end; gap: 4px; }
+.scenography-comment-editor > .scenography-comment-actions { margin-top: 5px; display: flex; justify-content: flex-end; gap: 4px; }
 .scenography-comment-editor .icon { width: 25px; height: 25px; }
 .scenography-comment-editor .subtle { min-height: 25px; margin: 0; padding: 0 8px; }
 .theme-dark .scenography-object.selected { background: rgba(209,161,42,.11); border-color: rgba(217,173,50,.45); }
@@ -1868,3 +1868,50 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   background: #555650 !important;
 }
 .theme-light .timeline .track-pair.active .track-label { background: #686963 !important; }
+
+/* Compact direction presets; full instructions are stored with the project. */
+.direction-input { position: relative; min-width: 0; }
+.direction-input textarea { width: 100%; box-sizing: border-box; }
+.direction-group { padding-top: 8px; }
+.direction-group > small { display: block; margin-bottom: 1px; color: #a8adb5; font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.direction-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
+.direction-group .direction-badges { padding-top: 4px; }
+.direction-sequence-item { display: inline-flex; align-items: center; gap: 6px; }
+.direction-arrow { color: #9d8a51; font-size: 13px; line-height: 1; }
+.direction-badge { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 2px 5px 2px 9px; color: #f3f4f6; background: #49505a; border: 1px solid #646c77; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1; }
+.direction-badge.emotion { color: #ffe69a; background: #51451f; border-color: #8a742f; }
+.direction-badge.movement { color: #dbeaff; background: #2d465f; border-color: #466b91; }
+.direction-badge.camera { color: #dfd4ff; background: #44385d; border-color: #68558e; }
+.direction-badge button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; color: currentColor; background: rgba(255,255,255,.08); border: 0; border-radius: 50%; font: 15px/1 system-ui; cursor: pointer; }
+.direction-badge button:hover { background: rgba(255,255,255,.18); }
+.direction-badge button:disabled { opacity: .25; cursor: default; }
+.direction-order-controls { display: inline-flex; gap: 2px; margin-left: 1px; }
+.direction-order-controls button { width: 16px; height: 16px; font-size: 15px; }
+.direction-preview { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; width: 100%; }
+.direction-preview .direction-badges { padding: 0; }
+.direction-preview .direction-badge { min-height: 22px; padding: 3px 9px; }
+.direction-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.direction-hint { display: block; color: #a8adb5; font-size: 11px; line-height: 1.5; margin: 7px 0; }
+.preset-menu { position: relative; max-height: 230px; overflow-y: auto; background: #202328; border: 1px solid #575c64; border-radius: 8px; padding: 5px; margin-top: 5px; }
+.preset-menu button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; padding: 9px 12px; border: 0; background: transparent; color: #eef0f3; border-radius: 5px; }
+.preset-menu button.active { background: #3c414a; color: #f8d25c; }
+.preset-menu small { font-size: 10px; color: #afb5bf; }
+.preset-menu p { padding: 8px; font-size: 12px; }
+.standard-panel { padding: 0 22px 18px; display: grid; gap: 14px; }
+.standard-panel p { margin: 4px 0; line-height: 1.5; }
+.standard-panel small { display: block; color: #a8adb5; line-height: 1.5; }
+.standard-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.standard-attached { padding: 14px; border: 1px solid #555b64; border-radius: 8px; display: grid; gap: 10px; }
+.standard-attached pre { max-height: 260px; overflow: auto; white-space: pre-wrap; font: 12px/1.6 system-ui; }
+.timeline-comment-popover:has(.direction-input) { max-height: 85vh; overflow-y: auto; }
+.direction-input textarea { min-height: 100px; padding: 10px; margin-top: 8px; resize: vertical; }
+
+.scenography-standard { border: 1px solid var(--ui-edge, #555b64); border-radius: 9px; margin: 4px 0 16px; }
+.scenography-standard > summary { padding: 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.scenography-standard .standard-panel { padding: 0 12px 12px; gap: 10px; font-size: 12px; }
+.scenography-standard .standard-buttons { display: grid; gap: 8px; }
+.scenography-standard .standard-buttons button { width: 100%; white-space: normal; }
+.scenography-standard .standard-attached { min-width: 0; padding: 10px; overflow-wrap: anywhere; }
+.scenography-comment-editor .direction-input { display: block; min-width: 0; }
+.scenography-comment-editor .preset-menu { width: 100%; box-sizing: border-box; }
+.scenography-comment-editor .preset-menu button { min-height: 34px; }

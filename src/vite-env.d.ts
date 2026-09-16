@@ -15,8 +15,8 @@ declare global {
       chooseBackground(kind: 'image' | 'model'): Promise<{ path: string; name: string } | null>;
       loadAsset(path: string): Promise<string>;
       chooseAudio(): Promise<{ sourcePath: string; name: string } | null>;
-      chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number } | null>;
-      ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number }>;
+      chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number } | null>;
+      ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number }>;
       generatePlan(project: AbacoProject, contactSheet?: string): Promise<BlenderPlan>;
       buildBlender(project: AbacoProject, plan: BlenderPlan, projectPath: string): Promise<{ version: string; directory: string; blendPath: string; audioPath?: string }>;
       syncPreviewProject(state: PreviewState): void;

@@ -1,10 +1,11 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { Box, Eye, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
+import { Box, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
 import { hitsTransformHandle } from '../domain/gizmo';
+import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
@@ -124,12 +125,12 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
     return clone;
   }, [gltf.scene]);
   // L'exporter glTF converte le coordinate Blender (x, y, z) in (x, z, -y).
-  // Convertiamo allo stesso modo il centro; la rotazione del gruppo rimette
-  // dritte e frontali le tavole 2D create sul piano XY in Blender.
+  // Il resto dell'editor usa Z verso l'alto: +90° su X ripristina quindi
+  // l'orientamento originale del file Blender senza coricarne la geometria.
   const [centerX, centerY, centerZ] = object.asset.boundsCenter;
   const center: Vec3 = [centerX, centerZ, -centerY];
   return <group scale={object.asset.previewScale}>
-    <group rotation={[Math.PI, 0, 0]}>
+    <group rotation={[Math.PI / 2, 0, 0]}>
       <primitive object={model} position={[-center[0], -center[1], -center[2]]} />
     </group>
   </group>;
@@ -146,7 +147,7 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
       const metadata = object.asset.sourcePath
         ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath })
         : undefined;
-      if (metadata && (metadata.previewScale !== object.asset.previewScale || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index]))) {
+      if (metadata && (metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index]))) {
         updateObject(object.id, { asset: { ...object.asset, ...metadata } });
       }
       const value = await window.abaco.loadAsset(object.asset.proxyPath);
@@ -257,8 +258,12 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const snapToOtherObjects = (position: THREE.Vector3) => {
     const state = useEditor.getState();
     const others = state.project.objects.filter((item) => item.id !== object.id && item.kind !== 'camera' && !item.kind.includes('light') && evaluateProperty(item, 'visibility', state.currentFrame));
-    if (!others.length) return position;
     const threshold = .22;
+    const snapToGround = (candidate: THREE.Vector3) => {
+      const targetZ = groundedPositionZ(object, evaluateTransform(object, state.currentFrame));
+      if (Math.abs(candidate.z - targetZ) <= .35) candidate.z = targetZ;
+      return candidate;
+    };
     if (cameraView) {
       const cameraPose: Transform = {
         position: viewCamera.position.toArray() as Vec3,
@@ -275,7 +280,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
         }
         local[axis] = nearest;
       }
-      return new THREE.Vector3(...fromCameraSpace(local, cameraPose));
+      return snapToGround(new THREE.Vector3(...fromCameraSpace(local, cameraPose)));
     }
     const snapped = position.clone();
     for (const axis of [0, 1, 2] as const) {
@@ -287,7 +292,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
       }
       snapped.setComponent(axis, nearest);
     }
-    return snapped;
+    return snapToGround(snapped);
   };
 
   const commit = (snap = true) => {
@@ -850,7 +855,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const [cameraHintVisible, setCameraHintVisible] = useState(true);
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
-  const [freeWasdTarget, setFreeWasdTarget] = useState<'camera' | 'view'>('camera');
   const [draggingObject, setDraggingObject] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const objectControls = useRef<TransformControlsImpl | null>(null);
@@ -1000,6 +1004,12 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     camera.lookAt(subjectPosition);
     const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
     useEditor.getState().setCameraFraming(activeCut.id, cameraTransform.position, rotation, subjectTransform.position);
+  };
+  const restoreSelectedPosition = () => {
+    if (!selectedSubject) return;
+    const current = evaluateTransform(selectedSubject, frame);
+    const initial = evaluateTransform(selectedSubject, settings.frameStart);
+    useEditor.getState().setTransform(selectedSubject.id, { ...current, position: structuredClone(initial.position) });
   };
 
   const scheduleCameraCommit = () => {
@@ -1186,7 +1196,36 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       previousTime = time;
       if ([...held].some((code) => movementCodes.has(code))) {
         const editor = useEditor.getState();
-        if (!cameraView && freeWasdTarget === 'view') {
+        const selected = editor.project.objects.find((object) => object.id === editor.selectedId
+          && object.kind !== 'audio'
+          && !object.kind.includes('light')
+          && evaluateProperty(object, 'visibility', editor.currentFrame));
+        if (selected) {
+          const transform = evaluateTransform(selected, editor.currentFrame);
+          const controls = cameraView ? shotOrbitRef.current : orbitRef.current;
+          const viewCamera = controls?.object;
+          const forward = viewCamera?.getWorldDirection(new THREE.Vector3()) ?? new THREE.Vector3(0, 1, 0);
+          forward.z = 0;
+          if (forward.lengthSq() < .0001) forward.set(0, 1, 0);
+          forward.normalize();
+          const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 0, 1)).normalize();
+          const speedModifier = ([...held].some((code) => code.startsWith('Shift')) ? 3 : 1) * ([...held].some((code) => code.startsWith('Alt')) ? .25 : 1);
+          const movement = new THREE.Vector3();
+          if (held.has('KeyW') || held.has('ArrowUp')) movement.add(forward);
+          if (held.has('KeyS') || held.has('ArrowDown')) movement.sub(forward);
+          if (held.has('KeyA') || held.has('ArrowLeft')) movement.sub(right);
+          if (held.has('KeyD') || held.has('ArrowRight')) movement.add(right);
+          if (held.has('KeyE')) movement.z += 1;
+          if (held.has('KeyQ')) movement.z -= 1;
+          if (movement.lengthSq() > 0) {
+            movement.normalize().multiplyScalar(3 * deltaSeconds * speedModifier);
+            const position = new THREE.Vector3(...transform.position).add(movement).toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
+            editor.setTransform(selected.id, { ...transform, position });
+          }
+          animationFrame = requestAnimationFrame(tick);
+          return;
+        }
+        if (!cameraView) {
           const controls = orbitRef.current;
           if (controls) {
             const camera = controls.object;
@@ -1277,7 +1316,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       window.removeEventListener('keyup', keyUp);
       window.removeEventListener('blur', clearKeys);
     };
-  }, [cameraView, freeWasdTarget]);
+  }, [cameraView]);
 
   return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
@@ -1303,15 +1342,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
-    {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch" role="group" aria-label="Vista e controllo WASD">
-      <button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button>
-      <button className={freeWasdTarget === 'view' ? 'active' : ''} aria-pressed={freeWasdTarget === 'view'} title="WASD muove la visuale libera" onClick={() => setFreeWasdTarget('view')}><Eye size={13} /> Vista</button>
-      <button className={freeWasdTarget === 'camera' ? 'active' : ''} aria-pressed={freeWasdTarget === 'camera'} title="WASD muove la camera della scena" onClick={() => setFreeWasdTarget('camera')}><Video size={13} /> Camera</button>
-    </div>}
+    {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch"><button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button></div>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
         <button className="camera-hint-close" title="Nascondi istruzioni" aria-label="Nascondi istruzioni" onClick={() => setCameraHintVisible(false)}>×</button>
-        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vola</span>
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {selectedTransformable ? `muove ${selectedTransformable.name}` : cameraView ? 'muove la camera' : 'muove la visuale'}</span>
         <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
         <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
         <small>2 dita inclina · Shift + 2 dita sposta</small>
@@ -1339,6 +1374,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <p>Aggiungi una forma o un testo. Poi trascinalo direttamente nello spazio.</p>
       <div><button className="primary" onClick={() => addObject('cube')}><Plus size={16} /> Forma</button><button className="secondary" onClick={() => addObject('text')}><TextCursorInput size={16} /> Testo</button></div>
     </div>}
-    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button></div>}
+    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Ripristina posizione iniziale" title={`Riporta ${selectedSubject.name} alla posizione della scena iniziale`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
   </div>;
 }

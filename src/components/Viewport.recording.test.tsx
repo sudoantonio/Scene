@@ -131,15 +131,18 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
 describe('controlli della vista libera', () => {
   beforeEach(() => useEditor.setState({ cameraView: false }));
 
-  it('permette di scegliere se WASD controlla la camera o la visuale', () => {
+  it('usa automaticamente WASD per la visuale o per l’elemento selezionato', () => {
     render(<Viewport />);
-    const camera = screen.getByRole('button', { name: 'Camera' });
-    const view = screen.getByRole('button', { name: 'Vista' });
-    expect(camera).toHaveAttribute('aria-pressed', 'true');
-    expect(view).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(view);
-    expect(view).toHaveAttribute('aria-pressed', 'true');
-    expect(camera).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove la visuale');
+    act(() => useEditor.getState().addObject('cube'));
+    const cube = useEditor.getState().project.objects.find((object) => object.kind === 'cube')!;
+    const before = evaluateTransform(cube, 1).position;
+    fireEvent.keyDown(window, { code: 'KeyW', key: 'w' });
+    act(() => vi.advanceTimersByTime(64));
+    fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
+    const updated = useEditor.getState().project.objects.find((object) => object.id === cube.id)!;
+    expect(evaluateTransform(updated, 1).position).not.toEqual(before);
+    expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove Cubo 1');
   });
 
   it('mostra solo la miniatura camera e permette di ridurla', () => {
@@ -149,5 +152,25 @@ describe('controlli della vista libera', () => {
     expect(screen.queryByRole('button', { name: "Apri l'anteprima della camera" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Espandi anteprima camera' }));
     expect(screen.getByRole('button', { name: "Apri l'anteprima della camera" })).toBeInTheDocument();
+  });
+});
+
+describe('azioni rapide sul soggetto', () => {
+  it('riporta l’elemento selezionato alla posizione della scena iniziale', () => {
+    act(() => {
+      useEditor.getState().addObject('cube');
+      const id = useEditor.getState().selectedId!;
+      useEditor.getState().setTransform(id, { position: [2, 1, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+      useEditor.getState().addShot();
+      useEditor.getState().select(id);
+      useEditor.getState().setTransform(id, { position: [8, 4, 1], rotation: [0, 0, 20], scale: [1.2, 1.2, 1.2] });
+      useEditor.getState().setCameraView(true);
+    });
+    render(<Viewport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ripristina posizione iniziale' }));
+    const state = useEditor.getState();
+    const object = state.project.objects.find((item) => item.id === state.selectedId)!;
+    expect(evaluateTransform(object, state.currentFrame).position).toEqual([2, 1, 1]);
+    expect(evaluateTransform(object, state.currentFrame).rotation).toEqual([0, 0, 20]);
   });
 });

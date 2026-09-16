@@ -145,7 +145,13 @@ def create_blend_asset(data):
     with bpy.data.libraries.load(str(source_path), link=False) as (data_from, data_to):
         data_to.objects = data_from.objects
     supported = {"MESH", "CURVE", "SURFACE", "META", "FONT", "ARMATURE", "EMPTY"}
-    imported = [obj for obj in data_to.objects if obj is not None and obj.type in supported and not obj.hide_render]
+    all_imported = [obj for obj in data_to.objects if obj is not None and obj.type in supported and not obj.hide_render]
+    def explicitly_excluded(obj):
+        normalized = obj.name.casefold()
+        collection_names = " ".join(collection.name for collection in obj.users_collection).casefold()
+        return normalized.startswith("studio |") or normalized.startswith("mesh |") or "esclus" in collection_names or "copia mesh" in collection_names
+    preferred = [obj for obj in all_imported if not explicitly_excluded(obj)]
+    imported = preferred if any(obj.type in {"MESH", "CURVE", "SURFACE", "META", "FONT"} for obj in preferred) else all_imported
     if not any(obj.type in {"MESH", "CURVE", "SURFACE", "META", "FONT"} for obj in imported):
         raise RuntimeError("L’asset non contiene oggetti 3D importabili: " + str(source_path))
     collection = bpy.data.collections.new("ASSET • " + data["name"])

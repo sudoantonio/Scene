@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject } from '../domain/schema';
+import { evaluateTransform } from '../domain/animation';
 import { useEditor } from '../store/editor';
 import Inspector from './Inspector';
 
@@ -46,6 +47,16 @@ describe('Pannelli contestuali', () => {
     expect(screen.getByText('Rotazione', { exact: true }).closest('details')).not.toHaveAttribute('open');
     expect(screen.getByText('Aspetto').closest('details')).not.toHaveAttribute('open');
     expect(body).toContainElement(screen.getByText('Valori numerici'));
+  });
+
+  it('appoggia un elemento selezionato sul piano', () => {
+    useEditor.getState().addObject('cube');
+    const id = useEditor.getState().selectedId!;
+    useEditor.getState().setTransform(id, { position: [2, 3, 6], rotation: [0, 0, 0], scale: [1.5, 1.5, 1.5] });
+    render(<Inspector panel="edit" onPanelChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Appoggia al piano' }));
+    const object = useEditor.getState().project.objects.find((item) => item.id === id)!;
+    expect(evaluateTransform(object, 1).position).toEqual([2, 3, 1.5]);
   });
 
   it.each(['scene', 'framing', 'object'] as const)('scrive e salva indicazioni %s senza ricreare la textarea', (scope) => {
@@ -98,4 +109,63 @@ describe('Pannelli contestuali', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
     expect(useEditor.getState().project.comments[0]).toMatchObject({ text: 'Prima scena', sceneId: useEditor.getState().project.cameraCuts[0].id });
   });
+});
+
+describe('Preset nei campi Scenografia', () => {
+  it('mostra / nel campo del personaggio, combina due preset e ne conserva i prompt al salvataggio', () => {
+    useEditor.getState().addObject('cube');
+    render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
+    fireEvent.click(screen.getByTitle('Aggiungi commento Cubo 1'));
+    const input = screen.getByLabelText('Indicazione Cubo 1');
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    expect(screen.getByRole('option', { name: 'Scocciato Emozione' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Camera statica Camera' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Scocciato Emozione' }));
+    expect(input).toHaveValue('');
+    expect(screen.getByText('Scocciato')).toBeInTheDocument();
+    const query = '/si-av';
+    fireEvent.change(input, { target: { value: query, selectionStart: query.length } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).toHaveValue('');
+    expect(screen.getByText('Si avvicina')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    const comment = useEditor.getState().project.comments[0];
+    expect(comment.presets?.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']);
+    expect(comment.presets?.every(p => p.prompt.length > 100)).toBe(true);
+    expect(screen.getByLabelText('Preset salvati')).toBeInTheDocument();
+    expect(screen.queryByText('/scocciato /si-avvicina')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Modifica commento Cubo 1'));
+    expect(screen.getByLabelText('Indicazione Cubo 1')).toHaveValue('');
+    expect(screen.getByText('Scocciato')).toBeInTheDocument();
+    expect(screen.getByText('Si avvicina')).toBeInTheDocument();
+  });
+
+  it('propone solo movimenti camera e lascia libera la descrizione narrativa', () => {
+    const name = useEditor.getState().project.objects[0].name;
+    render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
+    fireEvent.click(screen.getByTitle(`Aggiungi commento ${name}`));
+    const input = screen.getByLabelText(`Indicazione ${name}`);
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    expect(screen.getByRole('option', { name: 'Camera statica Camera' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Scocciato Emozione' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Camera statica Camera' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    expect(useEditor.getState().project.comments[0].presets?.[0].id).toBe('camera-statica');
+    fireEvent.click(screen.getByTitle('Aggiungi commento Scena 1'));
+    const scene = screen.getByLabelText('Indicazione Scena 1');
+    expect(scene).toHaveValue('');
+    fireEvent.change(scene, { target: { value: '/', selectionStart: 1 } });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+});
+
+it('allega lo standard direttamente da Scenografia', () => {
+  render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
+  const section = screen.getByText('Standard animazione').closest('details')!;
+  fireEvent.click(screen.getByText('Standard animazione'));
+  expect(section).toHaveAttribute('open');
+  fireEvent.click(screen.getByRole('button', { name: 'Usa standard cartoon incluso' }));
+  expect(useEditor.getState().project.animationStandard?.name).toBe('STANDARD_ANIMAZIONE_GENERALE.md');
+  expect(screen.getByText('Standard animazione · Allegato')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

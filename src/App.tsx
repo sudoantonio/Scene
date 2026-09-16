@@ -245,7 +245,6 @@ export default function App() {
       if (event.key === ' ') { event.preventDefault(); setPlaying(!useEditor.getState().isPlaying); }
       if (event.key.toLowerCase() === 'g') setGizmoMode('translate');
       if (event.key.toLowerCase() === 'r') setGizmoMode('rotate');
-      if (event.key.toLowerCase() === 's' && !event.ctrlKey && !event.metaKey) setGizmoMode('scale');
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [setGizmoMode, setPlaying]);

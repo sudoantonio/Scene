@@ -1,4 +1,4 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -31,6 +31,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const updateObject = useEditor((state) => state.updateObject);
   const replaceObject = useEditor((state) => state.replaceObject);
   const setTransform = useEditor((state) => state.setTransform);
+  const alignObjectToGround = useEditor((state) => state.alignObjectToGround);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const startMotion = useEditor((state) => state.startMotion);
   const keyPose = useEditor((state) => state.keyPose);
@@ -98,7 +99,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
       if (!image) return;
       replaceObject(object.id, {
         kind: 'plane', name: image.name, screenSpace: true,
-        asset: { sourcePath: image.path, proxyPath: await window.abaco.loadAsset(image.path), collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1 },
+        asset: { sourcePath: image.path, proxyPath: await window.abaco.loadAsset(image.path), collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 0 },
       });
     } catch (error) { window.alert(error instanceof Error ? error.message : 'Sostituzione immagine non riuscita.'); }
   };
@@ -145,6 +146,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
           <div className="camera-sliders">
           {positionControls.map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Verticale' : label}</span><strong>{object.screenSpace ? `${Math.round(positionValues![axis] * 100)}%` : `${positionValues![axis].toFixed(1)} m`}</strong><input aria-label={`${label} elemento`} title={cameraView && axis === 1 ? 'Aumenta per allontanare il personaggio dalla camera' : undefined} type="range" min={cameraView && axis === 1 && !object.screenSpace ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step={object.screenSpace ? '.01' : '0.1'} value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
           </div>
+          {!object.screenSpace && <button className="subtle align-ground" onClick={() => alignObjectToGround(object.id)}><MoveDown size={13} /> Appoggia al piano</button>}
           <div className="size-control"><div><span>Dimensione</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Dimensione elemento" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
         </InspectorGroup>
 

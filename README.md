@@ -89,3 +89,9 @@ Scene is experimental and under active development. Its current feature set is i
 ## License
 
 Scene is released under the [MIT License](LICENSE). You may use, modify, and distribute it under the terms of that license.
+
+## 0.57.41: direction presets in Scenografia
+
+Open Scenografia. The Regia section contains freeform scene, camera and object directions. Type `/` in camera or object fields to select and combine presets; full versioned prompt snapshots are stored with the comment. The narrative scene field remains empty by default. The Standard animazione section in the same panel accepts .md/.txt files (UTF-8, max 500 KB) or the bundled cartoon standard. Its content is embedded in the JSON and exported with the animation handoff. The two header commands from 0.57.40 have been removed.
+
+Validation: 135 tests pass, including the actual Inspector/Scenografia inputs, preset selection and saving, and embedded standard loading. Compiled renderer checked in a native Electron window with an isolated QA profile.

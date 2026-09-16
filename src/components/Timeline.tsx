@@ -1,3 +1,4 @@
+import DirectionInput from './DirectionInput';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageCircle, Minimize2, MoveRight, Music2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
 import * as THREE from 'three';
@@ -89,6 +90,11 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const seek = (event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setFrame(start + ((event.clientX - rect.left) / rect.width) * (end - start));
+  };
+  const frameInsideBlock = (event: React.MouseEvent<HTMLElement>, rangeStart: number, rangeEnd: number) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)));
+    return Math.round(rangeStart + ratio * Math.max(0, rangeEnd - rangeStart - 1));
   };
   const seekFromEmptyTimeline = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
@@ -430,7 +436,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     </header>
     {commentDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommentDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Commento ${commentDraft.label}`}>
       <div className="comment-popover-head"><span title={commentDraft.label}>Commento · {commentDraft.label}</span><button className="icon" title="Chiudi" onClick={() => setCommentDraft(undefined)}><X size={14} /></button></div>
-      <textarea autoFocus placeholder="Scrivi un’indicazione" value={commentDraft.text} onChange={(event) => setCommentDraft({ ...commentDraft, text: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveComment(); if (event.key === 'Escape') setCommentDraft(undefined); }} />
+      <DirectionInput value={commentDraft.text} scope={commentDraft.scope} onChange={text => setCommentDraft({ ...commentDraft, text })} onSave={saveComment} onClose={() => setCommentDraft(undefined)} />
       <div className="comment-popover-actions">{findTrackComment(commentDraft) && <button className="subtle danger" onClick={removeComment}><Trash2 size={13} /> Elimina</button>}<button className="subtle" onClick={() => setCommentDraft(undefined)}>Annulla</button><button className="primary" disabled={!commentDraft.text.trim()} onClick={saveComment}><Check size={14} /> Salva</button></div>
     </div></div>}
     {transitionDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransitionDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Transizione ${transitionDraft.label}`}>
@@ -447,7 +453,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
         const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scena ${index + 1}` };
         return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }}>
-          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(scene.frame); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
+          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(isSelectedTrack(sceneSelection) ? scene.frame : frameInsideBlock(event, scene.frame, nextFrame)); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
             <span className="clip-title"><span className="clip-title-text">{scene.name ?? `Scena ${index + 1}`}</span>{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
           </button>
           <span className="clip-resize-handle" onPointerDown={(event) => beginResize(index, event)} />
@@ -470,7 +476,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
             if (!range) return null;
             const width = ((range[1] - range[0]) / Math.max(1, end - start + 1)) * 100;
             return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${preview ? 'resizing' : ''} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: left(range[0]), width: `${width}%` }} title={`${displayName} · frame ${range[0]}–${range[1] - 1}`} onClick={(event) => {
-              event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
+              event.stopPropagation(); setFrame(isSelectedTrack(selection) ? scene.frame : frameInsideBlock(event, range[0], range[1])); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
             }}><span className="presence-resize-handle start" role="separator" aria-label="Ridimensiona inizio elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Ridimensiona fine elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
           })}
           <i style={{ left: left(frame) }} />

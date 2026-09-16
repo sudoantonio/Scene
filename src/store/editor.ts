@@ -1,7 +1,9 @@
+import { resolvePresets } from '../domain/direction-presets';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from '../domain/animation';
+import { groundedPositionZ } from '../domain/ground';
 
 type RecordingSession = {
   sceneId: string;
@@ -43,7 +45,7 @@ type EditorState = {
   addObject(kind: ObjectKind): void;
   addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
   addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
-  addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number }): void;
+  addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number }): void;
   replaceObject(id: string, replacement: { kind: ObjectKind; name?: string; text?: string; screenSpace?: boolean; asset?: SceneObject['asset'] }): void;
   addShot(): void;
   splitScene(): void;
@@ -57,6 +59,7 @@ type EditorState = {
   removeSelected(): void;
   updateObject(id: string, patch: Record<string, unknown>): void;
   setSceneNote(id: string, text: string): void;
+  setAnimationStandard(standard: AbacoProject['animationStandard']): void;
   updateSettings(patch: Partial<AbacoProject['settings']>): void;
   updateLighting(patch: Partial<LightingSettings>): void;
   updateBackground(background: BackgroundSettings, sceneId?: string): void;
@@ -69,6 +72,7 @@ type EditorState = {
   deleteObjectFromScene(objectId: string, sceneId: string): void;
   deleteMotionFromScene(objectId: string, sceneId: string): void;
   setTransform(id: string, transform: Transform): void;
+  alignObjectToGround(id: string): void;
   keyPose(id: string): void;
   updateMotionPoint(objectId: string, keyframeId: string, position: Vec3): void;
   setMotionPointHold(objectId: string, keyframeId: string, holdFrames: number): void;
@@ -342,6 +346,7 @@ export const useEditor = create<EditorState>((set, get) => {
     select: (selectedId) => set((state) => ({
       selectedId,
       selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
+      gizmoMode: selectedId && selectedId !== state.selectedId ? 'translate' : state.gizmoMode,
     })),
     setFrame: (frame) => {
       const before = get();
@@ -392,14 +397,14 @@ export const useEditor = create<EditorState>((set, get) => {
       if (kind === 'text') putKey(object, sceneFrame, 'text', object.text, 'constant');
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id });
+      set({ selectedId: object.id, gizmoMode: 'translate' });
     },
     addScreenImage: (asset) => {
       const state = get();
       const object = createSceneObject('plane', state.project.objects.filter((item) => item.screenSpace && item.kind === 'plane').length + 1);
       object.name = asset.name;
       object.screenSpace = true;
-      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.dataUrl, collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1 };
+      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.dataUrl, collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 0 };
       object.transform.scale = [1, 1, 1];
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
@@ -410,7 +415,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id });
+      set({ selectedId: object.id, gizmoMode: 'translate' });
     },
     addAudio: (asset) => {
       const state = get();
@@ -431,7 +436,7 @@ export const useEditor = create<EditorState>((set, get) => {
       next.settings.frameEnd = Math.max(next.settings.frameEnd, clipEnd - 1);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id, selectedMotion: undefined });
+      set({ selectedId: object.id, selectedMotion: undefined, gizmoMode: 'translate' });
     },
     addBlendAsset: (asset) => {
       const state = get();
@@ -439,8 +444,9 @@ export const useEditor = create<EditorState>((set, get) => {
       object.name = asset.name;
       object.asset = {
         sourcePath: asset.sourcePath, proxyPath: asset.proxyPath, collectionName: asset.collectionName,
-        boundsCenter: structuredClone(asset.boundsCenter), previewScale: asset.previewScale,
+        boundsCenter: structuredClone(asset.boundsCenter), previewScale: asset.previewScale, groundOffset: asset.groundOffset,
       };
+      object.transform.position[2] = asset.groundOffset;
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
@@ -460,7 +466,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id });
+      set({ selectedId: object.id, gizmoMode: 'translate' });
     },
     replaceObject: (id, replacement) => {
       const state = get();
@@ -488,7 +494,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       next.objects[index] = fresh;
       commit(next);
-      set({ selectedId: fresh.id });
+      set({ selectedId: fresh.id, gizmoMode: 'translate' });
     },
     addShot: () => {
       const state = get();
@@ -657,6 +663,13 @@ export const useEditor = create<EditorState>((set, get) => {
       const sceneEnd = next.cameraCuts.filter((item) => item.frame > scene.frame).sort((a, b) => a.frame - b.frame)[0]?.frame ?? next.settings.frameEnd + 1;
       const motionFrame = Math.max(scene.frame, Math.min(sceneEnd - 1, state.currentFrame));
       const transform = evaluateTransform(object, motionFrame);
+      const hasSavedMotion = object.keyframes.some((key) => key.purpose === 'motion' && key.frame >= scene.frame && key.frame < sceneEnd);
+      if (!hasSavedMotion && motionFrame > scene.frame) {
+        const initialTransform = evaluateTransform(object, scene.frame);
+        for (const property of ['position', 'rotation', 'scale'] as const) {
+          putMotionKey(object, scene.frame, scene.frame, property, initialTransform[property], state.interpolation);
+        }
+      }
       let editFrame = sceneEnd - 1;
       if (object.kind !== 'camera' && !object.kind.includes('light')) {
         while (editFrame > motionFrame && !evaluateProperty(object, 'visibility', editFrame)) editFrame -= 1;
@@ -760,6 +773,12 @@ export const useEditor = create<EditorState>((set, get) => {
       else object.sceneNotes.push({ frame, text });
       commit(next);
     },
+    setAnimationStandard: (standard) => {
+      const next = snapshot(get().project);
+      if (standard) next.animationStandard = structuredClone(standard);
+      else delete next.animationStandard;
+      commit(ProjectSchema.parse(next));
+    },
     updateSettings: (patch) => {
       const next = snapshot(get().project);
       for (const property of ['fps', 'frameStart', 'frameEnd', 'resolutionX', 'resolutionY'] as const) {
@@ -844,7 +863,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       if (!created.length) return [];
       commit(next);
-      set({ selectedId: created.at(-1) });
+      set({ selectedId: created.at(-1), gizmoMode: 'translate' });
       return created;
     },
     resizeObjectPresence: (objectId, sceneId, requestedStart, requestedEnd) => {
@@ -983,6 +1002,13 @@ export const useEditor = create<EditorState>((set, get) => {
           ? { selectedMotion: { objectId: camera.id, sceneId: scene.id } }
           : {}),
       });
+    },
+    alignObjectToGround: (id) => {
+      const state = get();
+      const object = state.project.objects.find((item) => item.id === id && !item.screenSpace && item.kind !== 'audio' && item.kind !== 'camera' && !item.kind.includes('light'));
+      if (!object) return;
+      const transform = evaluateTransform(object, state.currentFrame);
+      get().setTransform(id, { ...transform, position: [transform.position[0], transform.position[1], groundedPositionZ(object, transform)] });
     },
     setTransform: (id, transform) => {
       if (!recordingProperties.every((property) => isValidAnimationValue(property, transform[property]))) return;
@@ -1188,6 +1214,7 @@ export const useEditor = create<EditorState>((set, get) => {
       } else {
         const fields = {
           text: clean,
+          presets: resolvePresets(clean, scope, existing?.presets),
           targetIds: scope === 'object' ? [objectId!] : scope === 'framing' ? [scene.cameraId] : [],
           startFrame: scene.frame,
           endFrame: Math.max(scene.frame, (scenes[sceneIndex + 1]?.frame ?? next.settings.frameEnd + 1) - 1),

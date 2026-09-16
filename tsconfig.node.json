@@ -7,7 +7,10 @@
     "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "target": "ES2022"
   },
   "include": [
     "vite.config.ts",
@@ -15,6 +18,8 @@
     "src/domain/schema.ts",
     "src/domain/animation.ts",
     "src/domain/ai-contract.ts",
-    "src/domain/versioning.ts"
+    "src/domain/versioning.ts",
+    "src/domain/animation-handoff.ts",
+    "src/domain/direction-presets.ts"
   ]
 }

@@ -1,3 +1,5 @@
+import AnimationStandardPanel from './AnimationStandardPanel';
+import DirectionInput, { DirectionPreview } from './DirectionInput';
 import { Box, Check, Circle, Cone, Cylinder, FileBox, Image, MessageSquare, Music2, SquareDashed, TextCursorInput, Trash2, Video } from 'lucide-react';
 import { useState } from 'react';
 import type { ObjectKind, SceneComment, TimelineCommentScope } from '../domain/schema';
@@ -15,14 +17,14 @@ type CommentDraft = { sceneId: string; scope: TimelineCommentScope; objectId?: s
 
 // Keep this component's identity stable while typing: declaring it inside
 // ElementsPanel remounted the textarea on every change and lost its focus.
-function SceneCommentControl({ label, prompt, comment, text, disabled, onEdit, onChange, onCancel, onSave, onRemove }: {
-  label: string; prompt: string; comment?: SceneComment; text?: string; disabled: boolean;
+function SceneCommentControl({ scope, label, prompt, comment, text, disabled, onEdit, onChange, onCancel, onSave, onRemove }: {
+  scope: TimelineCommentScope; label: string; prompt: string; comment?: SceneComment; text?: string; disabled: boolean;
   onEdit(): void; onChange(value: string): void; onCancel(): void; onSave(): void; onRemove(): void;
 }) {
   return <div className={`scenography-comment-control ${comment ? 'has-comment' : ''}`}>
-    {text === undefined ? <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={disabled} title={comment ? `Modifica commento ${label}` : `Aggiungi commento ${label}`} onClick={onEdit}><span>{comment ? comment.text : prompt}</span></button> : <div className="scenography-comment-editor">
-      <textarea autoFocus aria-label={`Indicazione ${label}`} placeholder={`${prompt}…`} value={text} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); onSave(); } if (event.key === 'Escape') onCancel(); }} />
-      <div>{comment && <button className="icon danger" title="Elimina commento" onClick={onRemove}><Trash2 size={13} /></button>}<button className="subtle comment-cancel" onClick={onCancel}>Annulla</button><button className="subtle comment-save" disabled={!text.trim()} onClick={onSave}><Check size={13} /> Salva</button></div>
+    {text === undefined ? <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={disabled} title={comment ? `Modifica commento ${label}` : `Aggiungi commento ${label}`} onClick={onEdit}>{comment ? <DirectionPreview value={comment.text} scope={scope} /> : <span>{prompt}</span>}</button> : <div className="scenography-comment-editor">
+      <DirectionInput scope={scope} label={`Indicazione ${label}`} value={text} onChange={onChange} onSave={onSave} onClose={onCancel} />
+      <div className="scenography-comment-actions">{comment && <button className="icon danger" title="Elimina commento" onClick={onRemove}><Trash2 size={13} /></button>}<button className="subtle comment-cancel" onClick={onCancel}>Annulla</button><button className="subtle comment-save" disabled={!text.trim()} onClick={onSave}><Check size={13} /> Salva</button></div>
     </div>}
   </div>;
 }
@@ -63,7 +65,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
     const comment = commentFor(scope, objectId);
     const editing = commentEditor?.sceneId === activeScene?.id && commentEditor?.scope === scope && commentEditor.objectId === objectId;
     const prompt = scope === 'scene' ? 'Descrivi la scena' : scope === 'framing' ? 'Descrivi il movimento camera' : `Descrivi il movimento di ${label}`;
-    return <SceneCommentControl label={label} prompt={prompt} comment={comment} text={editing ? commentEditor.text : undefined} disabled={!activeScene} onEdit={() => openComment(scope, objectId)} onChange={(text) => setCommentEditor((current) => current && { ...current, text })} onCancel={() => setCommentEditor(undefined)} onSave={saveComment} onRemove={() => removeComment(scope, objectId)} />;
+    return <SceneCommentControl scope={scope} label={label} prompt={prompt} comment={comment} text={editing ? commentEditor.text : undefined} disabled={!activeScene} onEdit={() => openComment(scope, objectId)} onChange={(text) => setCommentEditor((current) => current && { ...current, text })} onCancel={() => setCommentEditor(undefined)} onSave={saveComment} onRemove={() => removeComment(scope, objectId)} />;
   };
   return <div className="elements-panel">
     {mode === 'add' ? <section className="add-section">
@@ -94,7 +96,8 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
         }}><Music2 size={15} /><span>Audio</span></button>
       </div>
   </section> : <section className="outliner-section scene-elements-section">
-      <h3 className="inspector-list-heading">Indicazioni</h3>
+      <details className="scenography-standard"><summary>Standard animazione{project.animationStandard ? ' · Allegato' : ''}</summary><AnimationStandardPanel /></details>
+      <h3 className="inspector-list-heading">Regia</h3>
       <div className="scenography-context-comments">
         <article className="scenography-note-card"><div className="scenography-note-title"><MessageSquare size={14} /><strong>Scena</strong></div>{renderComment('scene', activeScene?.name ?? 'scena')}</article>
         <article className="scenography-note-card"><div className="scenography-note-title"><Video size={14} /><strong>Camera</strong></div>{renderComment('framing', activeCamera?.name ?? 'camera')}</article>
