@@ -21,9 +21,11 @@ describe('Jev action compiler', () => {
     const project = createProject();
     const character = createSceneObject('sphere', 1);
     project.objects.push(character);
+    project.objects[0].transform.rotation = [90, 0, 0];
     const request = jevActionRequest(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [1, 2, 3], instruction: 'corre a destra' });
     expect(request.model).toBe('jev-latest');
     expect(request.state.start_position_meters).toEqual({ x: 1, y: 2, z: 3 });
+    expect(request.state.active_camera?.rotation_degrees).toEqual([90, 0, 0]);
     expect(request.questions.action.type).toBe('choice');
   });
 
@@ -32,12 +34,25 @@ describe('Jev action compiler', () => {
     project.settings.frameEnd = 100;
     const character = createSceneObject('sphere', 1);
     project.objects.push(character);
+    project.objects[0].transform.rotation = [90, 0, 0];
     const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 10, startPosition: [1, 2, 0], instruction: 'vai a destra con decisione' }, response());
     expect(result.status).toBe('ready');
     expect(result.decision).toMatchObject({ action: 'move', direction: 'right', distanceMeters: 2, durationSeconds: 1, path: 'smooth' });
     expect(result.blenderPlan.operations).toHaveLength(2);
     expect(result.blenderPlan.operations[1].value.vector).toEqual([3, 2, 0]);
     expect(result.blenderPlan.operations[1].frame).toBe(34);
+  });
+
+  it('interprets right relative to the active camera', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [60, 0, 90];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [1, 2, 0], instruction: 'vai a destra' }, response());
+    const end = result.blenderPlan.operations[1].value.vector!;
+    expect(end[0]).toBeCloseTo(1);
+    expect(end[1]).toBeCloseTo(4);
   });
 
   it('adds an apex to a jump and flags uncertain decisions for review', () => {

@@ -11,7 +11,7 @@ import BackgroundPanel from './BackgroundPanel';
 import InspectorGroup from './InspectorGroup';
 import JevActionPanel from './JevActionPanel';
 
-type InspectorPanel = 'edit' | 'scene' | 'light';
+type InspectorPanel = 'edit' | 'scene' | 'jev' | 'light';
 const motionNames = { constant: 'Stacco', bezier: 'Fluido', linear: 'Lineare' } as const;
 
 function NumberField({ value, onChange, label, name }: { value: number; onChange(value: number): void; label: string; name: string }) {
@@ -128,10 +128,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className="inspector simple-inspector">
     <nav className="right-tabs" aria-label="Sezioni pannello destro"><button className="inspector-collapse-tab" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
-      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
+      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['jev', Sparkles, 'Jev'], ['light', Sun, 'Luce'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>
-    <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : 'Controlli luce'} tabIndex={0}>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
+    <div className="inspector-scroll" key={`${panel}:${['edit', 'jev'].includes(panel) ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : panel === 'jev' ? 'Generatore azioni Jev' : 'Controlli luce'} tabIndex={0}>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : panel === 'jev' ? <div className="jev-tab-content"><header className="inspector-context"><strong>Jev · Azioni</strong><span>{object ? object.name : 'Seleziona un elemento 3D'}</span></header>{object && transform && activeScene ? <InspectorGroup title="Crea azione" icon={<Sparkles size={13} />} collapsible={false}><JevActionPanel project={project} object={object} sceneId={activeScene.id} frame={frame} position={transform.position} /></InspectorGroup> : <p className="inspector-help jev-empty">Seleziona nella scena un personaggio o un elemento 3D animabile.</p>}</div> : <>
       {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
         <div className="inspector-identity">
           <span className="inspector-kind">{object.kind === 'text' ? 'Testo · 2D' : object.screenSpace ? 'Immagine · 2D' : 'Elemento · 3D'}</span>
@@ -158,7 +158,6 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div></InspectorGroup>
         <InspectorGroup title="Aspetto" icon={<Palette size={13} />}><div className="group-title"><span>Colore</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visibile</label></div><div className="style-row"><label className="color-picker" title="Scegli un colore"><input aria-label="Colore personalizzato" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Colore ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Ritaglio" icon={<Crop size={13} />}><div className="camera-sliders">{(['Alto', 'Destra', 'Basso', 'Sinistra'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Ritaglio ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
-        {!object.screenSpace && activeScene && <InspectorGroup title="Jev · Crea azione" icon={<Sparkles size={13} />}><JevActionPanel project={project} object={object} sceneId={activeScene.id} frame={frame} position={transform.position} /></InspectorGroup>}
         {motionControls}
         <InspectorGroup title="Valori numerici" icon={<Braces size={13} />}>
           <VectorFields label="Posizione" value={transform.position} onChange={(value) => changeTransform('position', value)} />

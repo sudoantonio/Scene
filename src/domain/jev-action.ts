@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { BlenderPlanSchema, type AbacoProject, type BlenderPlan, type SceneObject, type Vec3 } from './schema';
+import { evaluateTransform } from './animation';
+import { cameraBasis } from './camera-space';
 
 export const JevChoiceAnswerSchema = z.object({
   type: z.literal('choice'),
@@ -63,6 +65,9 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject, inp
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
+  const camera = project.objects.find((candidate) => candidate.id === scenes[sceneIndex]?.cameraId && candidate.kind === 'camera');
+  const cameraTransform = camera ? evaluateTransform(camera, input.frame) : undefined;
+  const objectTransform = evaluateTransform(object, input.frame);
   return {
     model: 'jev-latest',
     state: {
@@ -73,8 +78,9 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject, inp
       scene_end_frame: sceneEnd,
       fps: project.settings.fps,
       start_position_meters: { x: input.startPosition[0], y: input.startPosition[1], z: input.startPosition[2] },
-      start_rotation_degrees: { x: object.transform.rotation[0], y: object.transform.rotation[1], z: object.transform.rotation[2] },
-      coordinate_system: 'X destra/sinistra, Y avanti/indietro, Z alto/basso. Le distanze sono metri.',
+      start_rotation_degrees: { x: objectTransform.rotation[0], y: objectTransform.rotation[1], z: objectTransform.rotation[2] },
+      active_camera: cameraTransform ? { position: cameraTransform.position, rotation_degrees: cameraTransform.rotation } : null,
+      coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       constraint: 'Interpreta una sola azione principale. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
     },
     questions: {
@@ -94,9 +100,19 @@ const durations = [.25, .5, 1, 2, 4];
 const nearestLevel = (score: number, values: number[]) => values[Math.max(0, Math.min(values.length - 1, Math.round(score)))]!;
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scale = (a: Vec3, amount: number): Vec3 => [a[0] * amount, a[1] * amount, a[2] * amount];
-const directions: Record<string, Vec3> = {
-  forward: [0, 1, 0], backward: [0, -1, 0], left: [-1, 0, 0], right: [1, 0, 0], up: [0, 0, 1], down: [0, 0, -1],
+const normalizeGround = (vector: Vec3, fallback: Vec3): Vec3 => {
+  const length = Math.hypot(vector[0], vector[1]);
+  return length < .0001 ? fallback : [vector[0] / length, vector[1] / length, 0];
 };
+export function cameraRelativeDirections(project: AbacoProject, sceneId: string, frame: number): Record<string, Vec3> {
+  const scene = project.cameraCuts.find((candidate) => candidate.id === sceneId);
+  const camera = project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
+  if (!camera) return { forward: [0, 1, 0], backward: [0, -1, 0], left: [-1, 0, 0], right: [1, 0, 0], up: [0, 0, 1], down: [0, 0, -1] };
+  const [screenRight, intoScene] = cameraBasis(evaluateTransform(camera, frame).rotation).map((axis) => axis.toArray() as Vec3);
+  const right = normalizeGround(screenRight, [1, 0, 0]);
+  const forward = normalizeGround(intoScene, [0, 1, 0]);
+  return { forward, backward: scale(forward, -1), left: scale(right, -1), right, up: [0, 0, 1], down: [0, 0, -1] };
+}
 
 export const JevActionPlanSchema = z.object({
   schemaVersion: z.literal('JevActionPlanV1'),
@@ -119,6 +135,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   const duration = nearestLevel(answers.duration.score, durations);
   const confidences = [answers.action.confidence, answers.direction.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence];
   const confidence = Math.min(...confidences);
+  const directions = cameraRelativeDirections(project, input.sceneId, input.frame);
   const direction = directions[answers.direction.choice] ?? directions.forward;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
@@ -126,12 +143,13 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   const endFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(duration * project.settings.fps)));
   const interpolation = answers.path.choice === 'direct' ? 'linear' : 'bezier';
   let endPosition = input.startPosition;
-  let endRotation = object.transform.rotation;
+  const objectTransform = evaluateTransform(object, input.frame);
+  let endRotation = objectTransform.rotation;
   const action = answers.action.choice;
   if (['move', 'rise', 'descend'].includes(action)) endPosition = add(input.startPosition, scale(direction, distance));
   if (action === 'turn') {
     const amount = distance <= .5 ? 45 : distance <= 1 ? 90 : 180;
-    endRotation = [object.transform.rotation[0], object.transform.rotation[1], object.transform.rotation[2] + (answers.direction.choice === 'left' ? amount : -amount)];
+    endRotation = [objectTransform.rotation[0], objectTransform.rotation[1], objectTransform.rotation[2] + (answers.direction.choice === 'left' ? amount : -amount)];
   }
   if (action === 'jump') {
     const horizontal: Vec3 = answers.direction.choice === 'up' || answers.direction.choice === 'down' ? [0, 0, 0] : scale(direction, distance);
@@ -148,10 +166,10 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   }
   operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'position', value: value(endPosition), interpolation, rationale: `Azione ${action} compilata dalle decisioni Jev.`, commentIds: [] });
   if (action === 'turn') {
-    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(object.transform.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
+    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(objectTransform.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: 'Rotazione scelta da Jev.', commentIds: [] });
   }
-  const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `Jev: ${input.instruction}`, assumptions: ['Coordinate mondo di Scene: X laterale, Y profondità, Z altezza.'], warnings: confidence < .55 || answers.actionable.noul < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [], operations };
+  const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `Jev: ${input.instruction}`, assumptions: ['Le direzioni orizzontali sono relative alla camera attiva; alto e basso seguono l’asse Z della scena.'], warnings: confidence < .55 || answers.actionable.noul < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [], operations };
   return JevActionPlanSchema.parse({
     schemaVersion: 'JevActionPlanV1', objectId: object.id, instruction: input.instruction, model: response.model,
     status: confidence >= .55 && answers.actionable.noul >= .6 ? 'ready' : 'review', confidence,

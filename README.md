@@ -55,7 +55,7 @@ The application can compose scenes and export projects without an API key. AI in
 
 Plans produced by the model are validated before they are applied. The model cannot provide arbitrary Python code, select local filesystem paths, or directly delete project elements.
 
-Jev does not generate arbitrary animation JSON. It chooses among Scene's allowed action, direction, distance, duration and path values. Scene creates the final `JevActionPlanV1` JSON, displays its confidence and keyframes, and applies it only after the user confirms.
+Jev does not generate arbitrary animation JSON. It chooses among Scene's allowed action, direction, distance, duration and path values. Scene interprets horizontal directions from the active camera, creates the final `JevActionPlanV1` JSON, displays its confidence and keyframes, and applies it only after the user confirms.
 
 ## Development
 

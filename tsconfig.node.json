@@ -17,6 +17,7 @@
     "electron/**/*.ts",
     "src/domain/schema.ts",
     "src/domain/animation.ts",
+    "src/domain/camera-space.ts",
     "src/domain/ai-contract.ts",
     "src/domain/versioning.ts",
     "src/domain/animation-handoff.ts",

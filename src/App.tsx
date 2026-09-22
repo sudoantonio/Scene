@@ -40,7 +40,7 @@ export default function App() {
   const planProjectRef = useRef<ReturnType<typeof useEditor.getState>['project'] | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
+  const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'jev' | 'light'>('edit');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
