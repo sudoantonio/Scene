@@ -55,6 +55,22 @@ describe('Jev action compiler', () => {
     expect(end[1]).toBeCloseTo(4);
   });
 
+  it.each([
+    ['allontana dalla camera', 'away_camera', 4],
+    ['si avvicina alla camera', 'toward_camera', 0],
+  ])('honours the explicit camera direction in “%s”', (instruction, expectedDirection, expectedX) => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.position = [0, 0, 5];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [2, 0, 0], instruction }, response({
+      direction: { type: 'choice', choice: expectedDirection === 'away_camera' ? 'backward' : 'forward', confidence: .9, probabilities: {} },
+    }));
+    expect(result.decision.direction).toBe(expectedDirection);
+    expect(result.blenderPlan.operations[1].value.vector).toEqual([expectedX, 0, 0]);
+  });
+
   it('adds an apex to a jump and flags uncertain decisions for review', () => {
     const project = createProject();
     project.settings.frameEnd = 100;

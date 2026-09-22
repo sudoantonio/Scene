@@ -53,10 +53,12 @@ const actionCriteria = {
 };
 
 const directionCriteria = {
-  forward: 'Verso Y positivo nello spazio di Scene.',
-  backward: 'Verso Y negativo nello spazio di Scene.',
-  left: 'Verso X negativo nello spazio di Scene.',
-  right: 'Verso X positivo nello spazio di Scene.',
+  forward: 'Dentro l’inquadratura, seguendo la direzione di vista della camera.',
+  backward: 'Fuori dall’inquadratura, nel verso opposto alla direzione di vista della camera.',
+  away_camera: 'Si allontana radialmente dalla posizione della camera attiva.',
+  toward_camera: 'Si avvicina radialmente alla posizione della camera attiva.',
+  left: 'Verso il lato sinistro dell’inquadratura.',
+  right: 'Verso il lato destro dell’inquadratura.',
   up: 'Verso Z positivo.',
   down: 'Verso Z negativo.',
 };
@@ -86,7 +88,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject, inp
     questions: {
       actionable: { type: 'noul', instructions: 'La richiesta descrive un movimento o una posa abbastanza chiari da convertire in keyframe?' },
       action: { type: 'choice', instructions: 'Qual è l’azione principale richiesta?', criteria: actionCriteria },
-      direction: { type: 'choice', instructions: 'Qual è la direzione principale? Per turn usa left o right; per rise usa up; per descend usa down.', criteria: directionCriteria },
+      direction: { type: 'choice', instructions: 'Qual è la direzione principale? “Allontanarsi dalla camera” significa away_camera; “avvicinarsi alla camera” significa toward_camera. Per turn usa left o right; per rise usa up; per descend usa down.', criteria: directionCriteria },
       distance: { type: 'score', instructions: 'Quanto deve essere ampio lo spostamento?', criteria: ['Minimo: 0,25 m', 'Piccolo: 0,5 m', 'Medio: 1 m', 'Ampio: 2 m', 'Molto ampio: 4 m'] },
       duration: { type: 'score', instructions: 'Quanto deve durare l’azione?', criteria: ['Scatto: 0,25 s', 'Rapida: 0,5 s', 'Normale: 1 s', 'Lenta: 2 s', 'Molto lenta: 4 s'] },
       energy: { type: 'score', instructions: 'Qual è l’energia espressiva del movimento?', criteria: ['Quasi immobile', 'Controllata', 'Naturale', 'Decisa', 'Esplosiva'] },
@@ -108,10 +110,33 @@ export function cameraRelativeDirections(project: AbacoProject, sceneId: string,
   const scene = project.cameraCuts.find((candidate) => candidate.id === sceneId);
   const camera = project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
   if (!camera) return { forward: [0, 1, 0], backward: [0, -1, 0], left: [-1, 0, 0], right: [1, 0, 0], up: [0, 0, 1], down: [0, 0, -1] };
-  const [screenRight, intoScene] = cameraBasis(evaluateTransform(camera, frame).rotation).map((axis) => axis.toArray() as Vec3);
+  const cameraTransform = evaluateTransform(camera, frame);
+  const [screenRight, intoScene] = cameraBasis(cameraTransform.rotation).map((axis) => axis.toArray() as Vec3);
   const right = normalizeGround(screenRight, [1, 0, 0]);
   const forward = normalizeGround(intoScene, [0, 1, 0]);
   return { forward, backward: scale(forward, -1), left: scale(right, -1), right, up: [0, 0, 1], down: [0, 0, -1] };
+}
+
+function explicitCameraDirection(instruction: string): 'away_camera' | 'toward_camera' | undefined {
+  const text = instruction.toLocaleLowerCase('it').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const matches: { index: number; direction: 'away_camera' | 'toward_camera' }[] = [];
+  const patterns: ['away_camera' | 'toward_camera', RegExp][] = [
+    ['away_camera', /(?:allontan\w*|lontan\w*)[^.!?,;]{0,32}(?:dalla|da\s+la)\s+(?:tele)?camera|away\s+from\s+(?:the\s+)?camera/g],
+    ['toward_camera', /(?:avvicin\w*)[^.!?,;]{0,32}(?:alla|a\s+la|verso\s+la)\s+(?:tele)?camera|towards?\s+(?:the\s+)?camera/g],
+  ];
+  patterns.forEach(([direction, pattern]) => {
+    for (const match of text.matchAll(pattern)) matches.push({ index: match.index, direction });
+  });
+  return matches.sort((a, b) => b.index - a.index)[0]?.direction;
+}
+
+function radialCameraDirections(project: AbacoProject, sceneId: string, frame: number, position: Vec3): Record<string, Vec3> {
+  const scene = project.cameraCuts.find((candidate) => candidate.id === sceneId);
+  const camera = project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
+  if (!camera) return {};
+  const cameraPosition = evaluateTransform(camera, frame).position;
+  const away = normalizeGround([position[0] - cameraPosition[0], position[1] - cameraPosition[1], 0], [0, 1, 0]);
+  return { away_camera: away, toward_camera: scale(away, -1) };
 }
 
 export const JevActionPlanSchema = z.object({
@@ -135,8 +160,10 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   const duration = nearestLevel(answers.duration.score, durations);
   const confidences = [answers.action.confidence, answers.direction.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence];
   const confidence = Math.min(...confidences);
-  const directions = cameraRelativeDirections(project, input.sceneId, input.frame);
-  const direction = directions[answers.direction.choice] ?? directions.forward;
+  const cameraIntent = explicitCameraDirection(input.instruction);
+  const directionChoice = cameraIntent ?? answers.direction.choice;
+  const directions: Record<string, Vec3> = { ...cameraRelativeDirections(project, input.sceneId, input.frame), ...radialCameraDirections(project, input.sceneId, input.frame, input.startPosition) };
+  const direction = directions[directionChoice] ?? directions.forward;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
@@ -145,7 +172,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   let endPosition = input.startPosition;
   const objectTransform = evaluateTransform(object, input.frame);
   let endRotation = objectTransform.rotation;
-  const action = answers.action.choice;
+  const action = cameraIntent && answers.action.choice !== 'jump' ? 'move' : answers.action.choice;
   if (['move', 'rise', 'descend'].includes(action)) endPosition = add(input.startPosition, scale(direction, distance));
   if (action === 'turn') {
     const amount = distance <= .5 ? 45 : distance <= 1 ? 90 : 180;
@@ -173,7 +200,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject, inp
   return JevActionPlanSchema.parse({
     schemaVersion: 'JevActionPlanV1', objectId: object.id, instruction: input.instruction, model: response.model,
     status: confidence >= .55 && answers.actionable.noul >= .6 ? 'ready' : 'review', confidence,
-    decision: { action, direction: answers.direction.choice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable: answers.actionable.noul },
+    decision: { action, direction: directionChoice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable: answers.actionable.noul },
     blenderPlan: plan,
   });
 }
