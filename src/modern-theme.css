@@ -484,3 +484,48 @@
   .app-shell .simple-inspector .right-tabs { gap: 3px; padding: 8px 6px 0; }
   .app-shell .simple-inspector .right-tabs button { gap: 3px; padding: 0 2px; }
 }
+
+/* Blender-like neutral workspace with contextual controls floating over the main view. */
+.app-shell.theme-dark {
+  --premiere-accent: #5686c2;
+  --bg: #202020;
+  --panel: #303030;
+  --panel-2: #383838;
+  --line: #4b4b4b;
+  --ui-text: #dedede;
+  --ui-muted: #a7a7a7;
+  --ui-surface: #303030;
+  --ui-raised: #393939;
+  --ui-hover: #474747;
+  --ui-edge: rgba(255,255,255,.12);
+  --ui-subsection: #353535;
+  color: var(--ui-text);
+  background: #202020;
+}
+.app-shell.theme-dark .slim-headbar { background: #282828; border-color: #444 !important; }
+.app-shell.theme-dark .workspace { background: #252525; }
+.app-shell.theme-dark :is(.timeline, .timeline-toolbar, .timeline-scroll) { background: #2b2b2b; }
+.app-shell.theme-dark .timeline :is(.track, .ruler) { background-color: #303030 !important; border-color: #404040 !important; }
+.app-shell.theme-dark .timeline :is(.track-label, .ruler-label) { --timeline-label-base: #292929; background: #292929 !important; }
+.app-shell.theme-dark .timeline .track-pair.active :is(.track, .track-label) { background: #3a3a3a !important; }
+.app-shell.theme-dark :is(input:not([type='range']):not([type='checkbox']):not([type='color']), textarea, select) { background: #3a3a3a; border-color: #505050; }
+.app-shell.theme-dark :is(input, textarea, select):focus { border-color: var(--premiere-accent); box-shadow: 0 0 0 1px rgba(86,134,194,.35); }
+.app-shell.theme-dark .header-inspector-tabs button.active { color: #fff; background: #405d7e; border-color: #648fca; }
+.app-shell.theme-dark .header-inspector-tabs button:hover { color: #fff; background: #383838; }
+.app-shell.theme-dark .jev-composer-mark { color: #73a6e2; }
+.app-shell.theme-dark .jev-composer-tool:hover:not(:disabled),
+.app-shell.theme-dark .jev-composer-tool.active { color: #b9d8ff; background: #3b4b5e; }
+.app-shell.theme-dark .jev-composer-send { color: #fff; background: #477dbb; }
+.app-shell.theme-dark .jev-composer-send:hover:not(:disabled) { background: #5b91cf; }
+
+.app-shell .header-inspector-tabs { -webkit-app-region: no-drag; }
+.app-shell .workspace-main-only { position: relative; grid-template-columns: minmax(0,1fr) !important; }
+.app-shell .main-inspector-popover { position: absolute; z-index: 35; top: 12px; right: 12px; bottom: 12px; width: min(360px, calc(100% - 24px)); pointer-events: none; }
+.app-shell .floating-inspector { width: 100%; max-height: 100%; display: flex; pointer-events: auto; border-radius: 12px !important; overflow: hidden; box-shadow: 0 18px 55px rgba(0,0,0,.42) !important; }
+.app-shell .floating-inspector-header { flex: 0 0 42px; padding: 0 8px 0 14px; display: flex; align-items: center; justify-content: space-between; color: var(--ui-text); background: var(--ui-raised); border-bottom: 1px solid var(--ui-edge); }
+.app-shell .floating-inspector-header strong { font-size: 11px; font-weight: 600; }
+.app-shell .floating-inspector-header .icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; }
+.app-shell .floating-inspector > .inspector-scroll { background: var(--ui-surface); }
+
+.app-shell .live-camera-preview { left: 12px; right: auto; top: 12px; bottom: auto; }
+.app-shell .live-camera-preview-collapsed { left: 12px; right: auto; top: 12px; bottom: auto; }

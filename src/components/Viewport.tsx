@@ -1400,7 +1400,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
-    {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch"><button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button></div>}
+    {cameraView && <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
         <button className="camera-hint-close" title="Nascondi istruzioni" aria-label="Nascondi istruzioni" onClick={() => setCameraHintVisible(false)}>×</button>

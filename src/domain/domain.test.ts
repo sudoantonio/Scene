@@ -269,6 +269,35 @@ describe('scene indipendenti', () => {
     expect(positionKey?.value).toEqual([8, -5, 6]);
   });
 
+  it('crea sempre un keyframe controllabile quando la camera viene spostata tra due punti', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const cameraId = scene.cameraId;
+    useEditor.getState().setFrame(scene.frame + 18);
+    useEditor.getState().setCameraFraming(scene.id, [7, -4, 5], [68, 0, 24], [0, 0, 1]);
+    const state = useEditor.getState();
+    const camera = state.project.objects.find((object) => object.id === cameraId)!;
+    expect(camera.keyframes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ frame: scene.frame + 18, property: 'position', purpose: 'motion', value: [7, -4, 5] }),
+      expect.objectContaining({ frame: scene.frame + 18, property: 'rotation', purpose: 'motion', value: [68, 0, 24] }),
+    ]));
+    expect(state.selectedMotion).toEqual({ objectId: cameraId, sceneId: scene.id });
+  });
+
+  it('crea un keyframe anche spostando direttamente la camera nella vista libera', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    useEditor.getState().setFrame(scene.frame + 12);
+    useEditor.getState().setTransform(camera.id, { position: [6, -3, 4], rotation: [65, 0, 20], scale: [1, 1, 1] });
+    const state = useEditor.getState();
+    const updated = state.project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(updated.keyframes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ frame: scene.frame + 12, property: 'position', purpose: 'motion', value: [6, -3, 4] }),
+    ]));
+    expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: scene.id });
+  });
+
   it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');

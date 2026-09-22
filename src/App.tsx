@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Box, Plus, SlidersHorizontal, Sun } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -42,7 +42,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const inspectorMenuRef = useRef<HTMLDivElement>(null);
+  const inspectorPopoverRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
   const [viewportFullscreen, setViewportFullscreen] = useState(false);
@@ -217,12 +220,24 @@ export default function App() {
   }, [addOpen]);
 
   useEffect(() => {
+    if (!inspectorOpen) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!inspectorPopoverRef.current?.contains(target) && !inspectorMenuRef.current?.contains(target)) setInspectorOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setInspectorOpen(false); };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', escape); };
+  }, [inspectorOpen]);
+
+  useEffect(() => {
     document.title = `${project.name}${dirty ? ' •' : ''} — Scene`;
   }, [dirty, project.name]);
 
   useEffect(() => {
-    const openMotionEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
-    const openAudioEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
+    const openMotionEditor = () => { setInspectorPanel('edit'); setInspectorOpen(true); };
+    const openAudioEditor = () => { setInspectorPanel('edit'); setInspectorOpen(true); };
     window.addEventListener('abaco:edit-motion', openMotionEditor);
     window.addEventListener('abaco:edit-audio', openAudioEditor);
     return () => { window.removeEventListener('abaco:edit-motion', openMotionEditor); window.removeEventListener('abaco:edit-audio', openAudioEditor); };
@@ -250,7 +265,6 @@ export default function App() {
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [setGizmoMode, setPlaying]);
 
-  const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 52 : layout.timeline;
   const toggleViewportFullscreen = () => {
     setViewportFullscreen((value) => {
@@ -263,11 +277,13 @@ export default function App() {
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+      <nav ref={inspectorMenuRef} className="header-inspector-tabs" aria-label="Controlli scena">{([
+        ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
+      ] as const).map(([id, Icon, label]) => <button key={id} className={inspectorOpen && inspectorPanel === id ? 'active' : ''} aria-expanded={inspectorOpen && inspectorPanel === id} onClick={() => { if (inspectorPanel === id) setInspectorOpen((value) => !value); else { setInspectorPanel(id); setInspectorOpen(true); } }}><Icon size={14} />{label}</button>)}</nav>
     </div>
-    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
+    <main ref={workspaceRef} className="workspace workspace-main-only" style={{ gridTemplateColumns: 'minmax(0,1fr)' }}>
       <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
-      <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
-      <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
+      {inspectorOpen && <div ref={inspectorPopoverRef} className="main-inspector-popover"><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} floating onClose={() => setInspectorOpen(false)} /></div>}
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} viewportFullscreen={viewportFullscreen} onToggleViewportFullscreen={toggleViewportFullscreen} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />

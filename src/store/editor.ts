@@ -983,6 +983,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const session = state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
       const sessionActive = Boolean(session);
       const editingSelectedMotion = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id;
+      const editingBetweenKeys = state.currentFrame !== sceneFrame;
       const range = sceneRange(next, scene.id);
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       let nextSession = session;
@@ -990,7 +991,7 @@ export const useEditor = create<EditorState>((set, get) => {
         nextSession = recordTransformSample(camera, sceneFrame, range!.end, recordFrame, {
           position, rotation, scale: evaluateTransform(camera, state.currentFrame).scale,
         }, state.interpolation, session);
-      } else if (motionActive || editingSelectedMotion) {
+      } else if (motionActive || editingSelectedMotion || editingBetweenKeys) {
         putMotionKey(camera, sceneFrame, recordFrame, 'position', position, state.interpolation);
         putMotionKey(camera, sceneFrame, recordFrame, 'rotation', rotation, state.interpolation);
       } else {
@@ -1003,6 +1004,7 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       makeCameraShotIndependent(next, camera, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       if (nextSession) commitRecording(next, nextSession); else commit(next);
+      if (!session && (motionActive || editingSelectedMotion || editingBetweenKeys)) set({ selectedMotion: { objectId: camera.id, sceneId: scene.id } });
       if (previousCameraId && camera.id !== previousCameraId) set({
         ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
         ...(state.selectedMotion?.objectId === previousCameraId && state.selectedMotion.sceneId === scene.id
@@ -1033,6 +1035,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const sessionActive = Boolean(session) && object.kind !== 'audio' && !object.kind.includes('light');
       const range = scene ? sceneRange(next, scene.id) : undefined;
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
+      const editingCameraBetweenKeys = object.kind === 'camera' && Boolean(scene) && state.currentFrame !== sceneFrame;
       const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
       if (provisionalFrame !== undefined && provisionalFrame !== state.currentFrame) {
         object.keyframes = object.keyframes.filter((key) => key.frame !== provisionalFrame || key.purpose !== 'motion' || !['position', 'rotation', 'scale'].includes(key.property));
@@ -1045,7 +1048,7 @@ export const useEditor = create<EditorState>((set, get) => {
           const editingExistingPoint = state.selectedMotion?.objectId === id
             && state.selectedMotion.sceneId === scene?.id
             && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
-          if (motionActive || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+          if (motionActive || editingExistingPoint || editingCameraBetweenKeys) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
           else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
         }
       }
@@ -1061,9 +1064,10 @@ export const useEditor = create<EditorState>((set, get) => {
         makeCameraShotIndependent(next, object, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       if (sessionActive && nextSession) commitRecording(next, nextSession); else commit(next);
+      if (!session && editingCameraBetweenKeys && scene) set({ selectedMotion: { objectId: object.id, sceneId: scene.id } });
       if (object.id !== id) set({
         selectedId: object.id,
-        selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
+        selectedMotion: motionActive || editingCameraBetweenKeys ? { objectId: object.id, sceneId: scene!.id } : undefined,
         recordingMotion: motionActive ? { ...state.recordingMotion!, objectId: object.id, sceneId: scene!.id } : state.recordingMotion,
       });
     },

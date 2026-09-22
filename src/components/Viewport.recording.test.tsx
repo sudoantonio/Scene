@@ -147,6 +147,7 @@ describe('controlli della vista libera', () => {
 
   it('mostra solo la miniatura camera e permette di ridurla', () => {
     render(<Viewport />);
+    expect(screen.queryByRole('button', { name: 'Frame della ripresa' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Camera · Scena/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Riduci anteprima camera' }));
     expect(screen.queryByRole('button', { name: "Apri l'anteprima della camera" })).not.toBeInTheDocument();

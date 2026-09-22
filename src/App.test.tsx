@@ -1,11 +1,11 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject, type AbacoProject } from './domain/schema';
 import { useEditor } from './store/editor';
 import App from './App';
 
 vi.mock('./components/Viewport', () => ({ default: () => <div />, captureContactSheet: vi.fn() }));
-vi.mock('./components/Inspector', () => ({ default: () => <div /> }));
+vi.mock('./components/Inspector', () => ({ default: ({ panel, floating }: { panel: string; floating?: boolean }) => <div data-testid="inspector">{floating ? `Pannello ${panel}` : panel}</div> }));
 vi.mock('./components/Timeline', () => ({ default: () => <div /> }));
 vi.mock('./components/ElementsPanel', () => ({ default: () => <div /> }));
 
@@ -30,6 +30,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Salvataggi e apertura progetto', () => {
+  it('apre i controlli dall’header come pannello flottante nel main', () => {
+    render(<App />);
+    expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Modifica' }));
+    expect(screen.getByTestId('inspector')).toHaveTextContent('Pannello edit');
+    fireEvent.click(screen.getByRole('button', { name: 'Scenografia' }));
+    expect(screen.getByTestId('inspector')).toHaveTextContent('Pannello scene');
+    fireEvent.click(screen.getByRole('button', { name: 'Scenografia' }));
+    expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
+  });
+
   it('non cancella modifiche effettuate mentre il salvataggio automatico è in corso', async () => {
     const pending = deferred();
     saveProject.mockReturnValue(pending.promise);

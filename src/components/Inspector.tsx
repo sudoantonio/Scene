@@ -1,4 +1,4 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -23,7 +23,7 @@ function VectorFields({ label, value, onChange }: { label: string; value: Vec3; 
 
 const styleColors = ['#2f3437', '#9cabb8', '#d97373', '#dfab01', '#448361', '#337ea9', '#9065b0'];
 
-export default function Inspector({ panel, onPanelChange, collapsed, onToggleCollapse }: { panel: InspectorPanel; onPanelChange(panel: InspectorPanel): void; collapsed?: boolean; onToggleCollapse?(): void }) {
+export default function Inspector({ panel, onPanelChange, collapsed, onToggleCollapse, floating = false, onClose }: { panel: InspectorPanel; onPanelChange(panel: InspectorPanel): void; collapsed?: boolean; onToggleCollapse?(): void; floating?: boolean; onClose?(): void }) {
   const project = useEditor((state) => state.project);
   const selectedId = useEditor((state) => state.selectedId);
   const frame = useEditor((state) => state.currentFrame);
@@ -125,10 +125,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     {!motionActive && <p className="inspector-help">Seleziona un movimento nella timeline o crea un punto qui.</p>}
   </InspectorGroup>;
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
-  return <aside className="inspector simple-inspector">
-    <nav className="right-tabs" aria-label="Sezioni pannello destro"><button className="inspector-collapse-tab" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
+  return <aside className={`inspector simple-inspector ${floating ? 'floating-inspector' : ''}`}>
+    {floating ? <header className="floating-inspector-header"><strong>{panel === 'edit' ? 'Modifica' : panel === 'scene' ? 'Scenografia' : 'Luce'}</strong><button className="icon" aria-label="Chiudi controlli" title="Chiudi" onClick={onClose}><X size={15} /></button></header> : <nav className="right-tabs" aria-label="Sezioni pannello destro"><button className="inspector-collapse-tab" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
       ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
-    ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>
+    ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>}
     <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : 'Controlli luce'} tabIndex={0}>
     {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
       {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
