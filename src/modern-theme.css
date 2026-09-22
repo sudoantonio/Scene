@@ -521,11 +521,21 @@
 .app-shell .header-inspector-tabs { -webkit-app-region: no-drag; }
 .app-shell .workspace-main-only { position: relative; grid-template-columns: minmax(0,1fr) !important; }
 .app-shell .main-inspector-popover { position: absolute; z-index: 35; top: 12px; right: 12px; bottom: 12px; width: min(360px, calc(100% - 24px)); pointer-events: none; }
-.app-shell .floating-inspector { width: 100%; max-height: 100%; display: flex; pointer-events: auto; border-radius: 12px !important; overflow: hidden; box-shadow: 0 18px 55px rgba(0,0,0,.42) !important; }
-.app-shell .floating-inspector-header { flex: 0 0 42px; padding: 0 8px 0 14px; display: flex; align-items: center; justify-content: space-between; color: var(--ui-text); background: var(--ui-raised); border-bottom: 1px solid var(--ui-edge); }
+.app-shell .floating-inspector { width: 100%; height: 100%; min-height: 0; display: flex; pointer-events: auto; border: 0 !important; border-radius: 0 !important; overflow: hidden; box-shadow: 0 18px 55px rgba(0,0,0,.42) !important; }
+.app-shell .floating-inspector-header { flex: 0 0 42px; padding: 0 8px 0 14px; display: flex; align-items: center; justify-content: space-between; color: var(--ui-text); background: var(--ui-raised); border: 0; }
 .app-shell .floating-inspector-header strong { font-size: 11px; font-weight: 600; }
 .app-shell .floating-inspector-header .icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; }
 .app-shell .floating-inspector > .inspector-scroll { background: var(--ui-surface); }
 
 .app-shell .live-camera-preview { left: 12px; right: auto; top: 12px; bottom: auto; }
 .app-shell .live-camera-preview-collapsed { left: 12px; right: auto; top: 12px; bottom: auto; }
+
+/* Flat Blender-style panels: square surfaces, no decorative outlines. */
+.app-shell :is(.viewport, .timeline, .inspector, .floating-inspector, .live-camera-preview, .inspector-group, .inspector-group-fixed) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell :is(.camera-frame-guide, .live-camera-preview-canvas, .live-camera-preview-open) { border-radius: 0 !important; }
+.app-shell .inspector-group > summary,
+.app-shell .inspector-group-fixed > .inspector-group-summary { border: 0 !important; border-radius: 0 !important; }
