@@ -444,10 +444,11 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
 ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
   const parsed = JevActionInputSchema.parse(incoming);
   const project = ProjectSchema.parse(parsed.project);
-  const object = project.objects.find((candidate) => candidate.id === parsed.objectId);
-  if (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace) {
+  const object = parsed.objectId ? project.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
+  if (parsed.objectId && (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace)) {
     throw new Error('Seleziona un personaggio o un elemento 3D animabile.');
   }
+  if (object && !parsed.startPosition) throw new Error('La posizione iniziale del soggetto non è valida.');
   if (!project.cameraCuts.some((scene) => scene.id === parsed.sceneId)) throw new Error('La scena attiva non esiste più.');
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === parsed.sceneId);

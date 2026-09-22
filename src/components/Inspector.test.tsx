@@ -11,6 +11,14 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; });
 
 describe('Pannelli contestuali', () => {
+  it('permette di descrivere la regia Jev anche senza un personaggio selezionato', () => {
+    render(<Inspector panel="jev" onPanelChange={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Generatore azioni Jev' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Soggetto Jev')).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Solo scena e camera' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Azione Jev')).toHaveAttribute('placeholder', expect.stringContaining('camera avanza'));
+  });
+
   it('mostra solo il volume audio in Modifica e lascia invariata la scheda Luce', () => {
     useEditor.getState().addAudio({ sourcePath: '/sound.wav', name: 'Passi', duration: 2.5, waveform: [.2, .8, .4] });
     const view = render(<Inspector panel="edit" onPanelChange={vi.fn()} />);

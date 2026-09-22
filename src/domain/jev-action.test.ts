@@ -71,6 +71,41 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations[1].value.vector).toEqual([expectedX, 0, 0]);
   });
 
+  it('creates subject and camera keyframes from one scene direction', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.position = [0, -5, 2];
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'il personaggio va a destra mentre la camera avanza lentamente' }, response({
+      camera_requested: { type: 'noul', noul: .98 },
+      camera_action: { type: 'choice', choice: 'push_in', confidence: .94, probabilities: { push_in: .94 } },
+      camera_distance: { type: 'score', score: 3, confidence: .9, probabilities: { '3': .9 } },
+      camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
+      camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
+    }));
+    expect(result.decision.camera).toMatchObject({ requested: true, action: 'push_in', distanceMeters: 2, durationSeconds: 2 });
+    expect(result.blenderPlan.operations.filter((operation) => operation.objectId === character.id)).toHaveLength(2);
+    const cameraOperations = result.blenderPlan.operations.filter((operation) => operation.objectId === project.objects[0].id);
+    expect(cameraOperations).toHaveLength(2);
+    expect(cameraOperations[1].value.vector![1]).toBeGreaterThan(-5);
+  });
+
+  it('can direct the camera without a selected subject', () => {
+    const project = createProject();
+    const result = compileJevAction(project, undefined, { objectId: null, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null, instruction: 'la camera arretra lentamente' }, response({
+      camera_requested: { type: 'noul', noul: .98 },
+      camera_action: { type: 'choice', choice: 'pull_out', confidence: .94, probabilities: { pull_out: .94 } },
+      camera_distance: { type: 'score', score: 2, confidence: .9, probabilities: { '2': .9 } },
+      camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
+      camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
+    }));
+    expect(result.objectId).toBeNull();
+    expect(result.decision.camera?.action).toBe('pull_out');
+    expect(result.blenderPlan.operations).toHaveLength(2);
+  });
+
   it('adds an apex to a jump and flags uncertain decisions for review', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
