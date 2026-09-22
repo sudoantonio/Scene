@@ -32,6 +32,8 @@ describe('Jev action compiler', () => {
     expect(request.state.scene_context.objects).toEqual(expect.arrayContaining([expect.objectContaining({ id: character.id, name: character.name, transform: expect.objectContaining({ position: character.transform.position }) })]));
     expect(request.state.scene_context.active_scene).toMatchObject({ id: project.cameraCuts[0].id, framing: project.cameraCuts[0].framing });
     expect(request.questions.action.type).toBe('choice');
+    expect(request.questions.translate_x.criteria).toHaveProperty('hold');
+    expect(request.questions.rotate_z.criteria).toHaveProperty('increase');
   });
 
   it('sends a compact description of the stroke to Jev', () => {
@@ -54,7 +56,7 @@ describe('Jev action compiler', () => {
     expect(result.status).toBe('ready');
     expect(result.decision).toMatchObject({ action: 'move', direction: 'right', distanceMeters: 2, durationSeconds: 1, path: 'smooth' });
     expect(result.blenderPlan.operations).toHaveLength(2);
-    expect(result.blenderPlan.operations[1].value.vector).toEqual([3, 2, 0]);
+    expect(result.blenderPlan.operations[1].value.vector).toEqual([1, 4, 0]);
     expect(result.blenderPlan.operations[1].frame).toBe(34);
   });
 
@@ -86,7 +88,7 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations[1].value.vector).toEqual([expectedX, 0, 0]);
   });
 
-  it('creates subject and camera keyframes from one scene direction', () => {
+  it('animates only the selected subject even when the text also mentions the camera', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
     project.objects[0].transform.position = [0, -5, 2];
@@ -100,11 +102,34 @@ describe('Jev action compiler', () => {
       camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
       camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
     }));
-    expect(result.decision.camera).toMatchObject({ requested: true, action: 'push_in', distanceMeters: 2, durationSeconds: 2 });
+    expect(result.decision.camera).toMatchObject({ requested: false });
     expect(result.blenderPlan.operations.filter((operation) => operation.objectId === character.id)).toHaveLength(2);
     const cameraOperations = result.blenderPlan.operations.filter((operation) => operation.objectId === project.objects[0].id);
-    expect(cameraOperations).toHaveLength(2);
-    expect(cameraOperations[1].value.vector![1]).toBeGreaterThan(-5);
+    expect(cameraOperations).toHaveLength(0);
+  });
+
+  it('combines independent axes and respects exact metres, seconds and degrees', () => {
+    const project = createProject();
+    project.settings.frameEnd = 200;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, {
+      objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1],
+      instruction: 'avanza e va a destra di 3 metri mentre gira a destra di 90 gradi in 2 secondi',
+    }, response({
+      translate_x: { type: 'choice', choice: 'increase', confidence: .96, probabilities: { increase: .96 } },
+      translate_y: { type: 'choice', choice: 'increase', confidence: .96, probabilities: { increase: .96 } },
+      translate_z: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      rotate_x: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      rotate_y: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      rotate_z: { type: 'choice', choice: 'increase', confidence: .96, probabilities: { increase: .96 } },
+    }));
+    const endPosition = result.blenderPlan.operations.find((operation) => operation.property === 'position' && operation.frame === 49)!.value.vector!;
+    const endRotation = result.blenderPlan.operations.find((operation) => operation.property === 'rotation' && operation.frame === 49)!.value.vector!;
+    expect(endPosition[0]).toBeCloseTo(3 / Math.sqrt(2));
+    expect(endPosition[1]).toBeCloseTo(3 / Math.sqrt(2));
+    expect(endPosition[2]).toBe(1);
+    expect(endRotation).toEqual([0, 0, 90]);
   });
 
   it('turns a curved canvas stroke into intermediate subject keyframes', () => {
@@ -160,9 +185,10 @@ describe('Jev action compiler', () => {
     expect(applied.keyframes.filter((key) => key.property === 'position' && key.source === 'ai')).toHaveLength(2);
   });
 
-  it('can direct the camera without a selected subject', () => {
+  it('directs the selected camera without requiring a selected subject', () => {
     const project = createProject();
-    const result = compileJevAction(project, undefined, { objectId: null, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null, instruction: 'la camera arretra lentamente' }, response({
+    const camera = project.objects[0];
+    const result = compileJevAction(project, undefined, { objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null, instruction: 'la camera arretra lentamente' }, response({
       camera_requested: { type: 'noul', noul: .98 },
       camera_action: { type: 'choice', choice: 'pull_out', confidence: .94, probabilities: { pull_out: .94 } },
       camera_distance: { type: 'score', score: 2, confidence: .9, probabilities: { '2': .9 } },
@@ -183,7 +209,7 @@ describe('Jev action compiler', () => {
     expect(request.state.selected_target).toMatchObject({ id: camera.id, role: 'camera' });
     const result = compileJevAction(project, undefined, input, response({
       camera_requested: { type: 'noul', noul: 0 },
-      camera_action: { type: 'choice', choice: 'push_in', confidence: .94, probabilities: { push_in: .94 } },
+      camera_action: { type: 'choice', choice: 'hold', confidence: .94, probabilities: { hold: .94 } },
       camera_distance: { type: 'score', score: 2, confidence: .9, probabilities: { '2': .9 } },
       camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
       camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },

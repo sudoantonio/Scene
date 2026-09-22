@@ -35,6 +35,13 @@ export const JevActionResponseSchema = z.object({
     camera_duration: JevScoreAnswerSchema.optional(),
     camera_path: JevChoiceAnswerSchema.optional(),
     stroke_target: JevChoiceAnswerSchema.optional(),
+    translate_x: JevChoiceAnswerSchema.optional(),
+    translate_y: JevChoiceAnswerSchema.optional(),
+    translate_z: JevChoiceAnswerSchema.optional(),
+    rotate_x: JevChoiceAnswerSchema.optional(),
+    rotate_y: JevChoiceAnswerSchema.optional(),
+    rotate_z: JevChoiceAnswerSchema.optional(),
+    rotation_amount: JevScoreAnswerSchema.optional(),
   }),
   usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional(),
 });
@@ -159,6 +166,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       spatial_rules: 'I movimenti ordinari restano sul piano XY e mantengono la quota Z iniziale. Z cambia solo con una richiesta esplicita di salita, discesa o salto. Un’orbita camera chiusa resta su un piano orizzontale, conserva il raggio camera-soggetto e mantiene il soggetto al centro.',
+      decision_rules: 'Valuta separatamente ogni asse. X positivo=avanti, X negativo=indietro; Y positivo=destra, Y negativo=sinistra; Z positivo=salire, Z negativo=scendere. Rotazione X=roll, Y=pitch, Z=yaw. Non dedurre movimenti della camera quando il soggetto selezionato non è una camera, e non animare elementi diversi dal soggetto selezionato.',
       constraint: input.target === 'camera'
         ? 'La camera attiva è il soggetto selezionato: interpreta la richiesta esclusivamente come movimento o rotazione della camera. Non animare altri elementi.'
         : 'Interpreta una sola azione principale del soggetto selezionato. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
@@ -177,6 +185,13 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       camera_duration: { type: 'score', instructions: 'Quanto deve durare il movimento della camera?', criteria: ['Scatto: 0,25 s', 'Rapido: 0,5 s', 'Normale: 1 s', 'Lento: 2 s', 'Molto lento: 4 s'] },
       camera_path: { type: 'choice', instructions: 'Come deve muoversi la camera?', criteria: { direct: 'Movimento lineare e meccanico.', smooth: 'Movimento cinematografico morbido.', arc: 'Movimento curvo o orbitale.' } },
       stroke_target: { type: 'choice', instructions: 'Se è presente un tratto disegnato, quale movimento rappresenta in base alla descrizione?', criteria: { subject: 'La traiettoria del soggetto selezionato.', camera: 'La traiettoria della camera attiva.' } },
+      translate_x: { type: 'choice', instructions: 'Lungo X il soggetto selezionato va avanti, indietro o resta fermo?', criteria: { increase: 'Incremento X: avanti.', decrease: 'Decremento X: indietro.', hold: 'Nessun movimento lungo X.' } },
+      translate_y: { type: 'choice', instructions: 'Lungo Y il soggetto selezionato va a destra, a sinistra o resta fermo?', criteria: { increase: 'Incremento Y: destra.', decrease: 'Decremento Y: sinistra.', hold: 'Nessun movimento lungo Y.' } },
+      translate_z: { type: 'choice', instructions: 'Lungo Z il soggetto selezionato sale, scende o resta alla stessa quota?', criteria: { increase: 'Incremento Z: sale o salta.', decrease: 'Decremento Z: scende o cade.', hold: 'Nessun movimento lungo Z.' } },
+      rotate_x: { type: 'choice', instructions: 'Il roll sull’asse X aumenta, diminuisce o resta fermo?', criteria: { increase: 'Roll positivo.', decrease: 'Roll negativo.', hold: 'Nessuna rotazione X.' } },
+      rotate_y: { type: 'choice', instructions: 'Il pitch sull’asse Y aumenta, diminuisce o resta fermo?', criteria: { increase: 'Pitch positivo: guarda verso l’alto.', decrease: 'Pitch negativo: guarda verso il basso.', hold: 'Nessuna rotazione Y.' } },
+      rotate_z: { type: 'choice', instructions: 'Lo yaw sull’asse Z aumenta, diminuisce o resta fermo?', criteria: { increase: 'Yaw positivo: gira verso destra.', decrease: 'Yaw negativo: gira verso sinistra.', hold: 'Nessuna rotazione Z.' } },
+      rotation_amount: { type: 'score', instructions: 'Quanto deve essere ampia la rotazione?', criteria: ['Minima: 10°', 'Piccola: 20°', 'Media: 45°', 'Ampia: 90°', 'Completa: 180°'] },
     },
   } as const;
 }
@@ -244,7 +259,6 @@ const normalizeVector = (vector: Vec3, fallback: Vec3): Vec3 => {
   return length < .0001 ? fallback : vector.map((entry) => entry / length) as Vec3;
 };
 const sameVector = (a: Vec3, b: Vec3) => a.every((entry, index) => Math.abs(entry - b[index]) < .0001);
-const cameraWords = /camera|telecamera|inquadratur|carrell|panoram|dolly|orbit|zoom|ripresa/;
 
 function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 4) {
   const count = Math.min(maxPoints, points.length);
@@ -323,12 +337,13 @@ function cameraOrbitTrajectory(position: Vec3, center: Vec3, direction: 'orbit_l
   });
 }
 
-function explicitCameraMotion(instruction: string) {
+function explicitCameraMotion(instruction: string, selectedCamera = false) {
   const text = normalizedInstruction(instruction);
   const patterns: [string, RegExp][] = [
     ['follow_subject', /(?:camera|telecamera)[^.!?]{0,32}(?:segue|insegue|accompagna)/],
     ['orbit_left', /(?:camera|telecamera)[^.!?]{0,32}(?:orbita|gira)[^.!?]{0,20}(?:sinistra|antiorari)/],
     ['orbit_right', /(?:camera|telecamera)[^.!?]{0,32}(?:orbita|gira)[^.!?]{0,20}(?:destra|orari)/],
+    ['orbit_right', /(?:camera|telecamera)?[^.!?]{0,16}(?:orbita|gira)[^.!?]{0,24}(?:attorno|intorno)/],
     ['pan_left', /(?:panoramica|pan|sguardo)[^.!?]{0,20}(?:sinistra)/],
     ['pan_right', /(?:panoramica|pan|sguardo)[^.!?]{0,20}(?:destra)/],
     ['tilt_up', /(?:camera|telecamera|inquadratura)[^.!?]{0,32}(?:inclina|guarda|punta)[^.!?]{0,16}(?:alto|su)/],
@@ -340,7 +355,20 @@ function explicitCameraMotion(instruction: string) {
     ['rise', /(?:camera|telecamera)[^.!?]{0,32}(?:sale|si alza|solleva)/],
     ['descend', /(?:camera|telecamera)[^.!?]{0,32}(?:scende|si abbassa)/],
   ];
-  return patterns.find(([, pattern]) => pattern.test(text))?.[0];
+  const named = patterns.find(([, pattern]) => pattern.test(text))?.[0];
+  if (named || !selectedCamera) return named;
+  const selectedPatterns: [string, RegExp][] = [
+    ['follow_subject', /\b(?:segue|insegue|accompagna)\b/],
+    ['orbit_left', /(?:orbita|gira)[^.!?]{0,24}(?:attorno|intorno)[^.!?]{0,24}(?:sinistra|antiorari)/],
+    ['orbit_right', /(?:orbita|gira)[^.!?]{0,24}(?:attorno|intorno)/],
+    ['push_in', /\b(?:avanza|avvicina\w*|stringe|entra)\b/],
+    ['pull_out', /\b(?:arretra|allontana\w*|allarga|esce)\b/],
+    ['truck_left', /(?:trasla|scorre|carrella|sposta\w*)[^.!?]{0,18}\bsinistra\b/],
+    ['truck_right', /(?:trasla|scorre|carrella|sposta\w*)[^.!?]{0,18}\bdestra\b/],
+    ['rise', /\b(?:sale|sali|alza\w*|solleva\w*)\b/],
+    ['descend', /\b(?:scende|scendi|abbassa\w*)\b/],
+  ];
+  return selectedPatterns.find(([, pattern]) => pattern.test(text))?.[0];
 }
 
 function rotationToward(position: Vec3, target: Vec3): Vec3 {
@@ -361,18 +389,66 @@ function unwrapRotation(previous: Vec3 | undefined, rotation: Vec3): Vec3 {
   }) as Vec3;
 }
 
+type AxisIntent = { translation: [number | undefined, number | undefined, number | undefined]; rotation: [number | undefined, number | undefined, number | undefined] };
+
+function explicitAxisIntent(instruction: string, cameraOnly: boolean): AxisIntent {
+  const complete = normalizedInstruction(instruction);
+  const clauses = complete.split(/\bmentre\b|[.;]/).map((entry) => entry.trim()).filter(Boolean);
+  const scoped = cameraOnly ? clauses.filter((entry) => /camera|telecamera|inquadratur|ripresa/.test(entry)) : clauses.filter((entry) => !/camera|telecamera|inquadratur|ripresa/.test(entry));
+  const text = scoped.length ? scoped.join(' ') : complete;
+  const movingRight = /(?:va|vai|muov\w*|spost\w*|trasl\w*|corr\w*|cammin\w*|scorr\w*|carrell\w*)[^.!?]{0,24}\bdestra\b|\bdestra\b[^.!?]{0,24}(?:va|vai|muov\w*|spost\w*|trasl\w*|corr\w*|cammin\w*)/.test(text);
+  const movingLeft = /(?:va|vai|muov\w*|spost\w*|trasl\w*|corr\w*|cammin\w*|scorr\w*|carrell\w*)[^.!?]{0,24}\bsinistra\b|\bsinistra\b[^.!?]{0,24}(?:va|vai|muov\w*|spost\w*|trasl\w*|corr\w*|cammin\w*)/.test(text);
+  const yawRight = /(?:gira|ruota|yaw)[^.!?]{0,20}\bdestra\b|\bdestra\b[^.!?]{0,20}(?:gira|ruota|yaw)/.test(text);
+  const yawLeft = /(?:gira|ruota|yaw)[^.!?]{0,20}\bsinistra\b|\bsinistra\b[^.!?]{0,20}(?:gira|ruota|yaw)/.test(text);
+  const pitchUp = /(?:pitch|guarda|inclina|punta)[^.!?]{0,20}(?:verso\s+)?(?:l alto|alto|su)\b/.test(text);
+  const pitchDown = /(?:pitch|guarda|inclina|punta)[^.!?]{0,20}(?:verso\s+)?(?:il\s+)?(?:basso|giu)\b/.test(text);
+  const rollRight = /(?:roll|inclina|piega)[^.!?]{0,24}(?:lato\s+)?destro\b/.test(text);
+  const rollLeft = /(?:roll|inclina|piega)[^.!?]{0,24}(?:lato\s+)?sinistro\b/.test(text);
+  return {
+    translation: [
+      /\b(?:avanti|avanza|prosegue|entra)\b/.test(text) ? 1 : /\b(?:indietro|arretra|retrocede)\b/.test(text) ? -1 : undefined,
+      movingRight ? 1 : movingLeft ? -1 : undefined,
+      /\b(?:sale|sali|salire|alza|solleva|ascende)\b/.test(text) ? 1 : /\b(?:scende|scendi|scendere|abbassa|cade|precipita)\b/.test(text) ? -1 : undefined,
+    ],
+    rotation: [rollRight ? 1 : rollLeft ? -1 : undefined, pitchUp ? 1 : pitchDown ? -1 : undefined, yawRight ? 1 : yawLeft ? -1 : undefined],
+  };
+}
+
+function answerAxis(answer: JevActionResponse['answers']['translate_x'], explicit: number | undefined) {
+  if (explicit !== undefined) return explicit;
+  if (!answer || answer.confidence < .62) return 0;
+  return answer.choice === 'increase' ? 1 : answer.choice === 'decrease' ? -1 : 0;
+}
+
+function explicitMeasurement(instruction: string, unit: 'distance' | 'duration' | 'rotation') {
+  const text = normalizedInstruction(instruction);
+  const pattern = unit === 'distance' ? /(\d+(?:[.,]\d+)?)\s*(centimetr\w*|cm|metr\w*|m)\b/
+    : unit === 'duration' ? /(\d+(?:[.,]\d+)?)\s*(second\w*|sec|s)\b/
+      : /(\d+(?:[.,]\d+)?)\s*(grad\w*|°)\b/;
+  const match = text.match(pattern);
+  if (!match) return undefined;
+  const amount = Number(match[1]!.replace(',', '.'));
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+  return unit === 'distance' && /^(?:centimetr|cm)/.test(match[2]!) ? amount / 100 : amount;
+}
+
 export function compileJevAction(project: AbacoProject, object: SceneObject | undefined, input: Omit<JevActionInput, 'project'>, raw: JevActionResponse): JevActionPlan {
   const response = JevActionResponseSchema.parse(raw);
   const { answers } = response;
-  const distance = nearestLevel(answers.distance.score, distances);
-  const duration = nearestLevel(answers.duration.score, durations);
-  const drawnFullOrbit = closedStroke(input.gesture?.points) && /(?:gira\w*|ruota\w*|orbit\w*)[^.!?]{0,30}(?:attorno|intorno)|(?:attorno|intorno)[^.!?]{0,30}(?:personaggi|soggett|element)/.test(normalizedInstruction(input.instruction));
-  const explicitCameraAction = explicitCameraMotion(input.instruction) ?? (drawnFullOrbit ? drawnOrbitDirection(input.gesture?.points) : undefined);
-  const mentionsCamera = cameraWords.test(normalizedInstruction(input.instruction));
-  const cameraAction = explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
   const cameraOnly = input.target === 'camera';
-  const gestureTarget = input.gesture ? (cameraOnly ? 'camera' : input.gesture.target === 'auto' ? (answers.stroke_target?.choice === 'camera' || !object ? 'camera' : 'subject') : input.gesture.target) : undefined;
-  const cameraRequested = cameraOnly || gestureTarget === 'camera' || (cameraAction !== 'hold' && (mentionsCamera || (answers.camera_requested?.noul ?? 0) >= .6));
+  const distance = explicitMeasurement(input.instruction, 'distance') ?? nearestLevel(answers.distance.score, distances);
+  const duration = explicitMeasurement(input.instruction, 'duration') ?? nearestLevel(answers.duration.score, durations);
+  const rotationAmount = explicitMeasurement(input.instruction, 'rotation') ?? [10, 20, 45, 90, 180][Math.max(0, Math.min(4, Math.round(answers.rotation_amount?.score ?? answers.distance.score)))]!;
+  const explicitAxes = explicitAxisIntent(input.instruction, cameraOnly);
+  const translationAxes: Vec3 = [answerAxis(answers.translate_x, explicitAxes.translation[0]), answerAxis(answers.translate_y, explicitAxes.translation[1]), answerAxis(answers.translate_z, explicitAxes.translation[2])];
+  const rotationAxes: Vec3 = [answerAxis(answers.rotate_x, explicitAxes.rotation[0]), answerAxis(answers.rotate_y, explicitAxes.rotation[1]), answerAxis(answers.rotate_z, explicitAxes.rotation[2])];
+  const hasAxisTranslation = translationAxes.some((entry) => entry !== 0);
+  const hasAxisRotation = rotationAxes.some((entry) => entry !== 0);
+  const drawnFullOrbit = closedStroke(input.gesture?.points) && /(?:gira\w*|ruota\w*|orbit\w*)[^.!?]{0,30}(?:attorno|intorno)|(?:attorno|intorno)[^.!?]{0,30}(?:personaggi|soggett|element)/.test(normalizedInstruction(input.instruction));
+  const explicitCameraAction = explicitCameraMotion(input.instruction, cameraOnly) ?? (drawnFullOrbit ? drawnOrbitDirection(input.gesture?.points) : undefined);
+  const cameraAction = explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
+  const gestureTarget = input.gesture ? (cameraOnly ? 'camera' : 'subject') : undefined;
+  const cameraRequested = cameraOnly;
   const subjectConfidences = object ? [answers.action.confidence, answers.direction.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence] : [];
   const cameraConfidences = cameraRequested ? [answers.camera_action?.confidence, answers.camera_distance?.confidence, answers.camera_duration?.confidence, answers.camera_path?.confidence].filter((entry): entry is number => entry !== undefined) : [];
   const confidences = [...subjectConfidences, ...cameraConfidences];
@@ -394,11 +470,15 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   let endPosition = startPosition;
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
   let endRotation = objectTransform?.rotation ?? [0, 0, 0];
-  const action = object ? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action.choice) ? answers.action.choice : 'move') : cameraIntent && answers.action.choice !== 'jump' ? 'move' : answers.action.choice) : 'hold';
-  if (object && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(direction, distance));
-  if (object && action === 'turn') {
-    const amount = distance <= .5 ? 45 : distance <= 1 ? 90 : 180;
-    endRotation = [objectTransform!.rotation[0], objectTransform!.rotation[1], objectTransform!.rotation[2] + (answers.direction.choice === 'left' ? amount : -amount)];
+  let action = object ? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action.choice) ? answers.action.choice : 'move') : cameraIntent && answers.action.choice !== 'jump' ? 'move' : answers.action.choice) : 'hold';
+  if (object && hasAxisTranslation && action !== 'jump') action = translationAxes[2] !== 0 && translationAxes[0] === 0 && translationAxes[1] === 0 ? (translationAxes[2] > 0 ? 'rise' : 'descend') : 'move';
+  if (object && hasAxisRotation && !hasAxisTranslation && action !== 'jump') action = 'turn';
+  if (object && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(hasAxisTranslation && !cameraIntent ? normalizeVector(translationAxes, direction) : direction, distance));
+  if (object && hasAxisRotation) {
+    endRotation = objectTransform!.rotation.map((value, axis) => value + rotationAxes[axis]! * rotationAmount) as Vec3;
+  } else if (object && action === 'turn') {
+    const amount = rotationAmount;
+    endRotation = [objectTransform!.rotation[0], objectTransform!.rotation[1], objectTransform!.rotation[2] + (answers.direction.choice === 'left' ? -amount : amount)];
   }
   if (object && action === 'jump') {
     const horizontal: Vec3 = answers.direction.choice === 'up' || answers.direction.choice === 'down' ? [0, 0, 0] : scale(direction, distance);
@@ -424,7 +504,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: apexFrame, property: 'position', value: value([midpoint[0], midpoint[1], Math.max(startPosition[2], endPosition[2]) + Math.max(.35, distance * .5)]), interpolation: 'bezier', rationale: 'Apice del salto scelto da Jev.', commentIds: [] });
   }
   if (!subjectStroke && object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'position', value: value(endPosition), interpolation, rationale: `Azione ${action} compilata dalle decisioni Jev.`, commentIds: [] });
-  if (object && action === 'turn') {
+  if (object && (action === 'turn' || hasAxisRotation)) {
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(objectTransform!.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: 'Rotazione scelta da Jev.', commentIds: [] });
   }
@@ -434,8 +514,8 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     ? project.objects.find((candidate) => candidate.id === input.objectId && candidate.kind === 'camera')
     : project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
   const cameraFocusObject = cameraOnly && scene ? resolveCameraFocusObject(project, input.sceneId, input.frame, input.instruction, scene.framing.target) : object;
-  const cameraDistance = nearestLevel(answers.camera_distance?.score ?? answers.distance.score, distances);
-  const cameraDuration = nearestLevel(answers.camera_duration?.score ?? answers.duration.score, durations);
+  const cameraDistance = explicitMeasurement(input.instruction, 'distance') ?? nearestLevel(answers.camera_distance?.score ?? answers.distance.score, distances);
+  const cameraDuration = explicitMeasurement(input.instruction, 'duration') ?? nearestLevel(answers.camera_duration?.score ?? answers.duration.score, durations);
   const cameraInterpolation = answers.camera_path?.choice === 'direct' ? 'linear' : 'bezier';
   if (cameraRequested && cameraObject && scene) {
     const cameraTransform = evaluateTransform(cameraObject, input.frame);
@@ -446,7 +526,9 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     let cameraEndRotation = cameraTransform.rotation;
     const towardTarget = normalizeVector([targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]], [0, 1, 0]);
     const screenRight = normalizeGround(cameraBasis(cameraTransform.rotation)[0].toArray() as Vec3, [1, 0, 0]);
-    if (cameraAction === 'push_in') cameraEndPosition = add(cameraTransform.position, scale(towardTarget, Math.min(cameraDistance, Math.max(.1, Math.hypot(targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]) * .8))));
+    const atomicCameraDirection = normalizeVector(add(add(scale(towardTarget, translationAxes[0]), scale(screenRight, translationAxes[1])), [0, 0, translationAxes[2]]), towardTarget);
+    if (cameraOnly && hasAxisTranslation && !['orbit_left', 'orbit_right', 'follow_subject'].includes(cameraAction)) cameraEndPosition = add(cameraTransform.position, scale(atomicCameraDirection, cameraDistance));
+    else if (cameraAction === 'push_in') cameraEndPosition = add(cameraTransform.position, scale(towardTarget, Math.min(cameraDistance, Math.max(.1, Math.hypot(targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]) * .8))));
     else if (cameraAction === 'pull_out') cameraEndPosition = add(cameraTransform.position, scale(towardTarget, -cameraDistance));
     else if (cameraAction === 'truck_left') cameraEndPosition = add(cameraTransform.position, scale(screenRight, -cameraDistance));
     else if (cameraAction === 'truck_right') cameraEndPosition = add(cameraTransform.position, scale(screenRight, cameraDistance));
@@ -461,6 +543,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     if (['truck_left', 'truck_right', 'rise', 'descend', 'orbit_left', 'orbit_right'].includes(cameraAction)) cameraEndRotation = rotationToward(cameraEndPosition, targetEnd);
     if (cameraAction === 'pan_left' || cameraAction === 'pan_right') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, scale(screenRight, cameraDistance * (cameraAction === 'pan_left' ? -1 : 1))));
     if (cameraAction === 'tilt_up' || cameraAction === 'tilt_down') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, [0, 0, cameraDistance * (cameraAction === 'tilt_up' ? 1 : -1)]));
+    if (cameraOnly && hasAxisRotation) cameraEndRotation = cameraTransform.rotation.map((value, axis) => value + rotationAxes[axis]! * rotationAmount) as Vec3;
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
