@@ -376,6 +376,21 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(cube, 25).position).toEqual([4, 2, 1]);
   });
 
+  it('inserisce un punto modificabile cliccando tra due punti del percorso', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(49);
+    useEditor.getState().setTransform(cubeId, { position: [8, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const insertedId = useEditor.getState().insertMotionPoint(cubeId, sceneId, 25, [4, 2, 1]);
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(insertedId).toBeTruthy();
+    expect(cube.keyframes.find((key) => key.id === insertedId)).toMatchObject({ frame: 25, property: 'position', value: [4, 2, 1], purpose: 'motion', source: 'user' });
+    expect(evaluateTransform(cube, 25).position).toEqual([4, 2, 1]);
+  });
+
   it('imposta la sosta sull’intera posa del punto e la limita al punto seguente', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');

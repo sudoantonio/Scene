@@ -80,6 +80,7 @@ type EditorState = {
   alignObjectToGround(id: string): void;
   keyPose(id: string): void;
   updateMotionPoint(objectId: string, keyframeId: string, position: Vec3): void;
+  insertMotionPoint(objectId: string, sceneId: string, frame: number, position: Vec3): string | undefined;
   setMotionPointHold(objectId: string, keyframeId: string, holdFrames: number): void;
   moveMotionPoint(objectId: string, keyframeId: string, frame: number): void;
   resizeMotionRange(objectId: string, sceneId: string, startFrame: number, endFrame: number): void;
@@ -1092,6 +1093,24 @@ export const useEditor = create<EditorState>((set, get) => {
       key.purpose = 'motion';
       key.source = 'user';
       commit(next);
+    },
+    insertMotionPoint: (objectId, sceneId, requestedFrame, position) => {
+      if (!position.every(Number.isFinite)) return undefined;
+      const state = get();
+      const next = snapshot(state.project);
+      const object = next.objects.find((item) => item.id === objectId);
+      const range = sceneRange(next, sceneId);
+      if (!object || !range || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace) return undefined;
+      const frame = Math.max(range.scene.frame, Math.min(range.end - 1, Math.round(requestedFrame)));
+      let key = object.keyframes.find((item) => item.frame === frame && item.property === 'position');
+      if (key) Object.assign(key, { value: structuredClone(position), interpolation: state.interpolation, source: 'user', purpose: 'motion', commentIds: [] });
+      else {
+        key = { id: crypto.randomUUID(), frame, property: 'position', value: structuredClone(position), interpolation: state.interpolation, source: 'user', purpose: 'motion', commentIds: [] };
+        object.keyframes.push(key);
+      }
+      closePreviousScene(object, range.scene.frame);
+      commit(next);
+      return key.id;
     },
     setMotionPointHold: (objectId, keyframeId, requestedHoldFrames) => {
       const next = snapshot(get().project);

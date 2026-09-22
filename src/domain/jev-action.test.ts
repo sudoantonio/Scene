@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { createProject, createSceneObject } from './schema';
+import { applyPlan, evaluateTransform } from './animation';
 import { compileJevAction, jevActionRequest, type JevActionResponse } from './jev-action';
 import { useEditor } from '../store/editor';
 
@@ -27,6 +29,8 @@ describe('Jev action compiler', () => {
     expect(request.model).toBe('jev-latest');
     expect(request.state.start_position_meters).toEqual({ x: 1, y: 2, z: 3 });
     expect(request.state.active_camera?.rotation_degrees).toEqual([90, 0, 0]);
+    expect(request.state.scene_context.objects).toEqual(expect.arrayContaining([expect.objectContaining({ id: character.id, name: character.name, transform: expect.objectContaining({ position: character.transform.position }) })]));
+    expect(request.state.scene_context.active_scene).toMatchObject({ id: project.cameraCuts[0].id, framing: project.cameraCuts[0].framing });
     expect(request.questions.action.type).toBe('choice');
   });
 
@@ -193,15 +197,22 @@ describe('Jev action compiler', () => {
     project.settings.frameEnd = 160;
     const camera = project.objects[0];
     camera.transform.position = [0, -10, 5];
-    project.cameraCuts[0].framing.target = [0, 0, 1];
+    project.cameraCuts[0].framing.target = [-20, -20, 1];
+    const character = createSceneObject('blend_asset', 1);
+    character.name = 'Personaggio Fluido';
+    character.transform.position = [2, 3, 2];
+    project.objects.push(character);
     const points = Array.from({ length: 25 }, (_, index) => {
       const angle = Math.PI * 2 * index / 24;
       return [.5 + Math.cos(angle) * .35, .5 + Math.sin(angle) * .3] as [number, number];
     });
-    const result = compileJevAction(project, undefined, {
+    const input = {
       objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null,
       instruction: 'gira intorno al personaggio', gesture: { target: 'camera', points },
-    }, response({
+    } as const;
+    const request = jevActionRequest(project, undefined, input);
+    expect(request.state.camera_focus_target).toMatchObject({ id: character.id, name: character.name, position: character.transform.position });
+    const result = compileJevAction(project, undefined, input, response({
       camera_requested: { type: 'noul', noul: .99 },
       camera_action: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
       camera_distance: { type: 'score', score: 1, confidence: .9, probabilities: { '1': .9 } },
@@ -209,12 +220,23 @@ describe('Jev action compiler', () => {
       camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
     }));
     const positions = result.blenderPlan.operations.filter((operation) => operation.property === 'position').map((operation) => operation.value.vector!);
-    const initialRadius = Math.hypot(positions[0][0], positions[0][1], positions[0][2] - 1);
+    const rotationOperations = result.blenderPlan.operations.filter((operation) => operation.property === 'rotation');
+    const initialRadius = Math.hypot(positions[0][0] - 2, positions[0][1] - 3, positions[0][2] - 2);
     expect(result.decision.camera?.action).toBe('orbit_right');
     expect(positions).toHaveLength(4);
-    positions.forEach((position) => expect(Math.hypot(position[0], position[1], position[2] - 1)).toBeCloseTo(initialRadius));
+    positions.forEach((position) => expect(Math.hypot(position[0] - 2, position[1] - 3, position[2] - 2)).toBeCloseTo(initialRadius));
     positions[0].forEach((value, axis) => expect(positions.at(-1)![axis]).toBeCloseTo(value, 5));
     expect(Math.max(...positions.map((position) => position[0])) - Math.min(...positions.map((position) => position[0]))).toBeGreaterThan(8);
+    const applied = applyPlan(project, result.blenderPlan);
+    const appliedCamera = applied.objects.find((object) => object.id === camera.id)!;
+    rotationOperations.forEach((operation) => {
+      const rotation = operation.value.vector!;
+      const position = evaluateTransform(appliedCamera, operation.frame).position;
+      const view = new THREE.PerspectiveCamera();
+      view.rotation.set(...rotation.map(THREE.MathUtils.degToRad) as [number, number, number]);
+      const towardCharacter = new THREE.Vector3(...evaluateTransform(character, operation.frame).position).sub(new THREE.Vector3(...position)).normalize();
+      expect(view.getWorldDirection(new THREE.Vector3()).dot(towardCharacter)).toBeGreaterThan(.999);
+    });
   });
 
   it('adds an apex to a jump and flags uncertain decisions for review', () => {

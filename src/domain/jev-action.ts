@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as THREE from 'three';
-import { BlenderPlanSchema, type AbacoProject, type BlenderPlan, type SceneObject, type Vec3 } from './schema';
-import { evaluateTransform } from './animation';
+import { BlenderPlanSchema, type AbacoProject, type BlenderPlan, type Keyframe, type SceneObject, type Vec3 } from './schema';
+import { evaluateProperty, evaluateTransform } from './animation';
 import { cameraBasis, cameraTarget } from './camera-space';
 
 export const JevChoiceAnswerSchema = z.object({
@@ -115,13 +115,39 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
   const cameraTransform = referenceCamera ? evaluateTransform(referenceCamera, input.frame) : undefined;
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
   const selectedTarget = input.target === 'camera' ? selectedCamera : object;
+  const focusObject = input.target === 'camera' ? resolveCameraFocusObject(project, input.sceneId, input.frame, input.instruction, scenes[sceneIndex]?.framing.target) : object;
+  const activeScene = scenes[sceneIndex];
+  const sceneObjects = project.objects.filter((candidate) => !candidate.sceneIds.length || candidate.sceneIds.includes(input.sceneId)).map((candidate) => {
+    const transform = evaluateTransform(candidate, input.frame);
+    return {
+      id: candidate.id, name: candidate.name, kind: candidate.kind,
+      visible: evaluateProperty(candidate, 'visibility', input.frame), color: candidate.color,
+      transform: { position: transform.position, rotation_degrees: transform.rotation, scale: transform.scale },
+      asset_bounds_center: candidate.kind === 'blend_asset' ? candidate.asset.boundsCenter : null,
+      light: candidate.kind.includes('light') ? candidate.light : null,
+      audio: candidate.kind === 'audio' ? { duration_seconds: candidate.audio.duration, volume: candidate.audio.volume, muted: candidate.audio.muted } : null,
+      notes: candidate.sceneNotes,
+      animation_in_scene: candidate.keyframes.filter((key) => key.frame >= (activeScene?.frame ?? input.frame) && key.frame <= sceneEnd).map((key) => ({ frame: key.frame, property: key.property, value: key.value, interpolation: key.interpolation, purpose: key.purpose ?? null })),
+    };
+  });
+  const standardContent = project.animationStandard?.content ?? '';
   return {
     model: 'jev-latest',
     state: {
       application: 'Scene di ABACO, editor di animatic 3D',
       selected_target: selectedTarget ? { id: selectedTarget.id, name: selectedTarget.name, kind: selectedTarget.kind, role: input.target === 'camera' ? 'camera' : 'subject' } : null,
+      camera_focus_target: focusObject ? { id: focusObject.id, name: focusObject.name, position: evaluateTransform(focusObject, input.frame).position } : null,
       selected_subject: object ? { id: object.id, name: object.name, kind: object.kind } : null,
       available_subjects: project.objects.filter((candidate) => candidate.kind !== 'camera' && candidate.kind !== 'audio' && !candidate.kind.includes('light') && !candidate.screenSpace).map((candidate) => ({ id: candidate.id, name: candidate.name, kind: candidate.kind })),
+      scene_context: {
+        project: { id: project.id, name: project.name, fps: project.settings.fps, frame_range: [project.settings.frameStart, project.settings.frameEnd], resolution: [project.settings.resolutionX, project.settings.resolutionY] },
+        active_scene: activeScene ? { id: activeScene.id, name: activeScene.name ?? `Scena ${sceneIndex + 1}`, frame_range: [activeScene.frame, sceneEnd], framing: activeScene.framing, lighting: activeScene.lighting, background: { kind: activeScene.background.kind, name: activeScene.background.name } } : null,
+        timeline_scenes: scenes.map((scene, index) => ({ id: scene.id, name: scene.name ?? `Scena ${index + 1}`, frame: scene.frame, camera_id: scene.cameraId })),
+        objects: sceneObjects,
+        directions: project.comments.filter((comment) => comment.sceneId === input.sceneId || (comment.startFrame <= sceneEnd && comment.endFrame >= (activeScene?.frame ?? input.frame))).map((comment) => ({ text: comment.text, scope: comment.scope ?? null, target_ids: comment.targetIds, status: comment.status })),
+        animation_brief: project.animationBrief ?? null,
+        animation_standard: project.animationStandard ? { name: project.animationStandard.name, content: standardContent.slice(0, 20_000), truncated: standardContent.length > 20_000 } : null,
+      },
       instruction: input.instruction,
       current_frame: input.frame,
       scene_end_frame: sceneEnd,
@@ -238,6 +264,30 @@ function normalizedInstruction(instruction: string) {
   return instruction.toLocaleLowerCase('it').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function searchableText(value: string) {
+  return normalizedInstruction(value).replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function resolveCameraFocusObject(project: AbacoProject, sceneId: string, frame: number, instruction: string, fallbackTarget?: Vec3) {
+  const text = searchableText(instruction);
+  const genericReference = /\b(personaggi\w*|soggett\w*|protagonist\w*|character\w*|element\w*)\b/.test(text);
+  const candidates = project.objects.filter((candidate) => candidate.kind !== 'camera'
+    && candidate.kind !== 'audio'
+    && !candidate.kind.includes('light')
+    && !candidate.screenSpace
+    && (!candidate.sceneIds.length || candidate.sceneIds.includes(sceneId))
+    && evaluateProperty(candidate, 'visibility', frame) === true);
+  const scored = candidates.map((candidate) => {
+    const name = searchableText(candidate.name);
+    const tokens = name.split(' ').filter((token) => token.length >= 4);
+    const exact = name.length >= 3 && text.includes(name) ? 100 : 0;
+    const tokenScore = tokens.filter((token) => text.includes(token)).length * 10;
+    const distance = fallbackTarget ? new THREE.Vector3(...evaluateTransform(candidate, frame).position).distanceTo(new THREE.Vector3(...fallbackTarget)) : 0;
+    return { candidate, score: exact + tokenScore, distance };
+  }).filter((entry) => entry.score > 0 || genericReference);
+  return scored.sort((a, b) => b.score - a.score || a.distance - b.distance)[0]?.candidate;
+}
+
 function closedStroke(points: [number, number][] | undefined) {
   if (!points || points.length < 6) return false;
   const xs = points.map((point) => point[0]), ys = points.map((point) => point[1]);
@@ -296,6 +346,16 @@ function rotationToward(position: Vec3, target: Vec3): Vec3 {
   camera.position.set(...position);
   camera.lookAt(new THREE.Vector3(...target));
   return [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((entry) => THREE.MathUtils.radToDeg(entry)) as Vec3;
+}
+
+function unwrapRotation(previous: Vec3 | undefined, rotation: Vec3): Vec3 {
+  if (!previous) return rotation;
+  return rotation.map((value, axis) => {
+    let next = value;
+    while (next - previous[axis] > 180) next -= 360;
+    while (next - previous[axis] < -180) next += 360;
+    return next;
+  }) as Vec3;
 }
 
 export function compileJevAction(project: AbacoProject, object: SceneObject | undefined, input: Omit<JevActionInput, 'project'>, raw: JevActionResponse): JevActionPlan {
@@ -370,13 +430,15 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const cameraObject = cameraOnly
     ? project.objects.find((candidate) => candidate.id === input.objectId && candidate.kind === 'camera')
     : project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
+  const cameraFocusObject = cameraOnly && scene ? resolveCameraFocusObject(project, input.sceneId, input.frame, input.instruction, scene.framing.target) : object;
   const cameraDistance = nearestLevel(answers.camera_distance?.score ?? answers.distance.score, distances);
   const cameraDuration = nearestLevel(answers.camera_duration?.score ?? answers.duration.score, durations);
   const cameraInterpolation = answers.camera_path?.choice === 'direct' ? 'linear' : 'bezier';
   if (cameraRequested && cameraObject && scene) {
     const cameraTransform = evaluateTransform(cameraObject, input.frame);
-    const targetStart = object ? startPosition : cameraOnly ? scene.framing.target : cameraTarget(cameraTransform, scene.framing.distance);
-    const targetEnd = object ? endPosition : targetStart;
+    const cameraEndFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
+    const targetStart = object ? startPosition : cameraFocusObject ? evaluateTransform(cameraFocusObject, input.frame).position : cameraOnly ? scene.framing.target : cameraTarget(cameraTransform, scene.framing.distance);
+    const targetEnd = object ? endPosition : cameraFocusObject ? evaluateTransform(cameraFocusObject, cameraEndFrame).position : targetStart;
     let cameraEndPosition = cameraTransform.position;
     let cameraEndRotation = cameraTransform.rotation;
     const towardTarget = normalizeVector([targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]], [0, 1, 0]);
@@ -396,7 +458,6 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     if (['truck_left', 'truck_right', 'rise', 'descend', 'orbit_left', 'orbit_right'].includes(cameraAction)) cameraEndRotation = rotationToward(cameraEndPosition, targetEnd);
     if (cameraAction === 'pan_left' || cameraAction === 'pan_right') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, scale(screenRight, cameraDistance * (cameraAction === 'pan_left' ? -1 : 1))));
     if (cameraAction === 'tilt_up' || cameraAction === 'tilt_down') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, [0, 0, cameraDistance * (cameraAction === 'tilt_up' ? 1 : -1)]));
-    const cameraEndFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
@@ -404,15 +465,32 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];
+      const cameraPathKeys: Keyframe[] = [];
       let previousFrame = input.frame - 1;
       cameraStroke.forEach((point, index) => {
         const remaining = cameraStroke.length - 1 - index;
         const pointFrame = Math.max(previousFrame + 1, Math.min(cameraEndFrame - remaining, Math.round(input.frame + (cameraEndFrame - input.frame) * point.progress)));
         previousFrame = pointFrame;
-        const pointTarget = add(targetStart, scale(targetDelta, point.progress));
+        const pointTarget = cameraFocusObject ? evaluateTransform(cameraFocusObject, pointFrame).position : add(targetStart, scale(targetDelta, point.progress));
         operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'position', value: value(point.position), interpolation: 'bezier', rationale: index ? 'Traiettoria camera disegnata sul canvas e interpretata da Jev.' : 'Inizio della traiettoria camera disegnata.', commentIds: [] });
-        operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'rotation', value: value(rotationToward(point.position, pointTarget)), interpolation: 'bezier', rationale: 'La camera mantiene il soggetto di riferimento durante il tratto.', commentIds: [] });
+        cameraPathKeys.push({ id: crypto.randomUUID(), frame: pointFrame, property: 'position', value: point.position, interpolation: 'bezier', source: 'ai', purpose: 'motion', commentIds: [] });
+        if (!cameraFocusObject) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'rotation', value: value(rotationToward(point.position, pointTarget)), interpolation: 'bezier', rationale: 'La camera mantiene il soggetto di riferimento durante il tratto.', commentIds: [] });
       });
+      if (cameraFocusObject) {
+        const previewCamera = structuredClone(cameraObject);
+        previewCamera.keyframes = previewCamera.keyframes.filter((key) => !(key.property === 'position' && key.frame >= input.frame && key.frame <= cameraEndFrame && key.source === 'ai' && key.purpose === 'motion' && key.commentIds.length === 0));
+        previewCamera.keyframes.push(...cameraPathKeys);
+        const segmentCount = Math.min(12, Math.max(3, cameraEndFrame - input.frame));
+        const rotationFrames = [...new Set(Array.from({ length: segmentCount + 1 }, (_, index) => Math.round(input.frame + (cameraEndFrame - input.frame) * index / segmentCount)))];
+        let previousRotation: Vec3 | undefined;
+        rotationFrames.forEach((rotationFrame) => {
+          const position = evaluateTransform(previewCamera, rotationFrame).position;
+          const target = evaluateTransform(cameraFocusObject, rotationFrame).position;
+          const rotation = unwrapRotation(previousRotation, rotationToward(position, target));
+          previousRotation = rotation;
+          operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: rotationFrame, property: 'rotation', value: value(rotation), interpolation: 'linear', rationale: `La camera mantiene ${cameraFocusObject.name} al centro dell’inquadratura.`, commentIds: [] });
+        });
+      }
     } else if (!sameVector(cameraTransform.position, cameraEndPosition)) {
       operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: input.frame, property: 'position', value: value(cameraTransform.position), interpolation: cameraInterpolation, rationale: 'Posizione iniziale della camera per la regia Jev.', commentIds: [] });
       operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'position', value: value(cameraEndPosition), interpolation: cameraInterpolation, rationale: `Movimento camera ${cameraAction} scelto da Jev.`, commentIds: [] });
