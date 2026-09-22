@@ -79,7 +79,9 @@ describe('Punti e maniglie del movimento', () => {
   it('seleziona una barra e un punto senza cambiare la modalità della vista', () => {
     useEditor.setState({ cameraView: true });
     render(<Timeline />);
-    fireEvent.click(screen.getByTitle(/Movimento camera/));
+    const cameraMotion = screen.getByTitle(/Movimento camera/);
+    expect(cameraMotion).toHaveClass('camera-motion-segment');
+    fireEvent.click(cameraMotion);
     expect(useEditor.getState().cameraView).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
     expect(useEditor.getState().cameraView).toBe(true);

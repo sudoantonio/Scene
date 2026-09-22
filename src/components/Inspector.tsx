@@ -1,4 +1,4 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, Sparkles, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -9,9 +9,8 @@ import LightingPanel from './LightingPanel';
 import AudioPanel from './AudioPanel';
 import BackgroundPanel from './BackgroundPanel';
 import InspectorGroup from './InspectorGroup';
-import JevActionPanel from './JevActionPanel';
 
-type InspectorPanel = 'edit' | 'scene' | 'jev' | 'light';
+type InspectorPanel = 'edit' | 'scene' | 'light';
 const motionNames = { constant: 'Stacco', bezier: 'Fluido', linear: 'Lineare' } as const;
 
 function NumberField({ value, onChange, label, name }: { value: number; onChange(value: number): void; label: string; name: string }) {
@@ -128,10 +127,10 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello destro" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className="inspector simple-inspector">
     <nav className="right-tabs" aria-label="Sezioni pannello destro"><button className="inspector-collapse-tab" title="Riduci pannello" aria-label="Riduci pannello destro" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
-      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['jev', Sparkles, 'Jev'], ['light', Sun, 'Luce'],
+      ['edit', SlidersHorizontal, 'Modifica'], ['scene', Box, 'Scenografia'], ['light', Sun, 'Luce'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>
-    <div className="inspector-scroll" key={`${panel}:${['edit', 'jev'].includes(panel) ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : panel === 'jev' ? 'Generatore azioni Jev' : 'Controlli luce'} tabIndex={0}>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : panel === 'jev' ? <div className="jev-tab-content"><header className="inspector-context"><strong>Jev · Regia scena</strong><span>{object ? object.name : activeScene?.name ?? 'Scena'}</span></header>{activeScene ? <InspectorGroup title="Descrivi la regia" icon={<Sparkles size={13} />} collapsible={false}><JevActionPanel project={project} object={object} sceneId={activeScene.id} frame={frame} position={transform?.position} /></InspectorGroup> : <p className="inspector-help jev-empty">Aggiungi una scena per usare Jev.</p>}</div> : <>
+    <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Controlli modifica' : panel === 'scene' ? 'Contenuto scenografia' : 'Controlli luce'} tabIndex={0}>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scena'}</strong><span>Scenografia e indicazioni</span></header><InspectorGroup title="Inquadratura e sfondo" icon={<Frame size={13} />} collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
       {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
         <div className="inspector-identity">
           <span className="inspector-kind">{object.kind === 'text' ? 'Testo · 2D' : object.screenSpace ? 'Immagine · 2D' : 'Elemento · 3D'}</span>

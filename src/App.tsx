@@ -9,6 +9,7 @@ import SettingsModal from './components/SettingsModal';
 import Timeline from './components/Timeline';
 import Viewport, { captureContactSheet } from './components/Viewport';
 import AudioPlayback from './components/AudioPlayback';
+import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
 import headerLogo from './assets/abaco-scene-header.png';
 
@@ -40,7 +41,7 @@ export default function App() {
   const planProjectRef = useRef<ReturnType<typeof useEditor.getState>['project'] | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'jev' | 'light'>('edit');
+  const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
@@ -264,7 +265,7 @@ export default function App() {
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
     </div>
     <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
-      <Viewport dark={theme === 'dark'} />
+      <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
       <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
       <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
     </main>

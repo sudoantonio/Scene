@@ -774,7 +774,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
   </div>;
 }
 
-function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChange }: { objectId: string; keyframe: Keyframe; selected: boolean; onSelect(): void; onDragChange(value: boolean): void }) {
+function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor, onSelect, onDragChange }: { objectId: string; keyframe: Keyframe; selected: boolean; color: string; selectedColor: string; onSelect(): void; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number; start: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number; moved: boolean } | undefined>(undefined);
   const setPlaying = useEditor((state) => state.setPlaying);
@@ -827,14 +827,14 @@ function MotionPointHandle({ objectId, keyframe, selected, onSelect, onDragChang
   return <>
     <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'grab'; }} onPointerOut={() => { if (!drag.current) document.body.style.cursor = 'default'; }}>
       <Billboard follow>
-        <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={selected ? '#b41622' : '#ef3f3f'} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+        <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
         <mesh renderOrder={26}><circleGeometry args={[1.2, 16]} /><meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
       </Billboard>
     </group>
   </>;
 }
 
-function MotionPath({ objectId, keyframes, points, onDragChange }: { objectId: string; keyframes: Keyframe[]; points: Transform['position'][]; onDragChange(value: boolean): void }) {
+function MotionPath({ objectId, keyframes, points, color = '#ef3f3f', selectedColor = '#b41622', editable = false, onDragChange }: { objectId: string; keyframes: Keyframe[]; points: Transform['position'][]; color?: string; selectedColor?: string; editable?: boolean; onDragChange(value: boolean): void }) {
   const [selectedPointId, setSelectedPointId] = useState<string>();
   const deleteMotionPoint = useEditor((state) => state.deleteMotionPoint);
   const directionMarkers = useMemo(() => {
@@ -868,9 +868,9 @@ function MotionPath({ objectId, keyframes, points, onDragChange }: { objectId: s
   }, [deleteMotionPoint, objectId, selectedPointId]);
   if (points.length < 2) return null;
   return <group renderOrder={20}>
-    <Line points={points} color="#ef3f3f" lineWidth={2.4} depthTest={false} transparent opacity={.95} />
-    {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color="#ef3f3f" depthTest={false} /></mesh>)}
-    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={selectedPointId === keyframe.id} onSelect={() => setSelectedPointId(keyframe.id)} onDragChange={onDragChange} />)}
+    <Line points={points} color={color} lineWidth={2.4} depthTest={false} transparent opacity={editable ? .98 : .72} />
+    {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
+    {editable && keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => setSelectedPointId(keyframe.id)} onDragChange={onDragChange} />)}
   </group>;
 }
 
@@ -916,27 +916,24 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     ).toArray() as Transform['position']
     : activeCut?.framing.target;
   const motionObject = objects.find((object) => object.id === selectedMotion?.objectId);
-  const motionSceneIndex = cuts.findIndex((cut) => cut.id === selectedMotion?.sceneId);
-  const motionScene = motionSceneIndex >= 0 ? cuts[motionSceneIndex] : undefined;
-  const motionSceneEnd = motionScene ? (cuts.filter((cut) => cut.frame > motionScene.frame).sort((a, b) => a.frame - b.frame)[0]?.frame ?? settings.frameEnd + 1) : undefined;
-  const motionPositionKeys = useMemo(() => motionObject && motionScene && motionSceneEnd
-    ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= motionScene.frame && key.frame < motionSceneEnd).sort((a, b) => a.frame - b.frame)
-    : [], [motionObject, motionScene, motionSceneEnd]);
-  const motionHandleKeys = useMemo(() => motionScene
-    ? motionPositionKeys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== motionScene.frame))
-    : [], [motionPositionKeys, motionScene]);
-  const motionPathPoints = useMemo(() => {
-    if (!motionObject || !motionScene || !motionSceneEnd) return [];
-    const realPoints = motionPositionKeys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== motionScene.frame));
-    if (!realPoints.length || motionPositionKeys.length < 2) return [];
-    const positionFrames = motionPositionKeys.map((key) => key.frame);
-    const first = positionFrames[0], last = positionFrames[positionFrames.length - 1];
-    const step = Math.max(1, Math.ceil((last - first) / 120));
-    const points: Transform['position'][] = [];
-    for (let sample = first; sample <= last; sample += step) points.push(evaluateTransform(motionObject, sample).position);
-    if ((last - first) % step) points.push(evaluateTransform(motionObject, last).position);
-    return points.filter((point, index) => index === 0 || point.some((value, axis) => Math.abs(value - points[index - 1][axis]) > .0001));
-  }, [motionObject, motionPositionKeys, motionScene, motionSceneEnd]);
+  const visibleMotionPaths = useMemo(() => {
+    if (!activeCut) return [];
+    const sceneEnd = cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1;
+    return objects.flatMap((object) => {
+      if (object.kind === 'audio' || object.kind.includes('light') || object.screenSpace || (object.kind === 'camera' && object.id !== activeCut.cameraId)) return [];
+      const keys = object.keyframes.filter((key) => key.property === 'position' && key.frame >= activeCut.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const handles = keys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== activeCut.frame));
+      if (!handles.length || keys.length < 2) return [];
+      const first = keys[0]!.frame, last = keys[keys.length - 1]!.frame;
+      const step = Math.max(1, Math.ceil((last - first) / 120));
+      const points: Vec3[] = [];
+      for (let sample = first; sample <= last; sample += step) points.push(evaluateTransform(object, sample).position);
+      if ((last - first) % step) points.push(evaluateTransform(object, last).position);
+      const filtered = points.filter((point, index) => index === 0 || point.some((value, axis) => Math.abs(value - points[index - 1]![axis]) > .0001));
+      if (filtered.length < 2) return [];
+      return [{ object, keyframes: handles, points: filtered, sceneId: activeCut.id }];
+    });
+  }, [activeCut?.id, cuts, objects, settings.frameEnd]);
   const selectedObject = objects.find((object) => object.id === selectedId);
   const selectedTransformable = selectedObject && selectedObject.kind !== 'audio' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
     ? selectedObject : undefined;
@@ -1371,7 +1368,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {motionObject && motionPathPoints.length > 1 && <MotionPath objectId={motionObject.id} keyframes={motionHandleKeys} points={motionPathPoints} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />}
+      {visibleMotionPaths.map(({ object, keyframes, points, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} keyframes={keyframes} points={points} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}

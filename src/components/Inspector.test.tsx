@@ -4,6 +4,7 @@ import { createProject } from '../domain/schema';
 import { evaluateTransform } from '../domain/animation';
 import { useEditor } from '../store/editor';
 import Inspector from './Inspector';
+import JevFloatingComposer from './JevFloatingComposer';
 
 beforeEach(() => {
   useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false, cameraView: false, jevStroke: { active: false, points: [] } });
@@ -12,8 +13,9 @@ afterEach(() => { cleanup(); delete window.abaco; });
 
 describe('Pannelli contestuali', () => {
   it('permette di descrivere la regia Jev anche senza un personaggio selezionato', () => {
-    render(<Inspector panel="jev" onPanelChange={vi.fn()} />);
-    expect(screen.getByRole('region', { name: 'Generatore azioni Jev' })).toBeInTheDocument();
+    render(<JevFloatingComposer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Apri Jev' }));
+    expect(screen.getByRole('region', { name: 'Pannello principale Jev' })).toBeInTheDocument();
     expect(screen.getByLabelText('Soggetto Jev')).toHaveValue('');
     expect(screen.getByRole('option', { name: 'Solo scena e camera' })).toBeInTheDocument();
     expect(screen.getByLabelText('Azione Jev')).toHaveAttribute('placeholder', expect.stringContaining('camera avanza'));
