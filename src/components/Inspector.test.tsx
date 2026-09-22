@@ -6,7 +6,7 @@ import { useEditor } from '../store/editor';
 import Inspector from './Inspector';
 
 beforeEach(() => {
-  useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false, cameraView: false });
+  useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false, cameraView: false, jevStroke: { active: false, points: [] } });
 });
 afterEach(() => { cleanup(); delete window.abaco; });
 
@@ -17,6 +17,9 @@ describe('Pannelli contestuali', () => {
     expect(screen.getByLabelText('Soggetto Jev')).toHaveValue('');
     expect(screen.getByRole('option', { name: 'Solo scena e camera' })).toBeInTheDocument();
     expect(screen.getByLabelText('Azione Jev')).toHaveAttribute('placeholder', expect.stringContaining('camera avanza'));
+    fireEvent.click(screen.getByRole('button', { name: 'Disegna traiettoria' }));
+    expect(useEditor.getState().cameraView).toBe(true);
+    expect(useEditor.getState().jevStroke.active).toBe(true);
   });
 
   it('mostra solo il volume audio in Modifica e lascia invariata la scheda Luce', () => {

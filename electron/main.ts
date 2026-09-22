@@ -456,7 +456,8 @@ ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
   if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
   const settings = await readSettings();
   if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
-  const request = jevActionRequest(project, object, { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction });
+  const jevInput = { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
+  const request = jevActionRequest(project, object, jevInput);
   const response = await fetch('https://api.typesafe.ai/v1/systemone', {
     method: 'POST',
     headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
@@ -468,7 +469,7 @@ ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
     throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
   }
   const raw = JevActionResponseSchema.parse(await response.json());
-  return compileJevAction(project, object, { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction }, raw);
+  return compileJevAction(project, object, jevInput, raw);
 });
 
 ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {

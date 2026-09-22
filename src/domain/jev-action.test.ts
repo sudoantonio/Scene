@@ -29,6 +29,16 @@ describe('Jev action compiler', () => {
     expect(request.questions.action.type).toBe('choice');
   });
 
+  it('sends a compact description of the stroke to Jev', () => {
+    const project = createProject();
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const request = jevActionRequest(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'segui il tratto', gesture: { target: 'auto', points: [[.1, .6], [.5, .2], [.9, .6]] } });
+    expect(request.state.drawn_stroke).toMatchObject({ start: [.1, .6], end: [.9, .6] });
+    expect(request.state.drawn_stroke!.curvature_ratio).toBeGreaterThan(1);
+    expect(request.questions.stroke_target.type).toBe('choice');
+  });
+
   it('compiles a typed move decision into position keyframes', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
@@ -90,6 +100,20 @@ describe('Jev action compiler', () => {
     const cameraOperations = result.blenderPlan.operations.filter((operation) => operation.objectId === project.objects[0].id);
     expect(cameraOperations).toHaveLength(2);
     expect(cameraOperations[1].value.vector![1]).toBeGreaterThan(-5);
+  });
+
+  it('turns a curved canvas stroke into intermediate subject keyframes', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'corre seguendo la curva', gesture: { target: 'subject', points: [[.2, .5], [.5, .2], [.8, .5]] } }, response());
+    const positions = result.blenderPlan.operations.map((operation) => operation.value.vector!);
+    expect(result.decision.gesture).toEqual({ target: 'subject', points: 3 });
+    expect(positions).toHaveLength(3);
+    expect(positions[1][1]).toBeGreaterThan(0);
+    expect(positions[2][0]).toBeCloseTo(2);
   });
 
   it('can direct the camera without a selected subject', () => {

@@ -15,6 +15,42 @@ import { useEditor } from '../store/editor';
 let viewportCanvas: HTMLCanvasElement | null = null;
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
+function JevStrokeOverlay({ width, height }: { width: number; height: number }) {
+  const stroke = useEditor((state) => state.jevStroke);
+  const setPoints = useEditor((state) => state.setJevStrokePoints);
+  const setActive = useEditor((state) => state.setJevStrokeActive);
+  const drawing = useRef<number | undefined>(undefined);
+  const point = (event: ReactPointerEvent<SVGSVGElement>): [number, number] => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return [THREE.MathUtils.clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1), THREE.MathUtils.clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1)];
+  };
+  const begin = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!stroke.active || event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation(); drawing.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId); setPoints([point(event)]);
+  };
+  const move = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (drawing.current !== event.pointerId) return;
+    event.preventDefault(); event.stopPropagation();
+    const next = point(event), previous = useEditor.getState().jevStroke.points;
+    const last = previous[previous.length - 1];
+    if (!last || Math.hypot(next[0] - last[0], next[1] - last[1]) >= .004) setPoints([...previous.slice(-510), next]);
+  };
+  const finish = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (drawing.current !== event.pointerId) return;
+    event.preventDefault(); event.stopPropagation(); drawing.current = undefined;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setActive(false);
+  };
+  if (!stroke.active && stroke.points.length < 2) return null;
+  const polyline = stroke.points.map(([x, y]) => `${x * width},${y * height}`).join(' ');
+  return <svg className={`jev-stroke-overlay ${stroke.active ? 'drawing' : ''}`} aria-label="Disegna traiettoria Jev" width={width} height={height} viewBox={`0 0 ${width} ${height}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
+    <defs><marker id="jev-stroke-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs>
+    {stroke.points.length > 1 && <polyline points={polyline} markerEnd="url(#jev-stroke-arrow)" />}
+    {stroke.active && stroke.points.length < 2 && <text x="50%" y="50%" textAnchor="middle">Trascina per disegnare la traiettoria</text>}
+  </svg>;
+}
+
 export function WebGLContextGuard({ primary = false, onLost }: { primary?: boolean; onLost(): void }) {
   const { gl, invalidate } = useThree();
   useEffect(() => {
@@ -1341,6 +1377,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
+    {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
     {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch"><button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button></div>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
