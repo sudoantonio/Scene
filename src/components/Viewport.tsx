@@ -776,6 +776,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
 
 function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor, onSelect, onDragChange }: { objectId: string; keyframe: Keyframe; selected: boolean; color: string; selectedColor: string; onSelect(): void; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
+  const [hovered, setHovered] = useState(false);
   const drag = useRef<{ pointerId: number; x: number; y: number; start: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number; moved: boolean } | undefined>(undefined);
   const setPlaying = useEditor((state) => state.setPlaying);
   const updateMotionPoint = useEditor((state) => state.updateMotionPoint);
@@ -786,7 +787,7 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     const worldPerPixel = camera instanceof THREE.PerspectiveCamera
       ? (2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, size.height)
       : (camera.top - camera.bottom) / Math.max(1, size.height);
-    ref.current.scale.setScalar(worldPerPixel * (selected ? 22 : 18));
+    ref.current.scale.setScalar(worldPerPixel * (selected || hovered ? 22 : 18));
   });
   const startDrag = (event: ThreeEvent<PointerEvent>) => {
     if (event.button !== 0 || !ref.current) return;
@@ -825,9 +826,10 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     onDragChange(false);
   };
   return <>
-    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'grab'; }} onPointerOut={() => { if (!drag.current) document.body.style.cursor = 'default'; }}>
+    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
       <Billboard follow>
-        <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+        {(hovered || selected) && <mesh rotation={[0, 0, Math.PI / 4]} scale={1.42} renderOrder={24}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff2a6' : selectedColor} transparent opacity={.46} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>}
+        <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff7c9' : selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
         <mesh renderOrder={26}><circleGeometry args={[1.2, 16]} /><meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
       </Billboard>
     </group>
@@ -840,6 +842,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   const insertMotionPoint = useEditor((state) => state.insertMotionPoint);
   const select = useEditor((state) => state.select);
   const selectMotion = useEditor((state) => state.selectMotion);
+  const cameraView = useEditor((state) => state.cameraView);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const directionMarkers = useMemo(() => {
@@ -883,14 +886,14 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
     const frame = pointFrames[nearestIndex] ?? pointFrames[0];
     if (frame === undefined) return;
     const id = insertMotionPoint(objectId, sceneId, frame, clicked.toArray().map((value) => Number(value.toFixed(4))) as Vec3);
-    if (id) { setSelectedPointId(id); setFrame(frame); }
+    if (id) { setSelectedPointId(id); if (cameraView) setFrame(frame); }
   };
   if (points.length < 2) return null;
   return <group renderOrder={20}>
     <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     <Line points={points} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
-    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(objectId); selectMotion({ objectId, sceneId }); setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
+    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(objectId); selectMotion({ objectId, sceneId }); if (cameraView) setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
   </group>;
 }
 

@@ -7,7 +7,7 @@ import Timeline from './Timeline';
 beforeEach(() => {
   const project = createProject();
   project.objects[0].keyframes = [1, 36, 72].map((frame) => ({ id: `point-${frame}`, frame, property: 'position', purpose: 'motion', value: [frame, -10, 7], interpolation: 'linear', source: 'user', commentIds: [] }));
-  useEditor.setState({ project, currentFrame: 20, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false });
+  useEditor.setState({ project, currentFrame: 20, cameraView: false, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false });
   vi.stubGlobal('PointerEvent', MouseEvent);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -66,6 +66,7 @@ describe('Punti e maniglie del movimento', () => {
   });
 
   it.each([1, 72])('il punto al frame %s seleziona quel fotogramma senza ridimensionare', (frame) => {
+    useEditor.setState({ cameraView: true });
     render(<Timeline />);
     const point = screen.getByRole('button', { name: `Punto movimento al frame ${frame}` });
     expect(point).toHaveAttribute('data-edge', frame === 1 ? 'start' : 'end');
@@ -85,6 +86,23 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().cameraView).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
     expect(useEditor.getState().cameraView).toBe(true);
+    expect(useEditor.getState().currentFrame).toBe(36);
+  });
+
+  it('in vista libera seleziona il keyframe senza spostare la testina', () => {
+    render(<Timeline />);
+    fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
+    expect(useEditor.getState().currentFrame).toBe(20);
+    expect(useEditor.getState().selectedMotion).toBeTruthy();
+  });
+
+  it('a timeline chiusa mostra tutte le scene nella barra cumulativa', () => {
+    useEditor.getState().addShot();
+    const { container } = render(<Timeline collapsed />);
+    const overview = screen.getByRole('group', { name: 'Barra cumulativa delle scene' });
+    expect(overview).toBeVisible();
+    expect(container.querySelectorAll('.collapsed-scene-segment')).toHaveLength(2);
+    expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
   });
 
   it('trascinare un punto sposta solo quel punto e non riscala gli altri tempi', () => {
