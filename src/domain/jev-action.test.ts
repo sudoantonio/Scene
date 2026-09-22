@@ -173,15 +173,22 @@ describe('Jev action compiler', () => {
     expect(Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2])).toBeGreaterThan(10);
   });
 
-  it('reduces a dense stroke to at most four movement points', () => {
+  it('keeps the direction changes of a dense S-shaped stroke with a limited number of points', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
     project.objects[0].transform.rotation = [90, 0, 0];
     const character = createSceneObject('sphere', 1);
     project.objects.push(character);
-    const points = Array.from({ length: 80 }, (_, index) => [index / 100, .5 + Math.sin(index / 10) * .1] as [number, number]);
+    const points = Array.from({ length: 80 }, (_, index) => {
+      const progress = index / 79;
+      return [.5 + Math.sin(progress * Math.PI * 2) * .35, .1 + progress * .8] as [number, number];
+    });
     const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'segue il tratto', gesture: { target: 'subject', points } }, response());
-    expect(result.blenderPlan.operations).toHaveLength(4);
+    const positions = result.blenderPlan.operations.map((operation) => operation.value.vector!);
+    expect(positions.length).toBeGreaterThan(4);
+    expect(positions.length).toBeLessThanOrEqual(12);
+    expect(Math.max(...positions.map((position) => position[0]))).toBeGreaterThan(.5);
+    expect(Math.min(...positions.map((position) => position[0]))).toBeLessThan(-.5);
   });
 
   it('replaces previous Jev points instead of accumulating them', () => {

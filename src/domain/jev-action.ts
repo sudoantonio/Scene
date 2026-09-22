@@ -274,20 +274,62 @@ function strokeProjection(gesture: JevActionInput['gesture'] | undefined, refere
   return { horizontalSpan: verticalSpan * gesture.aspect, verticalSpan };
 }
 
-function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 4, projection?: { horizontalSpan: number; verticalSpan: number }) {
-  const count = Math.min(maxPoints, points.length);
-  const samples = Array.from({ length: count }, (_, index) => points[Math.round(index * (points.length - 1) / Math.max(1, count - 1))]!);
-  const first = samples[0]!;
-  const rawOffsets = samples.map(([x, y]) => add(
+function pointSegmentDistance(point: [number, number], start: [number, number], end: [number, number]) {
+  const dx = end[0] - start[0], dy = end[1] - start[1];
+  const denominator = dx * dx + dy * dy;
+  if (denominator < 1e-12) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+  const t = THREE.MathUtils.clamp(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / denominator, 0, 1);
+  return Math.hypot(point[0] - (start[0] + dx * t), point[1] - (start[1] + dy * t));
+}
+
+function simplifyStroke(points: [number, number][], maxPoints: number) {
+  const retained = points.reduce<Array<{ point: [number, number]; index: number }>>((result, point, index) => {
+    const previous = result.at(-1)?.point;
+    if (!previous || index === points.length - 1 || Math.hypot(point[0] - previous[0], point[1] - previous[1]) >= .004) result.push({ point, index });
+    return result;
+  }, []);
+  const rdp = (tolerance: number) => {
+    const keep = new Set([0, retained.length - 1]);
+    const visit = (startIndex: number, endIndex: number) => {
+      let furthest = -1, furthestDistance = tolerance;
+      for (let index = startIndex + 1; index < endIndex; index += 1) {
+        const distance = pointSegmentDistance(retained[index]!.point, retained[startIndex]!.point, retained[endIndex]!.point);
+        if (distance > furthestDistance) { furthest = index; furthestDistance = distance; }
+      }
+      if (furthest < 0) return;
+      keep.add(furthest);
+      visit(startIndex, furthest);
+      visit(furthest, endIndex);
+    };
+    visit(0, retained.length - 1);
+    return [...keep].sort((a, b) => a - b).map((index) => retained[index]!);
+  };
+  let simplified = rdp(.008);
+  if (simplified.length <= maxPoints) return simplified;
+  let low = .008, high = 1;
+  for (let iteration = 0; iteration < 18; iteration += 1) {
+    const middle = (low + high) / 2;
+    const candidate = rdp(middle);
+    if (candidate.length > maxPoints) low = middle;
+    else { high = middle; simplified = candidate; }
+  }
+  return simplified;
+}
+
+function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 12, projection?: { horizontalSpan: number; verticalSpan: number }) {
+  const samples = simplifyStroke(points, Math.min(maxPoints, points.length));
+  const first = samples[0]!.point;
+  const rawOffsets = samples.map(({ point: [x, y] }) => add(
     scale(horizontal, (x - first[0]) * (projection?.horizontalSpan ?? 1)),
     scale(vertical, (first[1] - y) * (projection?.verticalSpan ?? 1)),
   ));
   const extent = Math.max(.0001, ...rawOffsets.map((offset) => Math.hypot(...offset)));
-  const segmentLengths = samples.map((point, index) => index ? Math.hypot(point[0] - samples[index - 1]![0], point[1] - samples[index - 1]![1]) : 0);
-  const total = Math.max(.0001, segmentLengths.reduce((sum, entry) => sum + entry, 0));
-  let elapsed = 0;
+  const cumulativeLengths = points.map((point, index) => index ? Math.hypot(point[0] - points[index - 1]![0], point[1] - points[index - 1]![1]) : 0);
+  for (let index = 1; index < cumulativeLengths.length; index += 1) cumulativeLengths[index] += cumulativeLengths[index - 1]!;
+  const firstLength = cumulativeLengths[samples[0]!.index] ?? 0;
+  const total = Math.max(.0001, (cumulativeLengths[samples.at(-1)!.index] ?? firstLength) - firstLength);
   return rawOffsets.map((offset, index) => {
-    elapsed += segmentLengths[index]!;
+    const elapsed = (cumulativeLengths[samples[index]!.index] ?? firstLength) - firstLength;
     return { position: add(origin, projection ? offset : scale(offset, distance / extent)), progress: index ? elapsed / total : 0 };
   });
 }
@@ -502,7 +544,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     endPosition = add(startPosition, horizontal);
   }
   const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? drawnUp : drawnForward;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(4, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition)) : undefined;
+  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition)) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -564,7 +606,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
-        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart))
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(12, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart))
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];
