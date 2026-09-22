@@ -15,7 +15,7 @@ import { useEditor } from '../store/editor';
 let viewportCanvas: HTMLCanvasElement | null = null;
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
-function JevStrokeOverlay({ width, height, viewMode, getViewRotation }: { width: number; height: number; viewMode: 'camera' | 'free'; getViewRotation(): Vec3 }) {
+function JevStrokeOverlay({ width, height, viewMode, getViewContext }: { width: number; height: number; viewMode: 'camera' | 'free'; getViewContext(): { rotation: Vec3; position: Vec3; verticalFovDegrees: number } }) {
   const stroke = useEditor((state) => state.jevStroke);
   const setPoints = useEditor((state) => state.setJevStrokePoints);
   const setActive = useEditor((state) => state.setJevStrokeActive);
@@ -41,7 +41,8 @@ function JevStrokeOverlay({ width, height, viewMode, getViewRotation }: { width:
     if (drawing.current !== event.pointerId) return;
     event.preventDefault(); event.stopPropagation(); drawing.current = undefined;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    setContext(viewMode, getViewRotation());
+    const context = getViewContext();
+    setContext(viewMode, context.rotation, context.position, context.verticalFovDegrees, width / Math.max(1, height));
     setActive(false);
   };
   if (!stroke.active && stroke.points.length < 2) return null;
@@ -845,6 +846,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   const cameraView = useEditor((state) => state.cameraView);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
+  const isCameraMotion = useEditor((state) => state.project.objects.find((object) => object.id === objectId)?.kind === 'camera');
   const directionMarkers = useMemo(() => {
     if (points.length < 3) return [];
     const interval = Math.max(2, Math.floor(points.length / 5));
@@ -876,7 +878,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   }, [deleteMotionPoint, objectId, selectedPointId]);
   const selectPathPoint = (event: ThreeEvent<MouseEvent>) => {
     if (event.button !== 0 || !points.length) return;
-    event.stopPropagation(); setPlaying(false); select(objectId); selectMotion({ objectId, sceneId });
+    event.stopPropagation(); setPlaying(false); if (!isCameraMotion) select(objectId); selectMotion({ objectId, sceneId });
     const clicked = event.point;
     let nearestIndex = 0, nearestDistance = Number.POSITIVE_INFINITY;
     points.forEach((point, index) => {
@@ -901,7 +903,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
     <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     <Line points={points} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
-    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(objectId); selectMotion({ objectId, sceneId }); if (cameraView) setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
+    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); if (!isCameraMotion) select(objectId); selectMotion({ objectId, sceneId }); if (cameraView) setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
   </group>;
 }
 
@@ -1002,24 +1004,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       state.setCameraFraming(pending.sceneId, pending.position, pending.rotation, pending.target);
     }
   };
-
-  const cameraMotionSelection = motionObject?.kind === 'camera' ? `${selectedMotion?.sceneId}:${motionObject.id}` : undefined;
-  useEffect(() => {
-    if (!cameraMotionSelection || !motionObject) return;
-    if (selectedId !== motionObject.id) select(motionObject.id);
-  }, [cameraMotionSelection]);
-
-  useEffect(() => {
-    if (cameraView || !cameraMotionSelection) return;
-    const request = requestAnimationFrame(() => {
-      const controls = orbitRef.current;
-      if (!controls || !activeCameraTransform) return;
-      controls.target.set(...activeCameraTransform.position);
-      controls.object.position.copy(controls.target).add(new THREE.Vector3(6, -8, 5));
-      controls.update();
-    });
-    return () => cancelAnimationFrame(request);
-  }, [cameraView, cameraMotionSelection]);
 
   useEffect(() => {
     window.addEventListener('abaco:flush-camera-edit', flushPendingCameraCommit);
@@ -1407,13 +1391,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
-    {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewRotation={() => {
+    {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
-      return camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : activeCameraTransform?.rotation ?? [0, 0, 0];
+      return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : activeCameraTransform?.rotation ?? [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : activeCameraTransform?.position ?? [0, 0, 0], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
-    {!cameraView && viewportSize.width > 0 && viewportSize.height > 0 && <JevStrokeOverlay width={viewportSize.width} height={viewportSize.height} viewMode="free" getViewRotation={() => {
+    {!cameraView && viewportSize.width > 0 && viewportSize.height > 0 && <JevStrokeOverlay width={viewportSize.width} height={viewportSize.height} viewMode="free" getViewContext={() => {
       const camera = orbitRef.current?.object;
-      return camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0];
+      return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
     {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch"><button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button></div>}

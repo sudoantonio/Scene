@@ -90,9 +90,12 @@ describe('Punti e maniglie del movimento', () => {
   });
 
   it('in vista libera seleziona il keyframe senza spostare la testina', () => {
+    useEditor.getState().addObject('cube');
+    const selectedBefore = useEditor.getState().selectedId;
     render(<Timeline />);
     fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
     expect(useEditor.getState().currentFrame).toBe(20);
+    expect(useEditor.getState().selectedId).toBe(selectedBefore);
     expect(useEditor.getState().selectedMotion).toBeTruthy();
   });
 

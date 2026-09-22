@@ -25,10 +25,10 @@ type EditorState = {
   isPlaying: boolean;
   cameraView: boolean;
   setCameraView(value: boolean): void;
-  jevStroke: { active: boolean; points: [number, number][]; viewMode?: 'camera' | 'free'; viewRotation?: Vec3 };
+  jevStroke: { active: boolean; points: [number, number][]; viewMode?: 'camera' | 'free'; viewRotation?: Vec3; viewPosition?: Vec3; verticalFovDegrees?: number; aspect?: number };
   setJevStrokeActive(active: boolean): void;
   setJevStrokePoints(points: [number, number][]): void;
-  setJevStrokeContext(viewMode: 'camera' | 'free', viewRotation: Vec3): void;
+  setJevStrokeContext(viewMode: 'camera' | 'free', viewRotation: Vec3, viewPosition: Vec3, verticalFovDegrees: number, aspect: number): void;
   clearJevStroke(): void;
   selectedMotion?: { objectId: string; sceneId: string };
   recordingMotion?: { objectId: string; sceneId: string; startFrame: number; provisionalFrame?: number };
@@ -346,7 +346,7 @@ export const useEditor = create<EditorState>((set, get) => {
     project: { ...project, updatedAt: new Date().toISOString() }, recordingSession, future: [], dirty: true,
   });
   return {
-    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
+    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
     newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
     loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),

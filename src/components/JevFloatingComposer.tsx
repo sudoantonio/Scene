@@ -52,7 +52,7 @@ export default function JevFloatingComposer() {
       const plan = await window.abaco.generateJevAction({
         project, objectId: selected.id, target, sceneId: activeScene.id, frame, startPosition,
         instruction: currentInstruction,
-        gesture: stroke.points.length > 1 ? { points: stroke.points, target, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation } : undefined,
+        gesture: stroke.points.length > 1 ? { points: stroke.points, target, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation, viewPosition: stroke.viewPosition, verticalFovDegrees: stroke.verticalFovDegrees, aspect: stroke.aspect } : undefined,
       });
       if (!plan.blenderPlan.operations.length) throw new Error('Jev non ha trovato un movimento applicabile.');
       acceptJevPlan(plan.blenderPlan, activeScene.id);

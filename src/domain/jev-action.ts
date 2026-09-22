@@ -60,6 +60,9 @@ export const JevActionInputSchema = z.object({
     target: z.enum(['auto', 'subject', 'camera']).default('auto'),
     viewMode: z.enum(['camera', 'free']).optional(),
     viewRotation: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]).optional(),
+    viewPosition: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]).optional(),
+    verticalFovDegrees: z.number().min(1).max(179).optional(),
+    aspect: z.number().min(.1).max(10).optional(),
   }).optional(),
 });
 export type JevActionInput = z.infer<typeof JevActionInputSchema>;
@@ -162,7 +165,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       start_position_meters: input.startPosition ? { x: input.startPosition[0], y: input.startPosition[1], z: input.startPosition[2] } : null,
       start_rotation_degrees: objectTransform ? { x: objectTransform.rotation[0], y: objectTransform.rotation[1], z: objectTransform.rotation[2] } : null,
       active_camera: cameraTransform ? { position: cameraTransform.position, rotation_degrees: cameraTransform.rotation } : null,
-      drawn_stroke: input.gesture ? { ...gestureSummary(input.gesture.points), view_mode: input.gesture.viewMode ?? 'camera', view_rotation_degrees: input.gesture.viewRotation ?? cameraTransform?.rotation ?? null } : null,
+      drawn_stroke: input.gesture ? { ...gestureSummary(input.gesture.points), view_mode: input.gesture.viewMode ?? 'camera', view_rotation_degrees: input.gesture.viewRotation ?? cameraTransform?.rotation ?? null, view_position: input.gesture.viewPosition ?? cameraTransform?.position ?? null, vertical_fov_degrees: input.gesture.verticalFovDegrees ?? 45, aspect: input.gesture.aspect ?? project.settings.resolutionX / project.settings.resolutionY } : null,
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       spatial_rules: 'I movimenti ordinari restano sul piano XY e mantengono la quota Z iniziale. Z cambia solo con una richiesta esplicita di salita, discesa o salto. Un’orbita camera chiusa resta su un piano orizzontale, conserva il raggio camera-soggetto e mantiene il soggetto al centro.',
@@ -260,18 +263,32 @@ const normalizeVector = (vector: Vec3, fallback: Vec3): Vec3 => {
 };
 const sameVector = (a: Vec3, b: Vec3) => a.every((entry, index) => Math.abs(entry - b[index]) < .0001);
 
-function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 4) {
+function strokeProjection(gesture: JevActionInput['gesture'] | undefined, reference: Vec3) {
+  if (!gesture?.viewPosition || !gesture.verticalFovDegrees || !gesture.aspect) return undefined;
+  const depth = Math.hypot(
+    gesture.viewPosition[0] - reference[0],
+    gesture.viewPosition[1] - reference[1],
+    gesture.viewPosition[2] - reference[2],
+  );
+  const verticalSpan = THREE.MathUtils.clamp(2 * depth * Math.tan(THREE.MathUtils.degToRad(gesture.verticalFovDegrees) / 2), .25, 200);
+  return { horizontalSpan: verticalSpan * gesture.aspect, verticalSpan };
+}
+
+function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 4, projection?: { horizontalSpan: number; verticalSpan: number }) {
   const count = Math.min(maxPoints, points.length);
   const samples = Array.from({ length: count }, (_, index) => points[Math.round(index * (points.length - 1) / Math.max(1, count - 1))]!);
   const first = samples[0]!;
-  const rawOffsets = samples.map(([x, y]) => add(scale(horizontal, x - first[0]), scale(vertical, first[1] - y)));
+  const rawOffsets = samples.map(([x, y]) => add(
+    scale(horizontal, (x - first[0]) * (projection?.horizontalSpan ?? 1)),
+    scale(vertical, (first[1] - y) * (projection?.verticalSpan ?? 1)),
+  ));
   const extent = Math.max(.0001, ...rawOffsets.map((offset) => Math.hypot(...offset)));
   const segmentLengths = samples.map((point, index) => index ? Math.hypot(point[0] - samples[index - 1]![0], point[1] - samples[index - 1]![1]) : 0);
   const total = Math.max(.0001, segmentLengths.reduce((sum, entry) => sum + entry, 0));
   let elapsed = 0;
   return rawOffsets.map((offset, index) => {
     elapsed += segmentLengths[index]!;
-    return { position: add(origin, scale(offset, distance / extent)), progress: index ? elapsed / total : 0 };
+    return { position: add(origin, projection ? offset : scale(offset, distance / extent)), progress: index ? elapsed / total : 0 };
   });
 }
 
@@ -485,7 +502,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     endPosition = add(startPosition, horizontal);
   }
   const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? drawnUp : drawnForward;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(4, endFrame - input.frame + 1)) : undefined;
+  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(4, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition)) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -547,7 +564,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
-        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1))
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart))
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];

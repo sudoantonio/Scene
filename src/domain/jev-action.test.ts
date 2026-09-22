@@ -158,6 +158,21 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations).toHaveLength(2);
   });
 
+  it('uses the visible stroke length to determine the movement scale', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const start: [number, number, number] = [0, 0, 1];
+    const result = compileJevAction(project, character, {
+      objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: start,
+      instruction: 'segui la freccia',
+      gesture: { target: 'subject', viewMode: 'free', viewRotation: [60, 0, 90], viewPosition: [0, -10, 5], verticalFovDegrees: 45, aspect: 16 / 9, points: [[.1, .5], [.9, .5]] },
+    }, response({ distance: { type: 'score', score: 0, confidence: .9, probabilities: { '0': .9 } } }));
+    const end = result.blenderPlan.operations.at(-1)!.value.vector!;
+    expect(Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2])).toBeGreaterThan(10);
+  });
+
   it('reduces a dense stroke to at most four movement points', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
