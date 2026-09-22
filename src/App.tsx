@@ -251,7 +251,7 @@ export default function App() {
   }, [setGizmoMode, setPlaying]);
 
   const rightWidth = collapsed.right ? 32 : layout.right;
-  const timelineHeight = collapsed.timeline ? 36 : layout.timeline;
+  const timelineHeight = collapsed.timeline ? 52 : layout.timeline;
   const toggleViewportFullscreen = () => {
     setViewportFullscreen((value) => {
       if (!value) setCameraView(true);

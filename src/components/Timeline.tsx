@@ -422,6 +422,18 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     <header className="timeline-toolbar">
       <div className="timeline-context">
         <strong className="timecode">{timecode}</strong>
+      </div>
+      <div className="timeline-center-stack">
+        <div className="transport timeline-transport">
+          <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Taglia la clip al cursore" aria-label="Taglia la clip al cursore"><Scissors size={15} /></button>
+          <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
+          <button className="icon" title="Frame precedente" aria-label="Frame precedente" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
+          <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
+          <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
+          <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
+          <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
+          <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
+        </div>
         {collapsed && <div className="collapsed-scene-overview" role="group" aria-label="Barra cumulativa delle scene">
           {scenes.map((scene, index) => {
             const nextFrame = scenes[index + 1]?.frame ?? end + 1;
@@ -431,16 +443,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
           })}
           <i className="collapsed-scene-playhead" style={{ left: left(frame) }} />
         </div>}
-      </div>
-      <div className="transport timeline-transport">
-        <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Taglia la clip al cursore" aria-label="Taglia la clip al cursore"><Scissors size={15} /></button>
-        <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
-        <button className="icon" title="Frame precedente" aria-label="Frame precedente" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
-        <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
-        <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
-        <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
-        <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
-        <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
       </div>
       <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={viewportFullscreen ? 'Ripristina pannelli' : 'Inquadratura a schermo intero'} onClick={onToggleViewportFullscreen}>{viewportFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
     </header>

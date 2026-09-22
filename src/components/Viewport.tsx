@@ -811,7 +811,7 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     if (!state || state.pointerId !== event.pointerId || !ref.current) return;
     event.stopPropagation();
     const dx = event.nativeEvent.clientX - state.x, dy = event.nativeEvent.clientY - state.y;
-    if (Math.hypot(dx, dy) < 1) return;
+    if (Math.hypot(dx, dy) < 6) return;
     ref.current.position.copy(state.start).addScaledVector(state.right, dx * state.worldPerPixel).addScaledVector(state.up, -dy * state.worldPerPixel);
     state.moved = true;
   };
@@ -826,7 +826,7 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     onDragChange(false);
   };
   return <>
-    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
+    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onClick={(event) => { event.stopPropagation(); }} onDoubleClick={(event) => { event.stopPropagation(); }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
       <Billboard follow>
         {(hovered || selected) && <mesh rotation={[0, 0, Math.PI / 4]} scale={1.42} renderOrder={24}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff2a6' : selectedColor} transparent opacity={.46} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>}
         <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff7c9' : selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
@@ -885,6 +885,14 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
     });
     const frame = pointFrames[nearestIndex] ?? pointFrames[0];
     if (frame === undefined) return;
+    const existingPoint = keyframes.reduce<Keyframe | undefined>((nearest, keyframe) => !nearest || Math.abs(keyframe.frame - frame) < Math.abs(nearest.frame - frame) ? keyframe : nearest, undefined);
+    const sampledRange = Math.max(1, (pointFrames.at(-1) ?? frame) - (pointFrames[0] ?? frame));
+    const handleFrameTolerance = Math.max(3, Math.ceil(sampledRange / 120) * 2);
+    if (existingPoint && Math.abs(existingPoint.frame - frame) <= handleFrameTolerance) {
+      setSelectedPointId(existingPoint.id);
+      if (cameraView) setFrame(existingPoint.frame);
+      return;
+    }
     const id = insertMotionPoint(objectId, sceneId, frame, clicked.toArray().map((value) => Number(value.toFixed(4))) as Vec3);
     if (id) { setSelectedPointId(id); if (cameraView) setFrame(frame); }
   };
