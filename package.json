@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build:renderer": "tsc -b && vite build",
-    "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron",
+    "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron --external @receptron/laya",
     "build": "npm run build:renderer && npm run build:electron",
     "test": "vitest run",
     "package:linux": "npm run build && electron-builder --linux AppImage",
@@ -19,6 +19,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@receptron/laya": "^0.1.2",
     "openai": "^5.20.0",
     "zod": "3.25.76"
   },
@@ -40,6 +41,7 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "three": "^0.180.0",
+    "three-stdlib": "^2.36.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
@@ -58,6 +60,9 @@
       "dist/assets/**/*",
       "dist-electron/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**/*"
     ],
     "linux": {
       "target": "AppImage",

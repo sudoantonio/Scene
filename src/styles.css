@@ -782,10 +782,14 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 /* Jev resta un unico input sopra la timeline; il soggetto segue la selezione corrente. */
 .viewport-stack { min-width: 0; min-height: 0; position: relative; overflow: hidden; }
 .viewport-stack > .viewport { position: absolute; inset: 0; }
-.jev-floating-composer { position: absolute; z-index: 20; left: 50%; bottom: 18px; width: min(640px, calc(100% - 36px)); transform: translateX(-50%); }
-.jev-composer-input { min-height: 52px; padding: 7px 8px 7px 16px; display: grid; grid-template-columns: auto minmax(0,1fr) 34px 34px; align-items: center; gap: 8px; color: #d8d8d5; background: rgba(36,36,36,.97); border: 1px solid #50504d; border-radius: 18px; box-shadow: 0 10px 32px rgba(0,0,0,.36); backdrop-filter: blur(14px); }
+.jev-floating-composer { position: absolute; z-index: 20; left: 50%; bottom: 18px; width: min(720px, calc(100% - 36px)); transform: translateX(-50%); }
+.jev-composer-input { min-height: 52px; padding: 7px 8px 7px 16px; display: grid; grid-template-columns: auto auto minmax(0,1fr) 34px 34px; align-items: center; gap: 8px; color: #d8d8d5; background: rgba(36,36,36,.97); border: 1px solid #50504d; border-radius: 18px; box-shadow: 0 10px 32px rgba(0,0,0,.36); backdrop-filter: blur(14px); }
 .jev-composer-input:focus-within { border-color: #74746f; box-shadow: 0 12px 38px rgba(0,0,0,.42); }
 .jev-composer-mark { color: #d1a12a; }
+.decision-engine-switch { display: flex; align-items: center; gap: 2px; padding: 2px; background: #2d2d2b; }
+.decision-engine-switch button { min-width: 42px; height: 26px; padding: 0 8px; color: #9b9b97; background: transparent; border: 0; border-radius: 3px; font-size: 10px; font-weight: 650; }
+.decision-engine-switch button:hover:not(:disabled) { color: #deded9; background: #3a3a37; }
+.decision-engine-switch button.active { color: #fff; background: #555550; }
 .jev-composer-input textarea { width: 100%; min-height: 24px; max-height: 96px; padding: 3px 0; resize: none; overflow-y: auto; color: #ededE8; background: transparent; border: 0; box-shadow: none; font: 13px/1.45 system-ui, sans-serif; }
 .jev-composer-input textarea:focus { border: 0; box-shadow: none; outline: 0; }
 .jev-composer-input textarea::placeholder { color: #9a9a95; opacity: 1; }
@@ -797,6 +801,10 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .jev-composer-send:hover:not(:disabled) { background: #e0b43a; }
 .jev-composer-tool:disabled, .jev-composer-send:disabled { color: #6f6f6b; background: #333331; opacity: .7; }
 .jev-composer-message { position: absolute; right: 12px; bottom: calc(100% + 8px); max-width: min(440px, calc(100vw - 60px)); padding: 7px 10px; color: #d8d8d3; background: rgba(35,35,34,.95); border: 1px solid #50504d; border-radius: 9px; box-shadow: 0 7px 22px rgba(0,0,0,.3); font-size: 10px; line-height: 1.35; }
+@media (max-width: 620px) {
+  .jev-composer-input { grid-template-columns: auto minmax(0,1fr) 34px 34px; }
+  .decision-engine-switch { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+}
 
 /* Gutter stabile: il thumb appare in hover senza cambiare la geometria del layout. */
 .app-shell * { scrollbar-width: thin; scrollbar-color: transparent transparent; }

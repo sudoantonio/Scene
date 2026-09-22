@@ -1,7 +1,11 @@
 import { ArrowUp, LoaderCircle, Pencil, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
+import type { DecisionEngine } from '../domain/jev-action';
 import { useEditor } from '../store/editor';
+
+const engineStorageKey = 'scene-decision-engine';
+const formatDuration = (milliseconds: number) => milliseconds < 1_000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1_000).toFixed(2)} s`;
 
 export default function JevFloatingComposer() {
   const project = useEditor((state) => state.project);
@@ -13,6 +17,7 @@ export default function JevFloatingComposer() {
   const setStrokePoints = useEditor((state) => state.setJevStrokePoints);
   const clearStroke = useEditor((state) => state.clearJevStroke);
   const [instruction, setInstruction] = useState('');
+  const [engine, setEngine] = useState<DecisionEngine>(() => window.localStorage.getItem(engineStorageKey) === 'laya' ? 'laya' : 'jev');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -23,6 +28,7 @@ export default function JevFloatingComposer() {
     && !candidate.kind.includes('light')
     && !candidate.screenSpace), [project.objects, selectedId]);
   const target = selected?.kind === 'camera' ? 'camera' : 'subject';
+  const engineLabel = engine === 'laya' ? 'Laya' : 'Jev';
   const canSubmit = Boolean(selected && instruction.trim() && !busy);
 
   useEffect(() => {
@@ -36,8 +42,13 @@ export default function JevFloatingComposer() {
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
   useEffect(() => { clearStroke(); setMessage(''); }, [selectedId, activeScene?.id]);
+  useEffect(() => { window.localStorage.setItem(engineStorageKey, engine); }, [engine]);
+  useEffect(() => window.abaco?.onLayaProgress?.(({ file, received, total }) => {
+    const percent = total ? ` · ${Math.min(100, Math.round(received / total * 100))}%` : '';
+    setMessage(`Laya · download iniziale ${file}${percent}`);
+  }), []);
   useEffect(() => {
-    if (!message) return;
+    if (!message || busy) return;
     const timeout = window.setTimeout(() => setMessage(''), 3200);
     return () => window.clearTimeout(timeout);
   }, [message]);
@@ -45,20 +56,25 @@ export default function JevFloatingComposer() {
   const generate = async () => {
     const currentInstruction = instruction.trim();
     if (!selected || !activeScene || !currentInstruction || busy) return;
-    if (!window.abaco) { setMessage('Jev è disponibile nell’app desktop Scene.'); return; }
+    if (!window.abaco) { setMessage(`${engineLabel} è disponibile nell’app desktop Scene.`); return; }
     setBusy(true); setMessage('');
     try {
       const startPosition = target === 'subject' ? evaluateTransform(selected, frame).position : null;
       const plan = await window.abaco.generateJevAction({
-        project, objectId: selected.id, target, sceneId: activeScene.id, frame, startPosition,
+        project, engine, objectId: selected.id, target, sceneId: activeScene.id, frame, startPosition,
         instruction: currentInstruction,
         gesture: stroke.points.length > 1 ? { points: stroke.points, target, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation, viewPosition: stroke.viewPosition, verticalFovDegrees: stroke.verticalFovDegrees, aspect: stroke.aspect } : undefined,
       });
-      if (!plan.blenderPlan.operations.length) throw new Error('Jev non ha trovato un movimento applicabile.');
+      if (!plan.blenderPlan.operations.length) throw new Error(`${engineLabel} non ha trovato un movimento applicabile.`);
       acceptJevPlan(plan.blenderPlan, activeScene.id);
-      clearStroke(); setInstruction(''); setMessage(`Movimento applicato a ${selected.name}.`);
+      const timing = plan.performance
+        ? plan.performance.modelLoadMs > 1_000
+          ? ` · totale ${formatDuration(plan.performance.totalMs)}, decisione ${formatDuration(plan.performance.decisionMs)}`
+          : ` · ${formatDuration(plan.performance.decisionMs)}`
+        : '';
+      clearStroke(); setInstruction(''); setMessage(`${engineLabel} · Movimento applicato a ${selected.name}${timing}.`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : 'Jev non ha completato la richiesta.');
+      setMessage(cause instanceof Error ? cause.message : `${engineLabel} non ha completato la richiesta.`);
     } finally { setBusy(false); }
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -72,9 +88,12 @@ export default function JevFloatingComposer() {
   if (!activeScene) return null;
   return <div className={`jev-floating-composer ${message ? 'has-message' : ''}`}>
     {message && <div className="jev-composer-message" role="status">{message}</div>}
-    <div className="jev-composer-input" aria-label="Input Jev" title={selected ? `Soggetto: ${selected.name}` : 'Seleziona il soggetto nella scena'}>
+    <div className="jev-composer-input" aria-label="Input azione" title={selected ? `Soggetto: ${selected.name}` : 'Seleziona il soggetto nella scena'}>
       <Sparkles className="jev-composer-mark" size={17} />
-      <textarea ref={inputRef} aria-label="Azione Jev" rows={1} value={instruction} disabled={!selected || busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? 'Jev sta creando il movimento…' : placeholder} />
+      <div className="decision-engine-switch" role="group" aria-label="Modello azione">
+        {(['jev', 'laya'] as const).map((option) => <button key={option} type="button" className={engine === option ? 'active' : ''} aria-pressed={engine === option} disabled={busy} onClick={() => setEngine(option)}>{option === 'jev' ? 'Jev' : 'Laya'}</button>)}
+      </div>
+      <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={!selected || busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
       <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={!selected || busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
       <button className="jev-composer-send" aria-label="Crea movimento" title="Crea movimento · Invio" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
     </div>

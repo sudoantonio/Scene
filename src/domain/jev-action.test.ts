@@ -46,6 +46,16 @@ describe('Jev action compiler', () => {
     expect(request.questions.stroke_target.type).toBe('choice');
   });
 
+  it('labels the compiled plan with the selected Laya engine', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { engine: 'laya', objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 0], instruction: 'vai a destra' }, { ...response(), model: 'laya-multilingual' });
+    expect(result.blenderPlan.summary).toContain('Laya');
+    expect(result.blenderPlan.operations.some((operation) => operation.rationale.includes('Laya'))).toBe(true);
+  });
+
   it('compiles a typed move decision into position keyframes', () => {
     const project = createProject();
     project.settings.frameEnd = 100;

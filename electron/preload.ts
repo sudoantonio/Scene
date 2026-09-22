@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('abaco', {
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),
   generateJevAction: (input: JevActionInput): Promise<JevActionPlan> => ipcRenderer.invoke('jev:action', input),
+  onLayaProgress: (callback: (progress: { file: string; received: number; total: number | null }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: { file: string; received: number; total: number | null }) => callback(progress);
+    ipcRenderer.on('laya:progress', listener);
+    return () => ipcRenderer.removeListener('laya:progress', listener);
+  },
   buildBlender: (project: AbacoProject, plan: BlenderPlan, projectPath: string) => ipcRenderer.invoke('blender:build', { project, plan, projectPath }),
   syncPreviewProject: (state: { project: AbacoProject; frame: number; theme: 'light' | 'dark' }) => ipcRenderer.send('preview:project', state),
   syncPreviewFrame: (frame: number) => ipcRenderer.send('preview:frame', frame),

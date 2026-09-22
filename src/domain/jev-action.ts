@@ -47,8 +47,12 @@ export const JevActionResponseSchema = z.object({
 });
 export type JevActionResponse = z.infer<typeof JevActionResponseSchema>;
 
+export const DecisionEngineSchema = z.enum(['jev', 'laya']);
+export type DecisionEngine = z.infer<typeof DecisionEngineSchema>;
+
 export const JevActionInputSchema = z.object({
   project: z.unknown(),
+  engine: DecisionEngineSchema.optional(),
   objectId: z.string().uuid().nullable(),
   target: z.enum(['subject', 'camera']).optional(),
   sceneId: z.string().uuid(),
@@ -248,6 +252,13 @@ export const JevActionPlanSchema = z.object({
   model: z.string(),
   status: z.enum(['ready', 'review']),
   confidence: z.number().min(0).max(1),
+  performance: z.object({
+    engine: DecisionEngineSchema,
+    totalMs: z.number().nonnegative(),
+    decisionMs: z.number().nonnegative(),
+    modelLoadMs: z.number().nonnegative(),
+    warm: z.boolean(),
+  }).optional(),
   decision: z.object({
     action: z.string(), direction: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), energy: z.number(), path: z.string(), actionable: z.number(),
     camera: z.object({ requested: z.boolean(), action: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), path: z.string() }).optional(),
@@ -493,6 +504,7 @@ function explicitMeasurement(instruction: string, unit: 'distance' | 'duration' 
 
 export function compileJevAction(project: AbacoProject, object: SceneObject | undefined, input: Omit<JevActionInput, 'project'>, raw: JevActionResponse): JevActionPlan {
   const response = JevActionResponseSchema.parse(raw);
+  const engineLabel = input.engine === 'laya' ? 'Laya' : 'Jev';
   const { answers } = response;
   const cameraOnly = input.target === 'camera';
   const distance = explicitMeasurement(input.instruction, 'distance') ?? nearestLevel(answers.distance.score, distances);
@@ -554,18 +566,18 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
       const remaining = subjectStroke.length - 1 - index;
       const pointFrame = Math.max(previousFrame + 1, Math.min(endFrame - remaining, Math.round(input.frame + (endFrame - input.frame) * point.progress)));
       previousFrame = pointFrame;
-      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object!.id, frame: pointFrame, property: 'position', value: value(point.position), interpolation: 'bezier', rationale: index ? 'Traiettoria disegnata sul canvas e interpretata da Jev.' : 'Inizio della traiettoria disegnata.', commentIds: [] });
+      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object!.id, frame: pointFrame, property: 'position', value: value(point.position), interpolation: 'bezier', rationale: index ? `Traiettoria disegnata sul canvas e interpretata da ${engineLabel}.` : 'Inizio della traiettoria disegnata.', commentIds: [] });
     });
-  } else if (object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'position', value: value(startPosition), interpolation, rationale: 'Posizione iniziale indicata per l’azione Jev.', commentIds: [] });
+  } else if (object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'position', value: value(startPosition), interpolation, rationale: `Posizione iniziale indicata per l’azione ${engineLabel}.`, commentIds: [] });
   if (!subjectStroke && object && action === 'jump') {
     const apexFrame = Math.max(input.frame + 1, Math.round((input.frame + endFrame) / 2));
     const midpoint = scale(add(startPosition, endPosition), .5);
-    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: apexFrame, property: 'position', value: value([midpoint[0], midpoint[1], Math.max(startPosition[2], endPosition[2]) + Math.max(.35, distance * .5)]), interpolation: 'bezier', rationale: 'Apice del salto scelto da Jev.', commentIds: [] });
+    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: apexFrame, property: 'position', value: value([midpoint[0], midpoint[1], Math.max(startPosition[2], endPosition[2]) + Math.max(.35, distance * .5)]), interpolation: 'bezier', rationale: `Apice del salto scelto da ${engineLabel}.`, commentIds: [] });
   }
-  if (!subjectStroke && object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'position', value: value(endPosition), interpolation, rationale: `Azione ${action} compilata dalle decisioni Jev.`, commentIds: [] });
+  if (!subjectStroke && object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'position', value: value(endPosition), interpolation, rationale: `Azione ${action} compilata dalle decisioni ${engineLabel}.`, commentIds: [] });
   if (object && (action === 'turn' || hasAxisRotation)) {
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(objectTransform!.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
-    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: 'Rotazione scelta da Jev.', commentIds: [] });
+    operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: `Rotazione scelta da ${engineLabel}.`, commentIds: [] });
   }
 
   const scene = scenes[sceneIndex];
@@ -617,7 +629,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
         const pointFrame = Math.max(previousFrame + 1, Math.min(cameraEndFrame - remaining, Math.round(input.frame + (cameraEndFrame - input.frame) * point.progress)));
         previousFrame = pointFrame;
         const pointTarget = cameraFocusObject ? evaluateTransform(cameraFocusObject, pointFrame).position : add(targetStart, scale(targetDelta, point.progress));
-        operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'position', value: value(point.position), interpolation: 'bezier', rationale: index ? 'Traiettoria camera disegnata sul canvas e interpretata da Jev.' : 'Inizio della traiettoria camera disegnata.', commentIds: [] });
+        operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'position', value: value(point.position), interpolation: 'bezier', rationale: index ? `Traiettoria camera disegnata sul canvas e interpretata da ${engineLabel}.` : 'Inizio della traiettoria camera disegnata.', commentIds: [] });
         cameraPathKeys.push({ id: crypto.randomUUID(), frame: pointFrame, property: 'position', value: point.position, interpolation: 'bezier', source: 'ai', purpose: 'motion', commentIds: [] });
         if (!cameraFocusObject) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: pointFrame, property: 'rotation', value: value(rotationToward(point.position, pointTarget)), interpolation: 'bezier', rationale: 'La camera mantiene il soggetto di riferimento durante il tratto.', commentIds: [] });
       });
@@ -637,18 +649,18 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
         });
       }
     } else if (!sameVector(cameraTransform.position, cameraEndPosition)) {
-      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: input.frame, property: 'position', value: value(cameraTransform.position), interpolation: cameraInterpolation, rationale: 'Posizione iniziale della camera per la regia Jev.', commentIds: [] });
-      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'position', value: value(cameraEndPosition), interpolation: cameraInterpolation, rationale: `Movimento camera ${cameraAction} scelto da Jev.`, commentIds: [] });
+      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: input.frame, property: 'position', value: value(cameraTransform.position), interpolation: cameraInterpolation, rationale: `Posizione iniziale della camera per la regia ${engineLabel}.`, commentIds: [] });
+      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'position', value: value(cameraEndPosition), interpolation: cameraInterpolation, rationale: `Movimento camera ${cameraAction} scelto da ${engineLabel}.`, commentIds: [] });
     }
     if (!cameraStroke && !sameVector(cameraTransform.rotation, cameraEndRotation)) {
-      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: input.frame, property: 'rotation', value: value(cameraTransform.rotation), interpolation: cameraInterpolation, rationale: 'Orientamento iniziale della camera per la regia Jev.', commentIds: [] });
-      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'rotation', value: value(cameraEndRotation), interpolation: cameraInterpolation, rationale: `Orientamento camera ${cameraAction} scelto da Jev.`, commentIds: [] });
+      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: input.frame, property: 'rotation', value: value(cameraTransform.rotation), interpolation: cameraInterpolation, rationale: `Orientamento iniziale della camera per la regia ${engineLabel}.`, commentIds: [] });
+      operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'rotation', value: value(cameraEndRotation), interpolation: cameraInterpolation, rationale: `Orientamento camera ${cameraAction} scelto da ${engineLabel}.`, commentIds: [] });
     }
   }
   const actionable = object ? answers.actionable.noul : 1;
   const warnings = confidence < .55 || actionable < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [];
   if (!operations.length) warnings.push('La descrizione non contiene un movimento applicabile al soggetto selezionato o alla camera.');
-  const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `Jev · Regia: ${input.instruction}`, assumptions: ['Le direzioni del soggetto sono relative alla camera attiva; i movimenti camera mantengono il soggetto selezionato come riferimento.'], warnings, operations };
+  const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `${engineLabel} · Regia: ${input.instruction}`, assumptions: ['Le direzioni del soggetto sono relative alla camera attiva; i movimenti camera mantengono il soggetto selezionato come riferimento.'], warnings, operations };
   return JevActionPlanSchema.parse({
     schemaVersion: 'JevActionPlanV1', objectId: object?.id ?? null, instruction: input.instruction, model: response.model,
     status: confidence >= .55 && actionable >= .6 && operations.length ? 'ready' : 'review', confidence,

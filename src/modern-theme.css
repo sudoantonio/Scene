@@ -513,6 +513,7 @@
 .app-shell.theme-dark .header-inspector-tabs button.active { color: #fff; background: #405d7e; border-color: #648fca; }
 .app-shell.theme-dark .header-inspector-tabs button:hover { color: #fff; background: #383838; }
 .app-shell.theme-dark .jev-composer-mark { color: #73a6e2; }
+.app-shell.theme-dark .decision-engine-switch button.active { color: #fff; background: #477dbb; }
 .app-shell.theme-dark .jev-composer-tool:hover:not(:disabled),
 .app-shell.theme-dark .jev-composer-tool.active { color: #b9d8ff; background: #3b4b5e; }
 .app-shell.theme-dark .jev-composer-send { color: #fff; background: #477dbb; }

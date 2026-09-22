@@ -7,6 +7,7 @@ import Inspector from './Inspector';
 import JevFloatingComposer from './JevFloatingComposer';
 
 beforeEach(() => {
+  window.localStorage.clear();
   useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false, cameraView: false, jevStroke: { active: false, points: [] } });
 });
 afterEach(() => { cleanup(); delete window.abaco; });
@@ -49,6 +50,22 @@ describe('Pannelli contestuali', () => {
     fireEvent.change(input, { target: { value: 'avanza lentamente' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ objectId: camera.id, target: 'camera', startPosition: null, gesture: expect.objectContaining({ target: 'camera' }) })));
+  });
+
+  it('permette di passare a Laya e invia lo stesso contesto al motore locale', async () => {
+    useEditor.getState().addObject('cube');
+    const objectId = useEditor.getState().selectedId!;
+    const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Laya', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Laya', commentIds: [] }] }, performance: { engine: 'laya', totalMs: 180, decisionMs: 120, modelLoadMs: 0, warm: true } });
+    window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
+    render(<JevFloatingComposer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Laya' }));
+    const input = screen.getByRole('textbox', { name: 'Azione Laya' });
+    fireEvent.change(input, { target: { value: 'vai avanti' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ engine: 'laya', objectId, instruction: 'vai avanti' })));
+    expect(window.localStorage.getItem('scene-decision-engine')).toBe('laya');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Laya · Movimento applicato'));
+    expect(screen.getByRole('status')).toHaveTextContent('120 ms');
   });
 
   it('attiva il disegno dal solo input senza cambiare la vista', () => {

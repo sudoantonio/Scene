@@ -18,9 +18,24 @@ type Settings = { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'hi
 const defaults: Settings = { reasoning: 'medium' };
 let mainWindow: BrowserWindow | null = null;
 let previewWindow: BrowserWindow | null = null;
+type LayaRuntime = Awaited<ReturnType<(typeof import('@receptron/laya'))['Laya']['load']>>;
+let layaRuntimePromise: Promise<LayaRuntime> | null = null;
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 let latestPreviewState: PreviewState | null = null;
 type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings';
+
+function loadLayaRuntime(onProgress: (progress: { file: string; received: number; total: number | null }) => void) {
+  if (!layaRuntimePromise) {
+    layaRuntimePromise = import('@receptron/laya')
+      .then(({ Laya }) => Laya.load({ subfolder: 'multilingual', onProgress }))
+      .catch((cause) => {
+        layaRuntimePromise = null;
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        throw new Error(`Laya non è stato caricato. ${detail}`);
+      });
+  }
+  return layaRuntimePromise;
+}
 
 function sendMenuCommand(command: MenuCommand) {
   mainWindow?.webContents.send('menu:command', command);
@@ -441,8 +456,10 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
   return plan;
 });
 
-ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
+ipcMain.handle('jev:action', async (event, incoming: unknown) => {
   const parsed = JevActionInputSchema.parse(incoming);
+  const engine = parsed.engine ?? 'jev';
+  const startedAt = Date.now();
   const project = ProjectSchema.parse(parsed.project);
   const selected = parsed.objectId ? project.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
   const object = parsed.target === 'camera' ? undefined : selected;
@@ -456,22 +473,39 @@ ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
   const sceneIndex = scenes.findIndex((scene) => scene.id === parsed.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
   if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
-  const settings = await readSettings();
-  if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
-  const jevInput = { objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
+  const jevInput = { engine, objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
   const request = jevActionRequest(project, object, jevInput);
-  const response = await fetch('https://api.typesafe.ai/v1/systemone', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
+  const wasWarm = engine === 'laya' && Boolean(layaRuntimePromise);
+  const loadStartedAt = Date.now();
+  let raw: unknown;
+  let modelLoadMs = 0;
+  let decisionStartedAt = loadStartedAt;
+  if (engine === 'laya') {
+    const laya = await loadLayaRuntime((progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send('laya:progress', progress);
+    });
+    modelLoadMs = Date.now() - loadStartedAt;
+    decisionStartedAt = Date.now();
+    raw = await laya.systemOne(request.state, request.questions as never);
+  } else {
+    const settings = await readSettings();
+    if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
+    decisionStartedAt = Date.now();
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
+    }
+    raw = await response.json();
   }
-  const raw = JevActionResponseSchema.parse(await response.json());
-  return compileJevAction(project, object, jevInput, raw);
+  const decisionMs = Date.now() - decisionStartedAt;
+  const compiled = compileJevAction(project, object, jevInput, JevActionResponseSchema.parse(raw));
+  return { ...compiled, performance: { engine, totalMs: Date.now() - startedAt, decisionMs, modelLoadMs, warm: engine === 'jev' || wasWarm } };
 });
 
 ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {

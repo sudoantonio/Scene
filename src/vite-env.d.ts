@@ -20,6 +20,7 @@ declare global {
       ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number }>;
       generatePlan(project: AbacoProject, contactSheet?: string): Promise<BlenderPlan>;
       generateJevAction(input: JevActionInput): Promise<JevActionPlan>;
+      onLayaProgress(callback: (progress: { file: string; received: number; total: number | null }) => void): () => void;
       buildBlender(project: AbacoProject, plan: BlenderPlan, projectPath: string): Promise<{ version: string; directory: string; blendPath: string; audioPath?: string }>;
       syncPreviewProject(state: PreviewState): void;
       syncPreviewFrame(frame: number): void;
