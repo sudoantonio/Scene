@@ -55,7 +55,7 @@ The application can compose scenes and export projects without an API key. AI in
 
 Plans produced by the model are validated before they are applied. The model cannot provide arbitrary Python code, select local filesystem paths, or directly delete project elements.
 
-Jev does not generate arbitrary animation JSON. It chooses among Scene's allowed subject actions and camera moves, including push, pull, truck, pan, tilt, orbit and follow. A direction can combine written staging with a trajectory drawn over the camera canvas; Scene samples the stroke into camera-relative keyframes for the chosen subject or camera. A single scene direction can produce coordinated subject and camera keyframes. Scene creates the final `JevActionPlanV1` JSON, displays its confidence and keyframes, and applies it only after the user confirms.
+Jev does not generate arbitrary animation JSON. It chooses among Scene's allowed subject actions and camera moves, including push, pull, truck, pan, tilt, orbit and follow. A direction can combine written staging with a trajectory drawn in either free or camera view; Scene reduces the stroke to at most four view-relative movement points for the chosen subject or camera. Applying a revised Jev plan replaces its earlier points in that scene instead of accumulating them. A single scene direction can produce coordinated subject and camera keyframes. Scene creates the final `JevActionPlanV1` JSON, displays its confidence and keyframes, and applies it only after the user confirms.
 
 ## Development
 

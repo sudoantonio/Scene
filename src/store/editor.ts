@@ -25,9 +25,10 @@ type EditorState = {
   isPlaying: boolean;
   cameraView: boolean;
   setCameraView(value: boolean): void;
-  jevStroke: { active: boolean; points: [number, number][] };
+  jevStroke: { active: boolean; points: [number, number][]; viewMode?: 'camera' | 'free'; viewRotation?: Vec3 };
   setJevStrokeActive(active: boolean): void;
   setJevStrokePoints(points: [number, number][]): void;
+  setJevStrokeContext(viewMode: 'camera' | 'free', viewRotation: Vec3): void;
   clearJevStroke(): void;
   selectedMotion?: { objectId: string; sceneId: string };
   recordingMotion?: { objectId: string; sceneId: string; startFrame: number; provisionalFrame?: number };
@@ -89,6 +90,7 @@ type EditorState = {
   addTransitionComment(fromSceneId: string, toSceneId: string, text: string): void;
   addCameraCut(): void;
   acceptPlan(plan: BlenderPlan): void;
+  acceptJevPlan(plan: BlenderPlan, sceneId: string): void;
   undo(): void;
   redo(): void;
 };
@@ -343,7 +345,7 @@ export const useEditor = create<EditorState>((set, get) => {
     project: { ...project, updatedAt: new Date().toISOString() }, recordingSession, future: [], dirty: true,
   });
   return {
-    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
+    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
     newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
     loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
@@ -1256,6 +1258,26 @@ export const useEditor = create<EditorState>((set, get) => {
       commit(next);
     },
     acceptPlan: (plan) => commit(applyPlan(get().project, plan)),
+    acceptJevPlan: (plan, sceneId) => {
+      const current = get().project;
+      const next = snapshot(current);
+      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+      const sceneIndex = scenes.findIndex((scene) => scene.id === sceneId);
+      const scene = scenes[sceneIndex];
+      if (!scene) return;
+      const sceneEnd = scenes[sceneIndex + 1]?.frame ?? next.settings.frameEnd + 1;
+      const touched = new Map<string, Set<string>>();
+      plan.operations.filter((operation) => operation.type === 'set_keyframe').forEach((operation) => {
+        const properties = touched.get(operation.objectId) ?? new Set<string>();
+        properties.add(operation.property); touched.set(operation.objectId, properties);
+      });
+      next.objects.forEach((object) => {
+        const properties = touched.get(object.id);
+        if (!properties) return;
+        object.keyframes = object.keyframes.filter((key) => !(key.frame >= scene.frame && key.frame < sceneEnd && properties.has(key.property) && key.source === 'ai' && key.purpose === 'motion' && key.commentIds.length === 0));
+      });
+      commit(applyPlan(next, plan));
+    },
     undo: () => set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createProject, createSceneObject } from './schema';
 import { compileJevAction, jevActionRequest, type JevActionResponse } from './jev-action';
+import { useEditor } from '../store/editor';
 
 const response = (overrides: Partial<JevActionResponse['answers']> = {}): JevActionResponse => ({
   model: 'jev-1.13.0',
@@ -114,6 +115,45 @@ describe('Jev action compiler', () => {
     expect(positions).toHaveLength(3);
     expect(positions[1][1]).toBeGreaterThan(0);
     expect(positions[2][0]).toBeCloseTo(2);
+  });
+
+  it('interprets a stroke from the orientation of the free view', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'corre seguendo il tratto', gesture: { target: 'subject', viewMode: 'free', viewRotation: [60, 0, 90], points: [[.2, .5], [.8, .5]] } }, response());
+    const end = result.blenderPlan.operations.at(-1)!.value.vector!;
+    expect(end[0]).toBeCloseTo(0);
+    expect(end[1]).toBeCloseTo(2);
+    expect(result.blenderPlan.operations).toHaveLength(2);
+  });
+
+  it('reduces a dense stroke to at most four movement points', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const points = Array.from({ length: 80 }, (_, index) => [index / 100, .5 + Math.sin(index / 10) * .1] as [number, number]);
+    const result = compileJevAction(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'segue il tratto', gesture: { target: 'subject', points } }, response());
+    expect(result.blenderPlan.operations).toHaveLength(4);
+  });
+
+  it('replaces previous Jev points instead of accumulating them', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const input = { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1] as [number, number, number], instruction: 'segue il tratto', gesture: { target: 'subject' as const, points: Array.from({ length: 80 }, (_, index) => [index / 100, .5] as [number, number]) } };
+    const first = compileJevAction(project, character, input, response());
+    useEditor.setState({ project, past: [], future: [] });
+    useEditor.getState().acceptJevPlan(first.blenderPlan, input.sceneId);
+    const second = compileJevAction(project, character, { ...input, gesture: { target: 'subject', points: [[.2, .5], [.8, .5]] } }, response());
+    useEditor.getState().acceptJevPlan(second.blenderPlan, input.sceneId);
+    const applied = useEditor.getState().project.objects.find((object) => object.id === character.id)!;
+    expect(applied.keyframes.filter((key) => key.property === 'position' && key.source === 'ai')).toHaveLength(2);
   });
 
   it('can direct the camera without a selected subject', () => {

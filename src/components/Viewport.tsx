@@ -15,10 +15,11 @@ import { useEditor } from '../store/editor';
 let viewportCanvas: HTMLCanvasElement | null = null;
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
-function JevStrokeOverlay({ width, height }: { width: number; height: number }) {
+function JevStrokeOverlay({ width, height, viewMode, getViewRotation }: { width: number; height: number; viewMode: 'camera' | 'free'; getViewRotation(): Vec3 }) {
   const stroke = useEditor((state) => state.jevStroke);
   const setPoints = useEditor((state) => state.setJevStrokePoints);
   const setActive = useEditor((state) => state.setJevStrokeActive);
+  const setContext = useEditor((state) => state.setJevStrokeContext);
   const drawing = useRef<number | undefined>(undefined);
   const point = (event: ReactPointerEvent<SVGSVGElement>): [number, number] => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -40,6 +41,7 @@ function JevStrokeOverlay({ width, height }: { width: number; height: number }) 
     if (drawing.current !== event.pointerId) return;
     event.preventDefault(); event.stopPropagation(); drawing.current = undefined;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setContext(viewMode, getViewRotation());
     setActive(false);
   };
   if (!stroke.active && stroke.points.length < 2) return null;
@@ -1377,7 +1379,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
-    {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} />}
+    {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewRotation={() => {
+      const camera = shotOrbitRef.current?.object;
+      return camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : activeCameraTransform?.rotation ?? [0, 0, 0];
+    }} />}
+    {!cameraView && viewportSize.width > 0 && viewportSize.height > 0 && <JevStrokeOverlay width={viewportSize.width} height={viewportSize.height} viewMode="free" getViewRotation={() => {
+      const camera = orbitRef.current?.object;
+      return camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0];
+    }} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
     {cameraView ? <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button> : <div className="free-view-switch"><button title="Visualizza il frame della ripresa" aria-label="Frame della ripresa" onClick={() => setCameraView(true)}><LayoutTemplate size={13} /> Frame</button></div>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>

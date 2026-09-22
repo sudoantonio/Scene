@@ -6,12 +6,11 @@ import { evaluateTransform } from '../domain/animation';
 import { useEditor } from '../store/editor';
 
 export default function JevActionPanel({ project, object, sceneId, frame, position }: { project: AbacoProject; object?: SceneObject; sceneId: string; frame: number; position?: Vec3 }) {
-  const acceptPlan = useEditor((state) => state.acceptPlan);
+  const acceptJevPlan = useEditor((state) => state.acceptJevPlan);
   const stroke = useEditor((state) => state.jevStroke);
   const setStrokeActive = useEditor((state) => state.setJevStrokeActive);
   const setStrokePoints = useEditor((state) => state.setJevStrokePoints);
   const clearStroke = useEditor((state) => state.clearJevStroke);
-  const setCameraView = useEditor((state) => state.setCameraView);
   const subjects = project.objects.filter((candidate) => candidate.kind !== 'camera' && candidate.kind !== 'audio' && !candidate.kind.includes('light') && !candidate.screenSpace);
   const [subjectId, setSubjectId] = useState(object?.id ?? '');
   const subject = subjects.find((candidate) => candidate.id === subjectId);
@@ -33,14 +32,14 @@ export default function JevActionPanel({ project, object, sceneId, frame, positi
     if (!window.abaco) return setError('Jev è disponibile nell’app desktop Scene.');
     setBusy(true);
     try {
-      setPlan(await window.abaco.generateJevAction({ project, objectId: subject?.id ?? null, sceneId, frame, startPosition: subject ? startPosition : null, instruction, gesture: stroke.points.length > 1 ? { points: stroke.points, target: strokeTarget } : undefined }));
+      setPlan(await window.abaco.generateJevAction({ project, objectId: subject?.id ?? null, sceneId, frame, startPosition: subject ? startPosition : null, instruction, gesture: stroke.points.length > 1 ? { points: stroke.points, target: strokeTarget, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation } : undefined }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Jev non ha completato la richiesta.');
     } finally { setBusy(false); }
   };
   const apply = () => {
     if (!plan) return;
-    acceptPlan(plan.blenderPlan); clearStroke(); setApplied(true);
+    acceptJevPlan(plan.blenderPlan, sceneId); clearStroke(); setApplied(true);
   };
   const copyJson = async () => {
     if (plan) await navigator.clipboard.writeText(JSON.stringify(plan, null, 2));
@@ -54,8 +53,8 @@ export default function JevActionPanel({ project, object, sceneId, frame, positi
       <div>{(['X', 'Y', 'Z'] as const).map((axis, index) => <label key={axis}><span>{axis}</span><input aria-label={`Jev posizione ${axis}`} type="number" step="0.1" value={Number(startPosition[index].toFixed(3))} onChange={(event) => changeAxis(index, Number(event.target.value))} /></label>)}</div>
     </div>}
     <label className="field"><span>Descrizione della scena</span><textarea aria-label="Azione Jev" rows={5} value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Esempio: il personaggio arretra mentre la camera avanza lentamente." /></label>
-    <div className="jev-draw-actions"><button className={stroke.active ? 'primary' : 'secondary'} onClick={() => { setCameraView(true); setStrokePoints([]); setStrokeActive(true); }}><Pencil size={13} />{stroke.active ? 'Disegna sul canvas…' : stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'}</button><button className="subtle" aria-label="Cancella traiettoria Jev" title="Cancella traiettoria" disabled={!stroke.points.length && !stroke.active} onClick={clearStroke}><Trash2 size={13} /></button></div>
-    {stroke.points.length > 1 && <><label className="field"><span>Il tratto guida</span><select aria-label="Destinazione tratto Jev" value={strokeTarget} onChange={(event) => setStrokeTarget(event.target.value as typeof strokeTarget)}><option value="auto">Jev decide dalla descrizione</option>{subject && <option value="subject">Movimento del soggetto</option>}<option value="camera">Movimento della camera</option></select></label><p className="jev-stroke-note">Tratto acquisito: {stroke.points.length} punti. La freccia indica il verso.</p></>}
+    <div className="jev-draw-actions"><button className={stroke.active ? 'primary' : 'secondary'} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={13} />{stroke.active ? 'Disegna sul canvas…' : stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'}</button><button className="subtle" aria-label="Cancella traiettoria Jev" title="Cancella traiettoria" disabled={!stroke.points.length && !stroke.active} onClick={clearStroke}><Trash2 size={13} /></button></div>
+    {stroke.points.length > 1 && <><label className="field"><span>Il tratto guida</span><select aria-label="Destinazione tratto Jev" value={strokeTarget} onChange={(event) => setStrokeTarget(event.target.value as typeof strokeTarget)}><option value="auto">Jev decide dalla descrizione</option>{subject && <option value="subject">Movimento del soggetto</option>}<option value="camera">Movimento della camera</option></select></label><p className="jev-stroke-note">Tratto acquisito in vista {stroke.viewMode === 'free' ? 'libera' : 'camera'}: {stroke.points.length} campioni, ridotti a pochi punti movimento. La freccia indica il verso.</p></>}
     <button className="jev-generate" disabled={busy || !instruction.trim()} onClick={generate}><Sparkles size={13} />{busy ? 'Jev sta decidendo…' : 'Crea regia'}</button>
     {error && <p className="jev-error">{error}</p>}
     {plan && <div className={`jev-result ${plan.status}`}>

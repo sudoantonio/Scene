@@ -50,6 +50,8 @@ export const JevActionInputSchema = z.object({
   gesture: z.object({
     points: z.array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)])).min(2).max(512),
     target: z.enum(['auto', 'subject', 'camera']).default('auto'),
+    viewMode: z.enum(['camera', 'free']).optional(),
+    viewRotation: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]).optional(),
   }).optional(),
 });
 export type JevActionInput = z.infer<typeof JevActionInputSchema>;
@@ -122,7 +124,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       start_position_meters: input.startPosition ? { x: input.startPosition[0], y: input.startPosition[1], z: input.startPosition[2] } : null,
       start_rotation_degrees: objectTransform ? { x: objectTransform.rotation[0], y: objectTransform.rotation[1], z: objectTransform.rotation[2] } : null,
       active_camera: cameraTransform ? { position: cameraTransform.position, rotation_degrees: cameraTransform.rotation } : null,
-      drawn_stroke: gestureSummary(input.gesture?.points),
+      drawn_stroke: input.gesture ? { ...gestureSummary(input.gesture.points), view_mode: input.gesture.viewMode ?? 'camera', view_rotation_degrees: input.gesture.viewRotation ?? cameraTransform?.rotation ?? null } : null,
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       constraint: 'Interpreta una sola azione principale. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
@@ -210,7 +212,7 @@ const normalizeVector = (vector: Vec3, fallback: Vec3): Vec3 => {
 const sameVector = (a: Vec3, b: Vec3) => a.every((entry, index) => Math.abs(entry - b[index]) < .0001);
 const cameraWords = /camera|telecamera|inquadratur|carrell|panoram|dolly|orbit|zoom|ripresa/;
 
-function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 9) {
+function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 4) {
   const count = Math.min(maxPoints, points.length);
   const samples = Array.from({ length: count }, (_, index) => points[Math.round(index * (points.length - 1) / Math.max(1, count - 1))]!);
   const first = samples[0]!;
@@ -275,6 +277,10 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const directionChoice = cameraIntent ?? answers.direction.choice;
   const startPosition = input.startPosition ?? (object ? evaluateTransform(object, input.frame).position : [0, 0, 0]);
   const directions: Record<string, Vec3> = { ...cameraRelativeDirections(project, input.sceneId, input.frame), ...radialCameraDirections(project, input.sceneId, input.frame, startPosition) };
+  const drawnBasis = input.gesture?.viewRotation ? cameraBasis(input.gesture.viewRotation).map((axis) => axis.toArray() as Vec3) : undefined;
+  const drawnRight = drawnBasis ? normalizeGround(drawnBasis[0]!, directions.right!) : directions.right!;
+  const drawnForward = drawnBasis ? normalizeGround(drawnBasis[1]!, directions.forward!) : directions.forward!;
+  const drawnUp = drawnBasis ? normalizeVector(drawnBasis[2]!, [0, 0, 1]) : [0, 0, 1] as Vec3;
   const direction = directions[directionChoice] ?? directions.forward;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
@@ -294,8 +300,8 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const horizontal: Vec3 = answers.direction.choice === 'up' || answers.direction.choice === 'down' ? [0, 0, 0] : scale(direction, distance);
     endPosition = add(startPosition, horizontal);
   }
-  const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? [0, 0, 1] : directions.forward!;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, directions.right!, strokeVertical, distance, endFrame - input.frame + 1) : undefined;
+  const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? drawnUp : drawnForward;
+  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(4, endFrame - input.frame + 1)) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -348,7 +354,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     if (cameraAction === 'pan_left' || cameraAction === 'pan_right') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, scale(screenRight, cameraDistance * (cameraAction === 'pan_left' ? -1 : 1))));
     if (cameraAction === 'tilt_up' || cameraAction === 'tilt_down') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, [0, 0, cameraDistance * (cameraAction === 'tilt_up' ? 1 : -1)]));
     const cameraEndFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
-    const cameraStroke = gestureTarget === 'camera' && input.gesture ? strokeTrajectory(input.gesture.points, cameraTransform.position, screenRight, [0, 0, 1], cameraDistance, cameraEndFrame - input.frame + 1) : undefined;
+    const cameraStroke = gestureTarget === 'camera' && input.gesture ? strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, drawnUp, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1)) : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];
       let previousFrame = input.frame - 1;

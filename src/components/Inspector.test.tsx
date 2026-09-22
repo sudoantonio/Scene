@@ -18,7 +18,7 @@ describe('Pannelli contestuali', () => {
     expect(screen.getByRole('option', { name: 'Solo scena e camera' })).toBeInTheDocument();
     expect(screen.getByLabelText('Azione Jev')).toHaveAttribute('placeholder', expect.stringContaining('camera avanza'));
     fireEvent.click(screen.getByRole('button', { name: 'Disegna traiettoria' }));
-    expect(useEditor.getState().cameraView).toBe(true);
+    expect(useEditor.getState().cameraView).toBe(false);
     expect(useEditor.getState().jevStroke.active).toBe(true);
   });
 
