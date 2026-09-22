@@ -7,13 +7,14 @@ import OpenAI from 'openai';
 import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan } from '../src/domain/schema';
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
 import { validatePlan } from '../src/domain/animation';
+import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest } from '../src/domain/jev-action';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
 import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
 import { hydratePortableProject, projectForStorage } from './project-storage';
 import { exportScreenLayers } from './export-screen-layers';
 
-type Settings = { apiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
+type Settings = { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
 const defaults: Settings = { reasoning: 'medium' };
 let mainWindow: BrowserWindow | null = null;
 let previewWindow: BrowserWindow | null = null;
@@ -91,19 +92,22 @@ async function openPreviewWindow() {
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
 async function readSettings(): Promise<Settings> {
   try {
-    const raw = JSON.parse(await fs.readFile(settingsPath(), 'utf8')) as { encryptedApiKey?: string; reasoning?: 'medium' | 'high'; blenderPath?: string };
+    const raw = JSON.parse(await fs.readFile(settingsPath(), 'utf8')) as { encryptedApiKey?: string; encryptedJevApiKey?: string; reasoning?: 'medium' | 'high'; blenderPath?: string };
     const apiKey = raw.encryptedApiKey && safeStorage.isEncryptionAvailable()
       ? safeStorage.decryptString(Buffer.from(raw.encryptedApiKey, 'base64')) : undefined;
-    return { ...defaults, reasoning: raw.reasoning ?? 'medium', blenderPath: raw.blenderPath, apiKey };
+    const jevApiKey = raw.encryptedJevApiKey && safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(Buffer.from(raw.encryptedJevApiKey, 'base64')) : undefined;
+    return { ...defaults, reasoning: raw.reasoning ?? 'medium', blenderPath: raw.blenderPath, apiKey, jevApiKey };
   } catch { return defaults; }
 }
 async function writeSettings(settings: Settings) {
   await fs.mkdir(path.dirname(settingsPath()), { recursive: true });
-  if (settings.apiKey && !safeStorage.isEncryptionAvailable()) {
-    throw new Error('La cifratura di sistema non è disponibile: la chiave API non è stata salvata.');
+  if ((settings.apiKey || settings.jevApiKey) && !safeStorage.isEncryptionAvailable()) {
+    throw new Error('La cifratura di sistema non è disponibile: le chiavi API non sono state salvate.');
   }
   const encryptedApiKey = settings.apiKey ? safeStorage.encryptString(settings.apiKey).toString('base64') : undefined;
-  await fs.writeFile(settingsPath(), JSON.stringify({ encryptedApiKey, reasoning: settings.reasoning, blenderPath: settings.blenderPath }, null, 2), { mode: 0o600 });
+  const encryptedJevApiKey = settings.jevApiKey ? safeStorage.encryptString(settings.jevApiKey).toString('base64') : undefined;
+  await fs.writeFile(settingsPath(), JSON.stringify({ encryptedApiKey, encryptedJevApiKey, reasoning: settings.reasoning, blenderPath: settings.blenderPath }, null, 2), { mode: 0o600 });
 }
 
 async function atomicWrite(filePath: string, contents: string) {
@@ -352,11 +356,11 @@ ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; 
 
 ipcMain.handle('settings:get', async () => {
   const settings = await readSettings();
-  return { hasApiKey: Boolean(settings.apiKey), reasoning: settings.reasoning, blenderPath: settings.blenderPath ?? '' };
+  return { hasApiKey: Boolean(settings.apiKey), hasJevApiKey: Boolean(settings.jevApiKey), reasoning: settings.reasoning, blenderPath: settings.blenderPath ?? '' };
 });
-ipcMain.handle('settings:save', async (_event, incoming: { apiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string }) => {
+ipcMain.handle('settings:save', async (_event, incoming: { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string }) => {
   const current = await readSettings();
-  await writeSettings({ apiKey: incoming.apiKey?.trim() || current.apiKey, reasoning: incoming.reasoning, blenderPath: incoming.blenderPath?.trim() || undefined });
+  await writeSettings({ apiKey: incoming.apiKey?.trim() || current.apiKey, jevApiKey: incoming.jevApiKey?.trim() || current.jevApiKey, reasoning: incoming.reasoning, blenderPath: incoming.blenderPath?.trim() || undefined });
   return { ok: true };
 });
 ipcMain.handle('settings:chooseBlender', async () => {
@@ -435,6 +439,35 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
   const errors = validatePlan(project, plan);
   if (errors.length) throw new Error(`Il piano è stato rifiutato:\n${errors.join('\n')}`);
   return plan;
+});
+
+ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
+  const parsed = JevActionInputSchema.parse(incoming);
+  const project = ProjectSchema.parse(parsed.project);
+  const object = project.objects.find((candidate) => candidate.id === parsed.objectId);
+  if (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace) {
+    throw new Error('Seleziona un personaggio o un elemento 3D animabile.');
+  }
+  if (!project.cameraCuts.some((scene) => scene.id === parsed.sceneId)) throw new Error('La scena attiva non esiste più.');
+  const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+  const sceneIndex = scenes.findIndex((scene) => scene.id === parsed.sceneId);
+  const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
+  if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
+  const settings = await readSettings();
+  if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
+  const request = jevActionRequest(project, object, { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction });
+  const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
+  }
+  const raw = JevActionResponseSchema.parse(await response.json());
+  return compileJevAction(project, object, { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction }, raw);
 });
 
 ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {

@@ -1,4 +1,4 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, Sparkles, SquareDashed, Sun, TextCursorInput, Trash2 } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -9,6 +9,7 @@ import LightingPanel from './LightingPanel';
 import AudioPanel from './AudioPanel';
 import BackgroundPanel from './BackgroundPanel';
 import InspectorGroup from './InspectorGroup';
+import JevActionPanel from './JevActionPanel';
 
 type InspectorPanel = 'edit' | 'scene' | 'light';
 const motionNames = { constant: 'Stacco', bezier: 'Fluido', linear: 'Lineare' } as const;
@@ -157,6 +158,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div></InspectorGroup>
         <InspectorGroup title="Aspetto" icon={<Palette size={13} />}><div className="group-title"><span>Colore</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visibile</label></div><div className="style-row"><label className="color-picker" title="Scegli un colore"><input aria-label="Colore personalizzato" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Colore ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Ritaglio" icon={<Crop size={13} />}><div className="camera-sliders">{(['Alto', 'Destra', 'Basso', 'Sinistra'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Ritaglio ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
+        {!object.screenSpace && activeScene && <InspectorGroup title="Jev · Crea azione" icon={<Sparkles size={13} />}><JevActionPanel project={project} object={object} sceneId={activeScene.id} frame={frame} position={transform.position} /></InspectorGroup>}
         {motionControls}
         <InspectorGroup title="Valori numerici" icon={<Braces size={13} />}>
           <VectorFields label="Posizione" value={transform.position} onChange={(value) => changeTransform('position', value)} />

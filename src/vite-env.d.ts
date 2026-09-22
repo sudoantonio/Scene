@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type { AbacoProject, BlenderPlan } from './domain/schema';
+import type { JevActionInput, JevActionPlan } from './domain/jev-action';
 
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 
@@ -9,8 +10,8 @@ declare global {
     abaco?: {
       openProject(): Promise<{ project: AbacoProject; path: string } | null>;
       saveProject(project: AbacoProject, path?: string): Promise<{ project: AbacoProject; path: string } | null>;
-      getSettings(): Promise<{ hasApiKey: boolean; reasoning: 'medium' | 'high'; blenderPath: string }>;
-      saveSettings(settings: { apiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string }): Promise<{ ok: boolean }>;
+      getSettings(): Promise<{ hasApiKey: boolean; hasJevApiKey: boolean; reasoning: 'medium' | 'high'; blenderPath: string }>;
+      saveSettings(settings: { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string }): Promise<{ ok: boolean }>;
       chooseBlender(): Promise<string | null>;
       chooseBackground(kind: 'image' | 'model'): Promise<{ path: string; name: string } | null>;
       loadAsset(path: string): Promise<string>;
@@ -18,6 +19,7 @@ declare global {
       chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number } | null>;
       ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number }>;
       generatePlan(project: AbacoProject, contactSheet?: string): Promise<BlenderPlan>;
+      generateJevAction(input: JevActionInput): Promise<JevActionPlan>;
       buildBlender(project: AbacoProject, plan: BlenderPlan, projectPath: string): Promise<{ version: string; directory: string; blendPath: string; audioPath?: string }>;
       syncPreviewProject(state: PreviewState): void;
       syncPreviewFrame(frame: number): void;

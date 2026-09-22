@@ -7,20 +7,23 @@ export default function SettingsModal({ onClose }: { onClose(): void }) {
   const projectSettings = useEditor((state) => state.project.settings);
   const updateSettings = useEditor((state) => state.updateSettings);
   const [apiKey, setApiKey] = useState('');
+  const [jevApiKey, setJevApiKey] = useState('');
   const [reasoning, setReasoning] = useState<'medium' | 'high'>('medium');
   const [blenderPath, setBlenderPath] = useState('');
   const [hasKey, setHasKey] = useState(false);
+  const [hasJevKey, setHasJevKey] = useState(false);
   const [status, setStatus] = useState('');
-  useEffect(() => { window.abaco?.getSettings().then((settings) => { setHasKey(settings.hasApiKey); setReasoning(settings.reasoning); setBlenderPath(settings.blenderPath); }); }, []);
+  useEffect(() => { window.abaco?.getSettings().then((settings) => { setHasKey(settings.hasApiKey); setHasJevKey(settings.hasJevApiKey); setReasoning(settings.reasoning); setBlenderPath(settings.blenderPath); }); }, []);
   const browse = async () => { const path = await window.abaco?.chooseBlender(); if (path) setBlenderPath(path); };
   const save = async () => {
     if (!window.abaco) return setStatus('Apri questa schermata nell’app desktop Electron.');
-    await window.abaco.saveSettings({ apiKey: apiKey || undefined, reasoning, blenderPath: blenderPath || undefined });
-    setStatus('Impostazioni salvate.'); setHasKey(Boolean(apiKey) || hasKey); setApiKey('');
+    await window.abaco.saveSettings({ apiKey: apiKey || undefined, jevApiKey: jevApiKey || undefined, reasoning, blenderPath: blenderPath || undefined });
+    setStatus('Impostazioni salvate.'); setHasKey(Boolean(apiKey) || hasKey); setHasJevKey(Boolean(jevApiKey) || hasJevKey); setApiKey(''); setJevApiKey('');
   };
   return <Modal title="Impostazioni" onClose={onClose}>
     <div className="settings-form">
       <label className="field"><span>Chiave API OpenAI</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? 'Chiave configurata · inserisci per sostituire' : 'sk-…'} /></div><small>Viene cifrata dal sistema e non entra mai nel progetto.</small></label>
+      <label className="field"><span>Chiave API TypeSafe · Jev</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={jevApiKey} onChange={(event) => setJevApiKey(event.target.value)} placeholder={hasJevKey ? 'Chiave configurata · inserisci per sostituire' : 'Chiave TypeSafe'} /></div><small>Serve al generatore di azioni Jev. Viene cifrata dal sistema e non entra nel progetto.</small></label>
       <label className="field"><span>Ragionamento Astra</span><select value={reasoning} onChange={(event) => setReasoning(event.target.value as 'medium' | 'high')}><option value="medium">Medium · consigliato</option><option value="high">High · scene più complesse</option></select></label>
       <label className="field"><span>Eseguibile Blender</span><div className="path-picker"><input value={blenderPath} onChange={(event) => setBlenderPath(event.target.value)} placeholder="Rilevato automaticamente" /><button className="icon" onClick={browse}><FolderOpen size={16} /></button></div><small>Su Mac cerca Blender in Applicazioni, Desktop e Applicazioni utente.</small></label>
       <details className="advanced-panel settings-advanced"><summary>Progetto avanzato</summary><div className="settings-grid">

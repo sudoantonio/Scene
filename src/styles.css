@@ -771,6 +771,35 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .theme-dark .modal,
 .theme-dark .toast { color: #ddd; background: #282828; border-color: #444; }
 
+/* Jev traduce decisioni tipizzate in un piano di keyframe rivedibile. */
+.jev-action-panel { display: grid; gap: 9px; }
+.jev-intro { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.jev-position > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
+.jev-position > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.jev-position label { position: relative; }
+.jev-position label span { position: absolute; top: 8px; left: 7px; color: #728096; font-size: 9px; font-weight: 700; }
+.jev-position input { width: 100%; padding-left: 20px; }
+.jev-action-panel .field { margin-top: 0; }
+.jev-action-panel textarea { min-height: 74px; resize: vertical; }
+.jev-generate { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #f4f7fb; background: #4a6375; }
+.jev-generate:hover:not(:disabled) { background: #3d5668; }
+.jev-error, .jev-warning { margin: 0; color: #a54343; font-size: 10px; line-height: 1.4; }
+.jev-result { padding: 9px; background: rgba(255,255,255,.35); border: 1px solid var(--line); border-radius: 5px; }
+.jev-result.review { border-color: #b98d43; }
+.jev-result > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jev-result > header strong { font-size: 10px; }
+.jev-result > header span { color: var(--muted); font-size: 9px; }
+.jev-result dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 9px 0; }
+.jev-result dl div { min-width: 0; }
+.jev-result dt { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+.jev-result dd { margin: 2px 0 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; }
+.jev-result details summary { color: var(--muted); cursor: pointer; font-size: 9px; }
+.jev-result pre { max-height: 210px; padding: 7px; overflow: auto; background: rgba(0,0,0,.08); font: 8px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.jev-actions { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.jev-actions button { min-height: 29px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 9px; }
+.theme-dark .jev-result { background: rgba(255,255,255,.035); }
+.theme-dark .jev-result pre { background: rgba(0,0,0,.22); }
+
 /* Gutter stabile: il thumb appare in hover senza cambiare la geometria del layout. */
 .app-shell * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 .app-shell *:hover { scrollbar-color: #aaa9a3 transparent; }
