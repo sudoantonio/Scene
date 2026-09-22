@@ -8,6 +8,7 @@ import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan }
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
 import { validatePlan } from '../src/domain/animation';
 import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest } from '../src/domain/jev-action';
+import { layaLoadOptions } from '../src/domain/laya-runtime';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
 import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
@@ -27,7 +28,7 @@ type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 
 function loadLayaRuntime(onProgress: (progress: { file: string; received: number; total: number | null }) => void) {
   if (!layaRuntimePromise) {
     layaRuntimePromise = import('@receptron/laya')
-      .then(({ Laya }) => Laya.load({ subfolder: 'multilingual', onProgress }))
+      .then(({ Laya }) => Laya.load(layaLoadOptions(onProgress)))
       .catch((cause) => {
         layaRuntimePromise = null;
         const detail = cause instanceof Error ? cause.message : String(cause);

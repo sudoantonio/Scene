@@ -22,6 +22,7 @@
     "src/domain/versioning.ts",
     "src/domain/animation-handoff.ts",
     "src/domain/direction-presets.ts",
-    "src/domain/jev-action.ts"
+    "src/domain/jev-action.ts",
+    "src/domain/laya-runtime.ts"
   ]
 }
