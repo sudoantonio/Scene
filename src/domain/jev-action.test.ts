@@ -188,6 +188,35 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations.every((operation) => operation.objectId === camera.id)).toBe(true);
   });
 
+  it('turns a closed drawn orbit into a full circle at the real camera-target radius', () => {
+    const project = createProject();
+    project.settings.frameEnd = 160;
+    const camera = project.objects[0];
+    camera.transform.position = [0, -10, 5];
+    project.cameraCuts[0].framing.target = [0, 0, 1];
+    const points = Array.from({ length: 25 }, (_, index) => {
+      const angle = Math.PI * 2 * index / 24;
+      return [.5 + Math.cos(angle) * .35, .5 + Math.sin(angle) * .3] as [number, number];
+    });
+    const result = compileJevAction(project, undefined, {
+      objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null,
+      instruction: 'gira intorno al personaggio', gesture: { target: 'camera', points },
+    }, response({
+      camera_requested: { type: 'noul', noul: .99 },
+      camera_action: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      camera_distance: { type: 'score', score: 1, confidence: .9, probabilities: { '1': .9 } },
+      camera_duration: { type: 'score', score: 4, confidence: .91, probabilities: { '4': .91 } },
+      camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
+    }));
+    const positions = result.blenderPlan.operations.filter((operation) => operation.property === 'position').map((operation) => operation.value.vector!);
+    const initialRadius = Math.hypot(positions[0][0], positions[0][1], positions[0][2] - 1);
+    expect(result.decision.camera?.action).toBe('orbit_right');
+    expect(positions).toHaveLength(4);
+    positions.forEach((position) => expect(Math.hypot(position[0], position[1], position[2] - 1)).toBeCloseTo(initialRadius));
+    positions[0].forEach((value, axis) => expect(positions.at(-1)![axis]).toBeCloseTo(value, 5));
+    expect(Math.max(...positions.map((position) => position[0])) - Math.min(...positions.map((position) => position[0]))).toBeGreaterThan(8);
+  });
+
   it('adds an apex to a jump and flags uncertain decisions for review', () => {
     const project = createProject();
     project.settings.frameEnd = 100;

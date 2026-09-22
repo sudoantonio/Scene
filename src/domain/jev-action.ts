@@ -238,6 +238,38 @@ function normalizedInstruction(instruction: string) {
   return instruction.toLocaleLowerCase('it').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function closedStroke(points: [number, number][] | undefined) {
+  if (!points || points.length < 6) return false;
+  const xs = points.map((point) => point[0]), ys = points.map((point) => point[1]);
+  const diagonal = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const closure = Math.hypot(points[0]![0] - points.at(-1)![0], points[0]![1] - points.at(-1)![1]);
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) length += Math.hypot(points[index]![0] - points[index - 1]![0], points[index]![1] - points[index - 1]![1]);
+  return diagonal > .08 && closure <= diagonal * .3 && length >= diagonal * 2;
+}
+
+function drawnOrbitDirection(points: [number, number][] | undefined): 'orbit_left' | 'orbit_right' {
+  if (!points || points.length < 3) return 'orbit_right';
+  let signedArea = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index]!, next = points[(index + 1) % points.length]!;
+    signedArea += current[0] * next[1] - next[0] * current[1];
+  }
+  return signedArea >= 0 ? 'orbit_right' : 'orbit_left';
+}
+
+function cameraOrbitTrajectory(position: Vec3, center: Vec3, direction: 'orbit_left' | 'orbit_right', fullCircle: boolean) {
+  const offset = new THREE.Vector3(...position).sub(new THREE.Vector3(...center));
+  const horizontalRadius = Math.hypot(offset.x, offset.y);
+  if (horizontalRadius < .1) offset.x = Math.max(.1, Math.hypot(...offset.toArray()));
+  const sweep = (fullCircle ? Math.PI * 2 : Math.PI / 2) * (direction === 'orbit_left' ? 1 : -1);
+  return Array.from({ length: 4 }, (_, index) => {
+    const progress = index / 3;
+    const point = offset.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), sweep * progress).add(new THREE.Vector3(...center));
+    return { position: point.toArray() as Vec3, progress };
+  });
+}
+
 function explicitCameraMotion(instruction: string) {
   const text = normalizedInstruction(instruction);
   const patterns: [string, RegExp][] = [
@@ -271,7 +303,8 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const { answers } = response;
   const distance = nearestLevel(answers.distance.score, distances);
   const duration = nearestLevel(answers.duration.score, durations);
-  const explicitCameraAction = explicitCameraMotion(input.instruction);
+  const drawnFullOrbit = closedStroke(input.gesture?.points) && /(?:gira\w*|ruota\w*|orbit\w*)[^.!?]{0,30}(?:attorno|intorno)|(?:attorno|intorno)[^.!?]{0,30}(?:personaggi|soggett|element)/.test(normalizedInstruction(input.instruction));
+  const explicitCameraAction = explicitCameraMotion(input.instruction) ?? (drawnFullOrbit ? drawnOrbitDirection(input.gesture?.points) : undefined);
   const mentionsCamera = cameraWords.test(normalizedInstruction(input.instruction));
   const cameraAction = explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
   const cameraOnly = input.target === 'camera';
@@ -342,7 +375,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const cameraInterpolation = answers.camera_path?.choice === 'direct' ? 'linear' : 'bezier';
   if (cameraRequested && cameraObject && scene) {
     const cameraTransform = evaluateTransform(cameraObject, input.frame);
-    const targetStart = object ? startPosition : cameraTarget(cameraTransform, scene.framing.distance);
+    const targetStart = object ? startPosition : cameraOnly ? scene.framing.target : cameraTarget(cameraTransform, scene.framing.distance);
     const targetEnd = object ? endPosition : targetStart;
     let cameraEndPosition = cameraTransform.position;
     let cameraEndRotation = cameraTransform.rotation;
@@ -364,7 +397,11 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     if (cameraAction === 'pan_left' || cameraAction === 'pan_right') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, scale(screenRight, cameraDistance * (cameraAction === 'pan_left' ? -1 : 1))));
     if (cameraAction === 'tilt_up' || cameraAction === 'tilt_down') cameraEndRotation = rotationToward(cameraEndPosition, add(targetStart, [0, 0, cameraDistance * (cameraAction === 'tilt_up' ? 1 : -1)]));
     const cameraEndFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
-    const cameraStroke = gestureTarget === 'camera' && input.gesture ? strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, drawnUp, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1)) : undefined;
+    const cameraStroke = gestureTarget === 'camera' && input.gesture
+      ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
+        ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, drawnUp, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1))
+      : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];
       let previousFrame = input.frame - 1;
