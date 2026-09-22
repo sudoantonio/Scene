@@ -223,8 +223,9 @@ describe('Jev action compiler', () => {
     const rotationOperations = result.blenderPlan.operations.filter((operation) => operation.property === 'rotation');
     const initialRadius = Math.hypot(positions[0][0] - 2, positions[0][1] - 3, positions[0][2] - 2);
     expect(result.decision.camera?.action).toBe('orbit_right');
-    expect(positions).toHaveLength(4);
+    expect(positions).toHaveLength(9);
     positions.forEach((position) => expect(Math.hypot(position[0] - 2, position[1] - 3, position[2] - 2)).toBeCloseTo(initialRadius));
+    positions.forEach((position) => expect(position[2]).toBeCloseTo(positions[0][2]));
     positions[0].forEach((value, axis) => expect(positions.at(-1)![axis]).toBeCloseTo(value, 5));
     expect(Math.max(...positions.map((position) => position[0])) - Math.min(...positions.map((position) => position[0]))).toBeGreaterThan(8);
     const applied = applyPlan(project, result.blenderPlan);
@@ -237,6 +238,25 @@ describe('Jev action compiler', () => {
       const towardCharacter = new THREE.Vector3(...evaluateTransform(character, operation.frame).position).sub(new THREE.Vector3(...position)).normalize();
       expect(view.getWorldDirection(new THREE.Vector3()).dot(towardCharacter)).toBeGreaterThan(.999);
     });
+  });
+
+  it('keeps a drawn camera move level unless vertical movement is requested', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const camera = project.objects[0];
+    const result = compileJevAction(project, undefined, {
+      objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null,
+      instruction: 'sposta la camera seguendo il tratto', gesture: { target: 'camera', viewMode: 'free', viewRotation: [52, 0, 30], points: [[.1, .8], [.5, .2], [.9, .7]] },
+    }, response({
+      camera_requested: { type: 'noul', noul: .99 },
+      camera_action: { type: 'choice', choice: 'truck_right', confidence: .94, probabilities: { truck_right: .94 } },
+      camera_distance: { type: 'score', score: 2, confidence: .9, probabilities: { '2': .9 } },
+      camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
+      camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
+    }));
+    const positions = result.blenderPlan.operations.filter((operation) => operation.property === 'position').map((operation) => operation.value.vector!);
+    expect(positions).toHaveLength(3);
+    positions.forEach((position) => expect(position[2]).toBeCloseTo(positions[0][2]));
   });
 
   it('adds an apex to a jump and flags uncertain decisions for review', () => {

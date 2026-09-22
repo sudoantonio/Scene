@@ -158,6 +158,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       drawn_stroke: input.gesture ? { ...gestureSummary(input.gesture.points), view_mode: input.gesture.viewMode ?? 'camera', view_rotation_degrees: input.gesture.viewRotation ?? cameraTransform?.rotation ?? null } : null,
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
+      spatial_rules: 'I movimenti ordinari restano sul piano XY e mantengono la quota Z iniziale. Z cambia solo con una richiesta esplicita di salita, discesa o salto. Un’orbita camera chiusa resta su un piano orizzontale, conserva il raggio camera-soggetto e mantiene il soggetto al centro.',
       constraint: input.target === 'camera'
         ? 'La camera attiva è il soggetto selezionato: interpreta la richiesta esclusivamente come movimento o rotazione della camera. Non animare altri elementi.'
         : 'Interpreta una sola azione principale del soggetto selezionato. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
@@ -313,9 +314,11 @@ function cameraOrbitTrajectory(position: Vec3, center: Vec3, direction: 'orbit_l
   const horizontalRadius = Math.hypot(offset.x, offset.y);
   if (horizontalRadius < .1) offset.x = Math.max(.1, Math.hypot(...offset.toArray()));
   const sweep = (fullCircle ? Math.PI * 2 : Math.PI / 2) * (direction === 'orbit_left' ? 1 : -1);
-  return Array.from({ length: 4 }, (_, index) => {
-    const progress = index / 3;
+  const pointCount = fullCircle ? 9 : 4;
+  return Array.from({ length: pointCount }, (_, index) => {
+    const progress = index / (pointCount - 1);
     const point = offset.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), sweep * progress).add(new THREE.Vector3(...center));
+    point.z = position[2];
     return { position: point.toArray() as Vec3, progress };
   });
 }
@@ -461,7 +464,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
-        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, drawnUp, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1))
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(4, cameraEndFrame - input.frame + 1))
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];
