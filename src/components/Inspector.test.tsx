@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject } from '../domain/schema';
 import { evaluateTransform } from '../domain/animation';
@@ -12,13 +12,48 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; });
 
 describe('Pannelli contestuali', () => {
-  it('permette di descrivere la regia Jev anche senza un personaggio selezionato', () => {
+  it('mostra solo l’input Jev e richiede la selezione del soggetto', () => {
     render(<JevFloatingComposer />);
-    fireEvent.click(screen.getByRole('button', { name: 'Apri Jev' }));
-    expect(screen.getByRole('region', { name: 'Pannello principale Jev' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Soggetto Jev')).toHaveValue('');
-    expect(screen.getByRole('option', { name: 'Solo scena e camera' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Azione Jev')).toHaveAttribute('placeholder', expect.stringContaining('camera avanza'));
+    expect(screen.getByRole('textbox', { name: 'Azione Jev' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Azione Jev' })).toHaveAttribute('placeholder', 'Seleziona una camera o un elemento…');
+    expect(screen.queryByText('Soggetto di riferimento')).not.toBeInTheDocument();
+    expect(screen.queryByText('Posizione iniziale')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Pannello principale Jev' })).not.toBeInTheDocument();
+  });
+
+  it('usa automaticamente l’elemento selezionato e applica la regia con Invio', async () => {
+    useEditor.getState().addObject('cube');
+    const objectId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Jev', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Jev', commentIds: [] }] } });
+    window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
+    render(<JevFloatingComposer />);
+    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    expect(input).toHaveAttribute('placeholder', expect.stringContaining('Cubo 1'));
+    fireEvent.change(input, { target: { value: 'vai a destra' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ objectId, target: 'subject', sceneId, instruction: 'vai a destra' })));
+    await waitFor(() => expect(input).toHaveValue(''));
+  });
+
+  it('usa automaticamente la camera selezionata anche per il tratto disegnato', async () => {
+    const camera = useEditor.getState().project.objects.find((object) => object.kind === 'camera')!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().select(camera.id);
+    const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Jev camera', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId: camera.id, frame: 1, property: 'position', value: { vector: [0, -10, 7], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Jev', commentIds: [] }] } });
+    window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
+    render(<JevFloatingComposer />);
+    act(() => useEditor.getState().setJevStrokePoints([[.1, .5], [.9, .5]]));
+    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    expect(input).toHaveAttribute('placeholder', expect.stringContaining(camera.name));
+    fireEvent.change(input, { target: { value: 'avanza lentamente' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ objectId: camera.id, target: 'camera', startPosition: null, gesture: expect.objectContaining({ target: 'camera' }) })));
+  });
+
+  it('attiva il disegno dal solo input senza cambiare la vista', () => {
+    useEditor.getState().addObject('cube');
+    render(<JevFloatingComposer />);
     fireEvent.click(screen.getByRole('button', { name: 'Disegna traiettoria' }));
     expect(useEditor.getState().cameraView).toBe(false);
     expect(useEditor.getState().jevStroke.active).toBe(true);

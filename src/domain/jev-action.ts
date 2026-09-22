@@ -43,6 +43,7 @@ export type JevActionResponse = z.infer<typeof JevActionResponseSchema>;
 export const JevActionInputSchema = z.object({
   project: z.unknown(),
   objectId: z.string().uuid().nullable(),
+  target: z.enum(['subject', 'camera']).optional(),
   sceneId: z.string().uuid(),
   frame: z.number().int().positive(),
   startPosition: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]).nullable(),
@@ -109,12 +110,16 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
   const camera = project.objects.find((candidate) => candidate.id === scenes[sceneIndex]?.cameraId && candidate.kind === 'camera');
-  const cameraTransform = camera ? evaluateTransform(camera, input.frame) : undefined;
+  const selectedCamera = input.target === 'camera' ? project.objects.find((candidate) => candidate.id === input.objectId && candidate.kind === 'camera') : undefined;
+  const referenceCamera = selectedCamera ?? camera;
+  const cameraTransform = referenceCamera ? evaluateTransform(referenceCamera, input.frame) : undefined;
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
+  const selectedTarget = input.target === 'camera' ? selectedCamera : object;
   return {
     model: 'jev-latest',
     state: {
       application: 'Scene di ABACO, editor di animatic 3D',
+      selected_target: selectedTarget ? { id: selectedTarget.id, name: selectedTarget.name, kind: selectedTarget.kind, role: input.target === 'camera' ? 'camera' : 'subject' } : null,
       selected_subject: object ? { id: object.id, name: object.name, kind: object.kind } : null,
       available_subjects: project.objects.filter((candidate) => candidate.kind !== 'camera' && candidate.kind !== 'audio' && !candidate.kind.includes('light') && !candidate.screenSpace).map((candidate) => ({ id: candidate.id, name: candidate.name, kind: candidate.kind })),
       instruction: input.instruction,
@@ -127,7 +132,9 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       drawn_stroke: input.gesture ? { ...gestureSummary(input.gesture.points), view_mode: input.gesture.viewMode ?? 'camera', view_rotation_degrees: input.gesture.viewRotation ?? cameraTransform?.rotation ?? null } : null,
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
-      constraint: 'Interpreta una sola azione principale. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
+      constraint: input.target === 'camera'
+        ? 'La camera attiva è il soggetto selezionato: interpreta la richiesta esclusivamente come movimento o rotazione della camera. Non animare altri elementi.'
+        : 'Interpreta una sola azione principale del soggetto selezionato. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
     },
     questions: {
       actionable: { type: 'noul', instructions: 'La richiesta descrive un movimento o una posa abbastanza chiari da convertire in keyframe?' },
@@ -267,8 +274,9 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const explicitCameraAction = explicitCameraMotion(input.instruction);
   const mentionsCamera = cameraWords.test(normalizedInstruction(input.instruction));
   const cameraAction = explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
-  const gestureTarget = input.gesture ? (input.gesture.target === 'auto' ? (answers.stroke_target?.choice === 'camera' || !object ? 'camera' : 'subject') : input.gesture.target) : undefined;
-  const cameraRequested = gestureTarget === 'camera' || (cameraAction !== 'hold' && (mentionsCamera || (answers.camera_requested?.noul ?? 0) >= .6));
+  const cameraOnly = input.target === 'camera';
+  const gestureTarget = input.gesture ? (cameraOnly ? 'camera' : input.gesture.target === 'auto' ? (answers.stroke_target?.choice === 'camera' || !object ? 'camera' : 'subject') : input.gesture.target) : undefined;
+  const cameraRequested = cameraOnly || gestureTarget === 'camera' || (cameraAction !== 'hold' && (mentionsCamera || (answers.camera_requested?.noul ?? 0) >= .6));
   const subjectConfidences = object ? [answers.action.confidence, answers.direction.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence] : [];
   const cameraConfidences = cameraRequested ? [answers.camera_action?.confidence, answers.camera_distance?.confidence, answers.camera_duration?.confidence, answers.camera_path?.confidence].filter((entry): entry is number => entry !== undefined) : [];
   const confidences = [...subjectConfidences, ...cameraConfidences];
@@ -326,7 +334,9 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   }
 
   const scene = scenes[sceneIndex];
-  const cameraObject = project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
+  const cameraObject = cameraOnly
+    ? project.objects.find((candidate) => candidate.id === input.objectId && candidate.kind === 'camera')
+    : project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
   const cameraDistance = nearestLevel(answers.camera_distance?.score ?? answers.distance.score, distances);
   const cameraDuration = nearestLevel(answers.camera_duration?.score ?? answers.duration.score, durations);
   const cameraInterpolation = answers.camera_path?.choice === 'direct' ? 'linear' : 'bezier';

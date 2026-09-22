@@ -444,8 +444,10 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
 ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
   const parsed = JevActionInputSchema.parse(incoming);
   const project = ProjectSchema.parse(parsed.project);
-  const object = parsed.objectId ? project.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
-  if (parsed.objectId && (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace)) {
+  const selected = parsed.objectId ? project.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
+  const object = parsed.target === 'camera' ? undefined : selected;
+  if (parsed.target === 'camera' && (!selected || selected.kind !== 'camera')) throw new Error('La camera selezionata non è valida.');
+  if (parsed.target !== 'camera' && parsed.objectId && (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace)) {
     throw new Error('Seleziona un personaggio o un elemento 3D animabile.');
   }
   if (object && !parsed.startPosition) throw new Error('La posizione iniziale del soggetto non è valida.');
@@ -456,7 +458,7 @@ ipcMain.handle('jev:action', async (_event, incoming: unknown) => {
   if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
   const settings = await readSettings();
   if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
-  const jevInput = { objectId: parsed.objectId, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
+  const jevInput = { objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
   const request = jevActionRequest(project, object, jevInput);
   const response = await fetch('https://api.typesafe.ai/v1/systemone', {
     method: 'POST',

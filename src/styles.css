@@ -771,58 +771,24 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .theme-dark .modal,
 .theme-dark .toast { color: #ddd; background: #282828; border-color: #444; }
 
-/* Jev traduce decisioni tipizzate in un piano di keyframe rivedibile. */
-.jev-action-panel { display: grid; gap: 9px; }
-.jev-tab-content { padding-bottom: 16px; }
-.jev-empty { padding: 16px; }
-.jev-draw-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-.jev-draw-actions button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.jev-stroke-note { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+/* Jev resta un unico input sopra la timeline; il soggetto segue la selezione corrente. */
 .viewport-stack { min-width: 0; min-height: 0; position: relative; overflow: hidden; }
 .viewport-stack > .viewport { position: absolute; inset: 0; }
 .jev-floating-composer { position: absolute; z-index: 20; left: 50%; bottom: 18px; width: min(640px, calc(100% - 36px)); transform: translateX(-50%); }
-.jev-floating-trigger { width: 100%; min-height: 48px; padding: 0 14px 0 16px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; color: #d8d8d5; background: rgba(36,36,36,.96); border: 1px solid #50504d; border-radius: 16px; box-shadow: 0 10px 32px rgba(0,0,0,.34); text-align: left; backdrop-filter: blur(14px); }
-.jev-floating-trigger span { color: #a8a8a3; font-size: 12px; }
-.jev-floating-trigger kbd { min-width: 22px; height: 22px; display: grid; place-items: center; color: #8d8d88; background: #2d2d2b; border: 1px solid #4b4b48; border-radius: 6px; font: 10px/1 inherit; }
-.jev-floating-trigger:hover { background: rgba(43,43,43,.98); border-color: #676762; }
-.jev-floating-main { max-height: min(72vh, 660px); display: grid; grid-template-rows: 42px minmax(0,1fr); color: #deded9; background: rgba(35,35,35,.985); border: 1px solid #51514e; border-radius: 18px; box-shadow: 0 18px 55px rgba(0,0,0,.48); overflow: hidden; backdrop-filter: blur(18px); }
-.jev-floating-main > header { min-height: 42px; padding: 0 10px 0 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #454542; }
-.jev-floating-main > header > div { display: flex; align-items: center; gap: 8px; }
-.jev-floating-main > header span { font-size: 12px; font-weight: 650; }
-.jev-floating-main > header small { color: #858580; font-size: 10px; }
-.jev-floating-main > header button { width: 28px; height: 28px; display: grid; place-items: center; color: #999994; background: transparent; border: 0; border-radius: 8px; }
-.jev-floating-main > header button:hover { color: #eee; background: #454542; }
-.jev-floating-scroll { min-height: 0; padding: 14px 16px 16px; overflow: auto; }
-.jev-floating-main .jev-action-panel :is(input, textarea, select) { color: #deded9; background: #292927; border-color: #484845; }
-.jev-floating-main .jev-result { background: #2b2b29; border-color: #4b4b48; }
-.jev-floating-main .jev-generate { background: #d1a12a; color: #1c170b; font-weight: 650; }
-.jev-floating-main .jev-generate:hover:not(:disabled) { background: #e0b43a; }
-.jev-intro { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
-.jev-position > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
-.jev-position > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.jev-position label { position: relative; }
-.jev-position label span { position: absolute; top: 8px; left: 7px; color: #728096; font-size: 9px; font-weight: 700; }
-.jev-position input { width: 100%; padding-left: 20px; }
-.jev-action-panel .field { margin-top: 0; }
-.jev-action-panel textarea { min-height: 74px; resize: vertical; }
-.jev-generate { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #f4f7fb; background: #4a6375; }
-.jev-generate:hover:not(:disabled) { background: #3d5668; }
-.jev-error, .jev-warning { margin: 0; color: #a54343; font-size: 10px; line-height: 1.4; }
-.jev-result { padding: 9px; background: rgba(255,255,255,.35); border: 1px solid var(--line); border-radius: 5px; }
-.jev-result.review { border-color: #b98d43; }
-.jev-result > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.jev-result > header strong { font-size: 10px; }
-.jev-result > header span { color: var(--muted); font-size: 9px; }
-.jev-result dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 9px 0; }
-.jev-result dl div { min-width: 0; }
-.jev-result dt { color: var(--muted); font-size: 8px; text-transform: uppercase; }
-.jev-result dd { margin: 2px 0 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; }
-.jev-result details summary { color: var(--muted); cursor: pointer; font-size: 9px; }
-.jev-result pre { max-height: 210px; padding: 7px; overflow: auto; background: rgba(0,0,0,.08); font: 8px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
-.jev-actions { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.jev-actions button { min-height: 29px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 9px; }
-.theme-dark .jev-result { background: rgba(255,255,255,.035); }
-.theme-dark .jev-result pre { background: rgba(0,0,0,.22); }
+.jev-composer-input { min-height: 52px; padding: 7px 8px 7px 16px; display: grid; grid-template-columns: auto minmax(0,1fr) 34px 34px; align-items: center; gap: 8px; color: #d8d8d5; background: rgba(36,36,36,.97); border: 1px solid #50504d; border-radius: 18px; box-shadow: 0 10px 32px rgba(0,0,0,.36); backdrop-filter: blur(14px); }
+.jev-composer-input:focus-within { border-color: #74746f; box-shadow: 0 12px 38px rgba(0,0,0,.42); }
+.jev-composer-mark { color: #d1a12a; }
+.jev-composer-input textarea { width: 100%; min-height: 24px; max-height: 96px; padding: 3px 0; resize: none; overflow-y: auto; color: #ededE8; background: transparent; border: 0; box-shadow: none; font: 13px/1.45 system-ui, sans-serif; }
+.jev-composer-input textarea:focus { border: 0; box-shadow: none; outline: 0; }
+.jev-composer-input textarea::placeholder { color: #9a9a95; opacity: 1; }
+.jev-composer-input textarea:disabled { opacity: .72; }
+.jev-composer-tool, .jev-composer-send { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px; }
+.jev-composer-tool { color: #aaa9a4; background: transparent; }
+.jev-composer-tool:hover:not(:disabled), .jev-composer-tool.active { color: #f2ca5c; background: #454039; }
+.jev-composer-send { color: #211b0c; background: #d1a12a; }
+.jev-composer-send:hover:not(:disabled) { background: #e0b43a; }
+.jev-composer-tool:disabled, .jev-composer-send:disabled { color: #6f6f6b; background: #333331; opacity: .7; }
+.jev-composer-message { position: absolute; right: 12px; bottom: calc(100% + 8px); max-width: min(440px, calc(100vw - 60px)); padding: 7px 10px; color: #d8d8d3; background: rgba(35,35,34,.95); border: 1px solid #50504d; border-radius: 9px; box-shadow: 0 7px 22px rgba(0,0,0,.3); font-size: 10px; line-height: 1.35; }
 
 /* Gutter stabile: il thumb appare in hover senza cambiare la geometria del layout. */
 .app-shell * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -1722,6 +1688,11 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark .movement-label, .theme-dark .movement-track { color: #efa5a5; background: #36262a; border-color: #5a3940; }
 .theme-dark .recorded-motion-segment { color: #ffd5d1; background: #80484b; border-color: #bd6b6e; }
 .theme-dark .camera-movement-label, .theme-dark .camera-movement-track { color: #b9d5ef; background: #253d54; border-color: #3e617f; }
+.theme-dark .timeline .camera-motion-segment { color: #d8f4ff; background: #245f78; border-color: #43a8d0; }
+.theme-dark .timeline .camera-motion-segment:hover { color: #effbff; background: #2b718e; border-color: #6bc7e9; }
+.theme-dark .timeline .camera-motion-segment small { color: #a9ddf1; }
+.theme-light .timeline .camera-motion-segment { color: #174e64; background: #cdebf6; border-color: #75bed9; }
+.theme-light .timeline .camera-motion-segment:hover { color: #103f52; background: #b9e1f0; border-color: #3a9cc2; }
 .presence-segment.text-layer { color: #ead8f3; background: #664879; border-color: #936bab; }
 .presence-segment.image-layer { color: #d4edf7; background: #35647c; border-color: #5791ad; }
 .presence-segment.audio-layer { color: #f3e5b1; background: #6b5724; border-color: #a98734; }

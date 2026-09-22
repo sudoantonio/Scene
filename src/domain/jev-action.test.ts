@@ -170,6 +170,24 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations).toHaveLength(2);
   });
 
+  it('treats the selected camera as the only target even when the text does not name it', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const camera = project.objects[0];
+    const input = { objectId: camera.id, target: 'camera' as const, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null, instruction: 'avanza lentamente' };
+    const request = jevActionRequest(project, undefined, input);
+    expect(request.state.selected_target).toMatchObject({ id: camera.id, role: 'camera' });
+    const result = compileJevAction(project, undefined, input, response({
+      camera_requested: { type: 'noul', noul: 0 },
+      camera_action: { type: 'choice', choice: 'push_in', confidence: .94, probabilities: { push_in: .94 } },
+      camera_distance: { type: 'score', score: 2, confidence: .9, probabilities: { '2': .9 } },
+      camera_duration: { type: 'score', score: 3, confidence: .91, probabilities: { '3': .91 } },
+      camera_path: { type: 'choice', choice: 'smooth', confidence: .95, probabilities: { smooth: .95 } },
+    }));
+    expect(result.decision.camera).toMatchObject({ requested: true, action: 'push_in' });
+    expect(result.blenderPlan.operations.every((operation) => operation.objectId === camera.id)).toBe(true);
+  });
+
   it('adds an apex to a jump and flags uncertain decisions for review', () => {
     const project = createProject();
     project.settings.frameEnd = 100;

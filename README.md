@@ -30,7 +30,7 @@ Scene is still an early-stage project and is intentionally focused. It was creat
 - add 3D primitives, Blender files, images, and 2D text;
 - define shots, camera positions, and motion using timeline control points;
 - keep every motion path visible in the active scene, with objects in red and the camera in cyan;
-- direct the whole scene from a centered TypeSafe Jev composer that expands above the timeline;
+- direct the selected camera or 3D element from one centered TypeSafe Jev input;
 - attach production notes to scenes, movements, and individual elements;
 - import audio tracks, display their waveforms, and adjust volume;
 - preview the animatic directly in the editor;
@@ -56,7 +56,7 @@ The application can compose scenes and export projects without an API key. AI in
 
 Plans produced by the model are validated before they are applied. The model cannot provide arbitrary Python code, select local filesystem paths, or directly delete project elements.
 
-Jev does not generate arbitrary animation JSON. Its centered composer opens on hover, click or the `J` key and chooses among Scene's allowed subject actions and camera moves, including push, pull, truck, pan, tilt, orbit and follow. A direction can combine written staging with a trajectory drawn in either free or camera view; Scene reduces the stroke to at most four view-relative movement points for the chosen subject or camera. Applying a revised Jev plan replaces its earlier points in that scene instead of accumulating them. A single scene direction can produce coordinated subject and camera keyframes. Scene creates the final `JevActionPlanV1` JSON, displays its confidence and keyframes, and applies it only after the user confirms. Motion paths remain visible throughout the active scene: red identifies subjects and objects, while cyan identifies the active camera.
+Jev does not generate arbitrary animation JSON. Its centered composer is a single input: select a camera or 3D element, describe the action and press Enter. The selected item is always the target, so camera instructions do not need to repeat the word “camera”. Jev chooses among Scene's allowed subject actions and camera moves, including push, pull, truck, pan, tilt, orbit and follow, then Scene applies the validated keyframes directly. A direction can combine written staging with a trajectory drawn in either free or camera view; Scene reduces the stroke to at most four view-relative movement points for the selected item. Applying a revised Jev plan replaces its earlier points in that scene instead of accumulating them. Motion paths remain visible throughout the active scene: red identifies subjects and objects, while cyan identifies the active camera.
 
 ## Development
 
