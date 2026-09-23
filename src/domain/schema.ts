@@ -157,6 +157,21 @@ export const CameraCutSchema = z.object({
 });
 export type CameraCut = z.infer<typeof CameraCutSchema>;
 
+export const DirectionPlanSchema = z.object({
+  id: z.string().uuid(), sceneId: z.string().uuid(), objectId: z.string().uuid(),
+  instruction: z.string(), startFrame: z.number().int(), endFrame: z.number().int(),
+  constraints: z.array(z.string()).optional(),
+  gesture: z.unknown().optional(),
+  actions: z.array(z.object({
+    id: z.string().uuid(), instruction: z.string(), motion: z.string(),
+    relation: z.enum(['then', 'with']), startFrame: z.number().int(), endFrame: z.number().int(),
+    referenceId: z.string().uuid().optional(), keepInFrame: z.boolean(),
+    distanceMeters: z.number(), durationSeconds: z.number(),
+    decision: z.record(z.unknown()).optional(),
+  })),
+});
+export type DirectionPlan = z.infer<typeof DirectionPlanSchema>;
+
 export const ProjectSchema = z.object({
   schemaVersion: z.literal('AbacoSceneV1'),
   id: z.string().uuid(),
@@ -173,6 +188,7 @@ export const ProjectSchema = z.object({
   }),
   animationStandard: AnimationStandardSchema.optional(),
   animationBrief: z.string().optional(),
+  directionPlans: z.array(DirectionPlanSchema).optional(),
   objects: z.array(SceneObjectSchema),
   comments: z.array(CommentSchema),
   cameraCuts: z.array(CameraCutSchema),
@@ -220,6 +236,7 @@ export const BlenderPlanSchema = z.object({
   assumptions: z.array(z.string()),
   warnings: z.array(z.string()),
   operations: z.array(PlanOperationSchema),
+  directionPlan: DirectionPlanSchema.optional(),
 });
 export type BlenderPlan = z.infer<typeof BlenderPlanSchema>;
 

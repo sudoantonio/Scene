@@ -1967,3 +1967,9 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .scenography-comment-editor .direction-input { display: block; min-width: 0; }
 .scenography-comment-editor .preset-menu { width: 100%; box-sizing: border-box; }
 .scenography-comment-editor .preset-menu button { min-height: 34px; }
+
+.jev-direction-editor { position: absolute; bottom: calc(100% + 8px); right: 0; max-width: min(420px, 90vw); color: #ddd; background: #303030; padding: 6px 10px; font-size: 12px; }
+.jev-direction-editor summary { cursor: pointer; }
+.jev-direction-editor > div { display: grid; gap: 4px; max-height: 180px; overflow: auto; margin-top: 6px; }
+.jev-direction-editor button { text-align: left; padding: 6px 10px; background: #3b3b3b; color: inherit; border: 0; cursor: pointer; }
+.jev-direction-editor button:hover { background: #4b4b4b; }

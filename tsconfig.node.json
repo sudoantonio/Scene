@@ -23,6 +23,7 @@
     "src/domain/animation-handoff.ts",
     "src/domain/direction-presets.ts",
     "src/domain/jev-action.ts",
+    "src/domain/direction-planner.ts",
     "src/domain/laya-runtime.ts"
   ]
 }

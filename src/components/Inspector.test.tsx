@@ -22,6 +22,25 @@ describe('Pannelli contestuali', () => {
     expect(screen.queryByRole('region', { name: 'Pannello principale Jev' })).not.toBeInTheDocument();
   });
 
+  it('reopens one saved direction action in the input and sends its identity', async () => {
+    const project = createProject();
+    const objectId = project.objects[0]!.id;
+    const sceneId = project.cameraCuts[0]!.id;
+    const planId = crypto.randomUUID(), actionId = crypto.randomUUID();
+    project.directionPlans = [{ id: planId, sceneId, objectId, instruction: 'si allontana', startFrame: 1, endFrame: 24, actions: [{ id: actionId, instruction: 'si allontana', motion: 'dolly_out', relation: 'then', startFrame: 1, endFrame: 24, keepInFrame: false, distanceMeters: 2, durationSeconds: 1 }] }];
+    useEditor.setState({ project, selectedId: objectId, currentFrame: 12 });
+    const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
+    window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
+    render(<JevFloatingComposer />);
+    fireEvent.click(screen.getByText('Regia · 1 movimenti'));
+    fireEvent.click(screen.getByRole('button', { name: /camera indietro/ }));
+    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    expect(input).toHaveValue('si allontana');
+    fireEvent.change(input, { target: { value: 'si allontana di 1 metro' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, editActionId: actionId, frame: 1 })));
+  });
+
   it('usa automaticamente l’elemento selezionato e applica la regia con Invio', async () => {
     useEditor.getState().addObject('cube');
     const objectId = useEditor.getState().selectedId!;

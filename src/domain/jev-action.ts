@@ -91,6 +91,11 @@ export const JevActionInputSchema = z.object({
   frame: z.number().int().positive(),
   startPosition: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]).nullable(),
   instruction: z.string().trim().min(3).max(2_000),
+  contextInstruction: z.string().optional(),
+  directionPlanId: z.string().uuid().optional(),
+  editActionId: z.string().uuid().optional(),
+  referenceId: z.string().uuid().optional(),
+  endFrame: z.number().int().positive().optional(),
   gesture: z.object({
     points: z.array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)])).min(2).max(512),
     target: z.enum(['auto', 'subject', 'camera']).default('auto'),
@@ -290,6 +295,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
         animation_standard: project.animationStandard ? { name: project.animationStandard.name, content: standardContent.slice(0, 20_000), truncated: standardContent.length > 20_000 } : null,
       },
       instruction: input.instruction,
+      context_instruction: input.contextInstruction,
       natural_language_hints: { family: naturalFamily ?? null, motion: naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
       selected_motion_family: family ?? null,
       camera_action_hint: explicitCameraMotion(input.instruction, input.target === 'camera') ?? null,
@@ -659,7 +665,7 @@ function searchableText(value: string) {
   return normalizedInstruction(value).replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function resolveCameraFocusObject(project: AbacoProject, sceneId: string, frame: number, instruction: string, fallbackTarget?: Vec3) {
+export function resolveCameraFocusObject(project: AbacoProject, sceneId: string, frame: number, instruction: string, fallbackTarget?: Vec3) {
   const text = searchableText(instruction);
   const genericReference = /\b(personaggi\w*|soggett\w*|protagonist\w*|character\w*|element\w*)\b/.test(text);
   const candidates = project.objects.filter((candidate) => candidate.kind !== 'camera'
@@ -753,7 +759,7 @@ function explicitCameraMotion(instruction: string, selectedCamera = false) {
   return selectedPatterns.find(([, pattern]) => pattern.test(text))?.[0];
 }
 
-function rotationToward(position: Vec3, target: Vec3): Vec3 {
+export function rotationToward(position: Vec3, target: Vec3): Vec3 {
   const camera = new THREE.PerspectiveCamera();
   camera.up.set(0, 0, 1);
   camera.position.set(...position);
@@ -1002,7 +1008,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === input.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
-  const endFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(duration * project.settings.fps)));
+  const endFrame = Math.min(input.endFrame ?? sceneEnd, sceneEnd, input.frame + Math.max(1, Math.round(duration * project.settings.fps)));
   const interpolation = answers.path.choice === 'direct' ? 'linear' : 'bezier';
   let endPosition = startPosition;
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
@@ -1055,13 +1061,13 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const cameraObject = cameraOnly
     ? project.objects.find((candidate) => candidate.id === input.objectId && candidate.kind === 'camera')
     : project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
-  const cameraFocusObject = cameraOnly && scene ? resolveCameraFocusObject(project, input.sceneId, input.frame, input.instruction, scene.framing.target) : object;
+  const cameraFocusObject = cameraOnly && scene ? project.objects.find((entry) => entry.id === input.referenceId) ?? resolveCameraFocusObject(project, input.sceneId, input.frame, input.instruction, scene.framing.target) ?? resolveCameraFocusObject(project, input.sceneId, input.frame, input.contextInstruction ?? '', scene.framing.target) : object;
   const cameraDistance = explicitMeasurement(input.instruction, 'distance') ?? nearestLevel(answers.camera_distance?.score ?? answers.distance.score, distances);
   const cameraDuration = explicitMeasurement(input.instruction, 'duration') ?? nearestLevel(answers.camera_duration?.score ?? answers.duration.score, durations);
   const cameraInterpolation = answers.camera_path?.choice === 'direct' ? 'linear' : 'bezier';
   if (cameraRequested && cameraObject && scene) {
     const cameraTransform = evaluateTransform(cameraObject, input.frame);
-    const cameraEndFrame = Math.min(sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
+    const cameraEndFrame = Math.min(input.endFrame ?? sceneEnd, sceneEnd, input.frame + Math.max(1, Math.round(cameraDuration * project.settings.fps)));
     const targetStart = object ? startPosition : cameraFocusObject ? evaluateTransform(cameraFocusObject, input.frame).position : cameraOnly ? scene.framing.target : cameraTarget(cameraTransform, scene.framing.distance);
     const targetEnd = object ? endPosition : cameraFocusObject ? evaluateTransform(cameraFocusObject, cameraEndFrame).position : targetStart;
     let cameraEndPosition = cameraTransform.position;
@@ -1069,7 +1075,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const towardTarget = normalizeVector([targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]], [0, 1, 0]);
     const screenRight = normalizeGround(cameraBasis(cameraTransform.rotation)[0].toArray() as Vec3, [1, 0, 0]);
     const atomicCameraDirection = normalizeVector(add(add(scale(towardTarget, translationAxes[0]), scale(screenRight, translationAxes[1])), [0, 0, translationAxes[2]]), towardTarget);
-    if (cameraOnly && hasAxisTranslation && !['orbit_left', 'orbit_right', 'follow_subject'].includes(cameraAction)) cameraEndPosition = add(cameraTransform.position, scale(atomicCameraDirection, cameraDistance));
+    if (cameraOnly && hasAxisTranslation && !['push_in', 'pull_out', 'orbit_left', 'orbit_right', 'follow_subject'].includes(cameraAction)) cameraEndPosition = add(cameraTransform.position, scale(atomicCameraDirection, cameraDistance));
     else if (cameraAction === 'push_in') cameraEndPosition = add(cameraTransform.position, scale(towardTarget, Math.min(cameraDistance, Math.max(.1, Math.hypot(targetStart[0] - cameraTransform.position[0], targetStart[1] - cameraTransform.position[1], targetStart[2] - cameraTransform.position[2]) * .8))));
     else if (cameraAction === 'pull_out') cameraEndPosition = add(cameraTransform.position, scale(towardTarget, -cameraDistance));
     else if (cameraAction === 'truck_left') cameraEndPosition = add(cameraTransform.position, scale(screenRight, -cameraDistance));

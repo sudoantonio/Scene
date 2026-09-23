@@ -1299,6 +1299,9 @@ export const useEditor = create<EditorState>((set, get) => {
         if (!properties) return;
         object.keyframes = object.keyframes.filter((key) => !(key.frame >= scene.frame && key.frame < sceneEnd && properties.has(key.property) && key.source === 'ai' && key.purpose === 'motion' && key.commentIds.length === 0));
       });
+      if (plan.directionPlan) {
+        next.directionPlans = [...(next.directionPlans ?? []).filter((entry) => entry.sceneId !== sceneId || entry.objectId !== plan.directionPlan!.objectId), plan.directionPlan];
+      }
       commit(applyPlan(next, plan));
     },
     undo: () => set((state) => {

@@ -19,6 +19,7 @@ export default function JevFloatingComposer() {
   const [instruction, setInstruction] = useState('');
   const [engine, setEngine] = useState<DecisionEngine>(() => window.localStorage.getItem(engineStorageKey) === 'laya' ? 'laya' : 'jev');
   const [busy, setBusy] = useState(false);
+  const [editingAction, setEditingAction] = useState<{ planId: string; actionId: string; frame: number }>();
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
@@ -29,6 +30,7 @@ export default function JevFloatingComposer() {
     && !candidate.screenSpace), [project.objects, selectedId]);
   const target = selected?.kind === 'camera' ? 'camera' : 'subject';
   const engineLabel = engine === 'laya' ? 'Laya' : 'Jev';
+  const savedDirection = project.directionPlans?.find((plan) => plan.objectId === selectedId && plan.sceneId === activeScene?.id);
   const canSubmit = Boolean(selected && instruction.trim() && !busy);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function JevFloatingComposer() {
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
-  useEffect(() => { clearStroke(); setMessage(''); }, [selectedId, activeScene?.id]);
+  useEffect(() => { clearStroke(); setMessage(''); setEditingAction(undefined); }, [selectedId, activeScene?.id]);
   useEffect(() => { window.localStorage.setItem(engineStorageKey, engine); }, [engine]);
   useEffect(() => window.abaco?.onLayaProgress?.(({ file, received, total }) => {
     const percent = total ? ` · ${Math.min(100, Math.round(received / total * 100))}%` : '';
@@ -59,9 +61,11 @@ export default function JevFloatingComposer() {
     if (!window.abaco) { setMessage(`${engineLabel} è disponibile nell’app desktop Scene.`); return; }
     setBusy(true); setMessage('');
     try {
-      const startPosition = target === 'subject' ? evaluateTransform(selected, frame).position : null;
+      const requestFrame = editingAction?.frame ?? frame;
+      const startPosition = target === 'subject' ? evaluateTransform(selected, requestFrame).position : null;
       const plan = await window.abaco.generateJevAction({
-        project, engine, objectId: selected.id, target, sceneId: activeScene.id, frame, startPosition,
+        project, engine, objectId: selected.id, target, sceneId: activeScene.id, frame: requestFrame, startPosition,
+        directionPlanId: editingAction?.planId, editActionId: editingAction?.actionId,
         instruction: currentInstruction,
         gesture: stroke.points.length > 1 ? { points: stroke.points, target, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation, viewPosition: stroke.viewPosition, verticalFovDegrees: stroke.verticalFovDegrees, aspect: stroke.aspect } : undefined,
       });
@@ -76,7 +80,7 @@ export default function JevFloatingComposer() {
       const motionSummary = sequence?.reduce((summary, step, index) => `${summary}${index ? step.relation === 'with' ? ' + ' : ' → ' : ''}${semanticMotionLabel(step.motion)}${step.referenceName ? ` ${step.referenceName}` : ''}`, '')
         ?? (plan.decision?.motion ? `${semanticMotionLabel(plan.decision.motion)}${plan.decision.reference?.name ? ` ${plan.decision.reference.name}` : ''}` : '');
       const interpretation = motionSummary ? `: ${motionSummary}` : '';
-      clearStroke(); setInstruction(''); setMessage(`${engineLabel} · Movimento applicato${interpretation} a ${selected.name}${timing}.`);
+      clearStroke(); setInstruction(''); setEditingAction(undefined); setMessage(`${engineLabel} · Movimento applicato${interpretation} a ${selected.name}${timing}.`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : `${engineLabel} non ha completato la richiesta.`);
     } finally { setBusy(false); }
@@ -91,6 +95,14 @@ export default function JevFloatingComposer() {
 
   if (!activeScene) return null;
   return <div className={`jev-floating-composer ${message ? 'has-message' : ''}`}>
+    {savedDirection && !message && !editingAction && <details className="jev-direction-editor">
+      <summary>Regia · {savedDirection.actions.length} movimenti</summary>
+      <div>{savedDirection.actions.map((action, index) => <button key={action.id} type="button" disabled={busy} onClick={() => {
+        setEditingAction({ planId: savedDirection.id, actionId: action.id, frame: savedDirection.startFrame });
+        setInstruction(action.instruction); inputRef.current?.focus();
+      }}>{index + 1}. {semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· soggetto inquadrato' : ''}</button>)}</div>
+    </details>}
+    {editingAction && !message && <div className="jev-composer-message">Modifica movimento <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Annulla</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}
     <div className="jev-composer-input" aria-label="Input azione" title={selected ? `Soggetto: ${selected.name}` : 'Seleziona il soggetto nella scena'}>
       <Sparkles className="jev-composer-mark" size={17} />

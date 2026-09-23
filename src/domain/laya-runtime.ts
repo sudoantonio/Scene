@@ -88,6 +88,10 @@ export function compactLayaState(state: unknown) {
   const source = state as Record<string, any>;
   return {
     instruction: source.instruction,
+    left_clause: source.left_clause,
+    right_clause: source.right_clause,
+    connector: source.connector,
+    context_instruction: source.context_instruction,
     selected_target: source.selected_target,
     local_interpretation: source.natural_language_hints,
     selected_motion_family: source.selected_motion_family,
