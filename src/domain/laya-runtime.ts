@@ -23,7 +23,10 @@ export type LayaSystemOneRuntime = Pick<Laya, 'systemOne'>;
 
 const englishQuestionInstructions: Record<string, string> = {
   actionable: 'Does the user clearly request a movement or pose that can be converted to keyframes?',
+  temporal_structure: 'How are the requested actions related in time? Treat then as sequential and while as simultaneous.',
+  motion_family: 'Which broad motion family best describes the selected target action? Use local_interpretation.family when present.',
   motion: 'Which single semantic motion primitive best represents the requested action? Use local_interpretation.motion when it is present.',
+  reference_object: 'Which listed scene object is explicitly named or implied as the action reference? Choose none when there is no specific reference.',
   action: 'What is the main requested action? Use the local_interpretation hint when present.',
   direction: 'What is the main direction? Use the local_interpretation when present.',
   distance: 'How large should the movement be?',
@@ -46,11 +49,17 @@ const englishQuestionInstructions: Record<string, string> = {
 };
 
 const englishQuestionCriteria: Record<string, Record<string, string> | string[]> = {
+  temporal_structure: { single: 'one action', sequential: 'actions happen one after another', simultaneous: 'actions happen during the same interval', mixed: 'simultaneous actions followed or preceded by sequential actions' },
+  motion_family: {
+    locomotion: 'horizontal or radial subject translation', vertical: 'subject rise, descend, or jump', orientation: 'subject turn, look, or roll', pose: 'remain still', path: 'follow a drawn path',
+    camera_translation: 'camera dolly, truck, or vertical translation', camera_orientation: 'camera pan, tilt, or roll', camera_orbit: 'camera orbit or subject follow',
+  },
   motion: {
     hold: 'remain still', move_forward: 'move forward into the scene', move_backward: 'move backward', move_left: 'move screen-left', move_right: 'move screen-right',
     move_forward_left: 'move diagonally forward-left', move_forward_right: 'move diagonally forward-right', move_backward_left: 'move diagonally backward-left', move_backward_right: 'move diagonally backward-right',
     move_up: 'move upward', move_down: 'move downward', jump_in_place: 'jump and land in place', jump_forward: 'jump forward', turn_left: 'turn left in place', turn_right: 'turn right in place',
     look_up: 'pitch upward', look_down: 'pitch downward', roll_left: 'roll left', roll_right: 'roll right', move_away_camera: 'move radially away from camera', move_toward_camera: 'move radially toward camera',
+    move_toward_object: 'move toward a named scene object', move_away_object: 'move away from a named scene object', look_at_object: 'turn to face a named scene object',
     follow_drawn_path: 'follow the supplied drawn path', dolly_in: 'camera moves toward subject', dolly_out: 'camera moves away from subject', truck_left: 'camera translates left', truck_right: 'camera translates right',
     pedestal_up: 'camera rises', pedestal_down: 'camera descends', pan_left: 'camera pans left', pan_right: 'camera pans right', tilt_up: 'camera tilts up', tilt_down: 'camera tilts down',
     orbit_left: 'camera orbits left around subject', orbit_right: 'camera orbits right around subject', follow_subject: 'camera follows subject',
@@ -81,6 +90,7 @@ export function compactLayaState(state: unknown) {
     instruction: source.instruction,
     selected_target: source.selected_target,
     local_interpretation: source.natural_language_hints,
+    selected_motion_family: source.selected_motion_family,
     camera_action_hint: source.camera_action_hint,
     current_frame: source.current_frame,
     scene_end_frame: source.scene_end_frame,

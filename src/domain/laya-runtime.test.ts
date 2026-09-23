@@ -55,4 +55,11 @@ describe('Laya local runtime', () => {
     expect(translated.instructions).toMatch(/^Which single semantic/);
     expect(translated.criteria).toEqual({ orbit_right: 'camera orbits right around subject', dolly_in: 'camera moves toward subject' });
   });
+
+  it('translates temporal and family routing choices for the English checkpoint', () => {
+    const temporal = prepareLayaQuestion('temporal_structure', { type: 'choice', instructions: 'Tempo', criteria: { single: 'una', simultaneous: 'insieme' } } as never) as { instructions: string; criteria: Record<string, string> };
+    const family = prepareLayaQuestion('motion_family', { type: 'choice', instructions: 'Famiglia', criteria: { locomotion: 'movimento', orientation: 'rotazione' } } as never) as { instructions: string; criteria: Record<string, string> };
+    expect(temporal.criteria).toEqual({ single: 'one action', simultaneous: 'actions happen during the same interval' });
+    expect(family.criteria).toEqual({ locomotion: 'horizontal or radial subject translation', orientation: 'subject turn, look, or roll' });
+  });
 });

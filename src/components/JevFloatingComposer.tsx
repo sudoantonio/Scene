@@ -72,9 +72,10 @@ export default function JevFloatingComposer() {
           ? ` · totale ${formatDuration(plan.performance.totalMs)}, decisione ${formatDuration(plan.performance.decisionMs)}`
           : ` · ${formatDuration(plan.performance.decisionMs)}`
         : '';
-      const motions = plan.decision?.sequence?.map((step) => semanticMotionLabel(step.motion))
-        ?? (plan.decision?.motion ? [semanticMotionLabel(plan.decision.motion)] : []);
-      const interpretation = motions.length ? `: ${motions.join(' → ')}` : '';
+      const sequence = plan.decision?.sequence;
+      const motionSummary = sequence?.reduce((summary, step, index) => `${summary}${index ? step.relation === 'with' ? ' + ' : ' → ' : ''}${semanticMotionLabel(step.motion)}${step.referenceName ? ` ${step.referenceName}` : ''}`, '')
+        ?? (plan.decision?.motion ? `${semanticMotionLabel(plan.decision.motion)}${plan.decision.reference?.name ? ` ${plan.decision.reference.name}` : ''}` : '');
+      const interpretation = motionSummary ? `: ${motionSummary}` : '';
       clearStroke(); setInstruction(''); setMessage(`${engineLabel} · Movimento applicato${interpretation} a ${selected.name}${timing}.`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : `${engineLabel} non ha completato la richiesta.`);

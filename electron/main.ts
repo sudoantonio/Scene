@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan } from '../src/domain/schema';
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
 import { applyPlan, evaluateTransform, validatePlan } from '../src/domain/animation';
-import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest, mergeJevSequencePlans, splitJevInstruction, type JevActionPlan } from '../src/domain/jev-action';
+import { compileJevAction, composeParallelJevPlans, JevActionInputSchema, JevActionResponseSchema, JevRoutingResponseSchema, jevActionRequest, jevMotionFamilyRequest, jevTemporalRequest, mergeJevSequencePlans, resolveMotionFamily, resolveTemporalStructure, splitMotionTimeline, type JevActionPlan } from '../src/domain/jev-action';
 import { layaLoadOptions, runLayaQuestions } from '../src/domain/laya-runtime';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
@@ -489,19 +489,8 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
     if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
     jevApiKey = settings.jevApiKey;
   }
-  const steps = splitJevInstruction(parsed.instruction);
-  let workingProject = project;
-  let currentFrame = parsed.frame;
   let decisionMs = 0;
-  const plans: JevActionPlan[] = [];
-  let truncated = false;
-  for (const [stepIndex, instruction] of steps.entries()) {
-    if (currentFrame >= sceneEnd) { truncated = true; break; }
-    const currentSelected = parsed.objectId ? workingProject.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
-    const currentObject = parsed.target === 'camera' ? undefined : currentSelected;
-    const startPosition = currentObject ? evaluateTransform(currentObject, currentFrame).position : null;
-    const jevInput = { engine, objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: currentFrame, startPosition, instruction, gesture: stepIndex === 0 ? parsed.gesture : undefined };
-    const request = jevActionRequest(workingProject, currentObject, jevInput);
+  const runDecision = async (request: { model: string; state: unknown; questions: Record<string, unknown> }) => {
     const decisionStartedAt = Date.now();
     let raw: unknown;
     if (engine === 'laya') raw = await runLayaQuestions(laya!, request.state, request.questions as never);
@@ -519,11 +508,43 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
       raw = await response.json();
     }
     decisionMs += Date.now() - decisionStartedAt;
-    const compiled = compileJevAction(workingProject, currentObject, jevInput, JevActionResponseSchema.parse(raw));
-    plans.push(compiled);
-    if (!compiled.blenderPlan.operations.length) continue;
-    workingProject = applyPlan(workingProject, compiled.blenderPlan);
-    currentFrame = Math.max(currentFrame, ...compiled.blenderPlan.operations.map((operation) => operation.frame));
+    return raw;
+  };
+  const temporalRaw = await runDecision(jevTemporalRequest(project, object, parsed));
+  const temporalAnswer = JevRoutingResponseSchema.parse(temporalRaw).answers.temporal_structure;
+  const temporalStructure = resolveTemporalStructure(parsed.instruction, temporalAnswer?.choice);
+  const timeline = splitMotionTimeline(parsed.instruction, temporalStructure);
+  let workingProject = project;
+  let currentFrame = parsed.frame;
+  const plans: JevActionPlan[] = [];
+  let truncated = false;
+  let absoluteStepIndex = 0;
+  for (const group of timeline) {
+    if (currentFrame >= sceneEnd) { truncated = true; break; }
+    const groupProject = workingProject;
+    const groupFrame = currentFrame;
+    const groupPlans: JevActionPlan[] = [];
+    for (const [parallelIndex, instruction] of group.instructions.entries()) {
+      const currentSelected = parsed.objectId ? groupProject.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
+      const currentObject = parsed.target === 'camera' ? undefined : currentSelected;
+      const startPosition = currentObject ? evaluateTransform(currentObject, groupFrame).position : null;
+      const jevInput = { engine, objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: groupFrame, startPosition, instruction, gesture: absoluteStepIndex === 0 ? parsed.gesture : undefined };
+      const familyRaw = await runDecision(jevMotionFamilyRequest(groupProject, currentObject, jevInput));
+      const familyAnswer = JevRoutingResponseSchema.parse(familyRaw).answers.motion_family;
+      const family = resolveMotionFamily(jevInput, familyAnswer?.choice);
+      const request = jevActionRequest(groupProject, currentObject, jevInput, family);
+      const raw = await runDecision(request);
+      const compiled = compileJevAction(groupProject, currentObject, jevInput, JevActionResponseSchema.parse(raw));
+      compiled.decision.relation = parallelIndex === 0 ? 'then' : 'with';
+      groupPlans.push(compiled);
+      absoluteStepIndex += 1;
+    }
+    const groupPlan = groupPlans.length > 1 ? composeParallelJevPlans(groupProject, groupPlans, group.instructions.join(' mentre ')) : groupPlans[0];
+    if (!groupPlan) continue;
+    plans.push(groupPlan);
+    if (groupPlan.blenderPlan.operations.length) workingProject = applyPlan(workingProject, groupPlan.blenderPlan);
+    const groupOperations = groupPlan.blenderPlan.operations;
+    if (groupOperations.length) currentFrame = Math.max(currentFrame, ...groupOperations.map((operation) => operation.frame));
   }
   if (!plans.length) throw new Error('La scena non ha spazio sufficiente per creare la sequenza richiesta.');
   const compiled = mergeJevSequencePlans(plans, parsed.instruction);

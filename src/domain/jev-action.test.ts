@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createProject, createSceneObject } from './schema';
 import { applyPlan, evaluateTransform, validatePlan } from './animation';
-import { compileJevAction, jevActionRequest, mergeJevSequencePlans, splitJevInstruction, type JevActionResponse } from './jev-action';
+import { compileJevAction, composeParallelJevPlans, jevActionRequest, jevMotionFamilyRequest, jevTemporalRequest, mergeJevSequencePlans, resolveMotionFamily, resolveTemporalStructure, splitJevInstruction, splitMotionTimeline, type JevActionResponse } from './jev-action';
 import { useEditor } from '../store/editor';
 
 const response = (overrides: Partial<JevActionResponse['answers']> = {}): JevActionResponse => ({
@@ -30,6 +30,17 @@ describe('Jev action compiler', () => {
     expect(splitJevInstruction('si sposta in alto a destra')).toEqual(['si sposta in alto a destra']);
   });
 
+  it('builds sequential and simultaneous timeline groups from one natural sentence', () => {
+    const instruction = 'avanza mentre guarda a sinistra, poi salta';
+    expect(resolveTemporalStructure(instruction, 'single')).toBe('mixed');
+    expect(splitMotionTimeline(instruction, 'mixed')).toEqual([
+      { instructions: ['avanza', 'guarda a sinistra'] },
+      { instructions: ['salta'] },
+    ]);
+    expect(resolveTemporalStructure('avanza e gira a destra', 'simultaneous')).toBe('simultaneous');
+    expect(splitMotionTimeline('avanza e gira a destra', 'simultaneous')).toEqual([{ instructions: ['avanza', 'gira a destra'] }]);
+  });
+
   it('merges consecutive rotations without duplicate boundary keyframes', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
@@ -52,7 +63,28 @@ describe('Jev action compiler', () => {
     expect(rotations.map((operation) => operation.frame)).toEqual([1, middleFrame, Math.max(...left.blenderPlan.operations.map((operation) => operation.frame))]);
     expect(rotations.map((operation) => operation.value.vector![2])).toEqual([0, 90, 0]);
     expect(merged.decision.sequence?.map((step) => step.motion)).toEqual(['turn_right', 'turn_left']);
+    expect(merged.decision.sequence?.map((step) => step.relation)).toEqual(['then', 'then']);
     expect(validatePlan(project, merged.blenderPlan)).toEqual([]);
+  });
+
+  it('adds simultaneous movement deltas instead of overwriting one action', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const input = { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1] as [number, number, number] };
+    const forward = compileJevAction(project, character, { ...input, instruction: 'avanza' }, response());
+    const rise = compileJevAction(project, character, { ...input, instruction: 'sale' }, response());
+    forward.decision.relation = 'then';
+    rise.decision.relation = 'with';
+    const composed = composeParallelJevPlans(project, [forward, rise], 'avanza mentre sale');
+    const applied = applyPlan(project, composed.blenderPlan);
+    const endFrame = Math.max(...composed.blenderPlan.operations.map((operation) => operation.frame));
+    const end = evaluateTransform(applied.objects.find((object) => object.id === character.id)!, endFrame).position;
+    expect(end).toEqual([0, 2, 3]);
+    expect(composed.decision.sequence?.map((step) => step.relation)).toEqual(['then', 'with']);
+    expect(validatePlan(project, composed.blenderPlan)).toEqual([]);
   });
   it('sends the selected character and the coordinate convention as state', () => {
     const project = createProject();
@@ -97,6 +129,61 @@ describe('Jev action compiler', () => {
     expect(request.questions.motion.criteria).toHaveProperty('orbit_right');
     expect(request.questions.motion.criteria).not.toHaveProperty('jump_forward');
     expect(request.state.natural_language_hints.motion).toBe('orbit_right');
+  });
+
+  it('routes through temporal structure and a small motion family before choosing a primitive', () => {
+    const project = createProject();
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const input = { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'esegui il gesto concordato' };
+    const temporal = jevTemporalRequest(project, character, input);
+    const family = jevMotionFamilyRequest(project, character, input);
+    const precise = jevActionRequest(project, character, input, resolveMotionFamily(input, 'orientation'));
+    expect(Object.keys(temporal.questions)).toEqual(['temporal_structure']);
+    expect(Object.keys(family.questions)).toEqual(['motion_family']);
+    expect(Object.keys(precise.questions.motion.criteria)).toEqual(['turn_left', 'turn_right', 'look_up', 'look_down', 'roll_left', 'roll_right', 'look_at_object']);
+    expect(Object.keys(precise.questions.motion.criteria).length).toBeLessThan(10);
+  });
+
+  it('grounds a relational movement to an object that exists in the active scene', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    character.name = 'Personaggio';
+    character.transform.position = [0, 0, 1];
+    const table = createSceneObject('cube', 2);
+    table.name = 'Tavolo';
+    table.transform.position = [4, 0, 1];
+    project.objects.push(character, table);
+    const input = { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'vai verso il Tavolo' };
+    const request = jevActionRequest(project, character, input, 'locomotion');
+    expect(request.questions.reference_object.criteria).toHaveProperty(table.id);
+    const result = compileJevAction(project, character, input, response({
+      motion: { type: 'choice', choice: 'move_toward_object', confidence: .96, probabilities: { move_toward_object: .96 } },
+      reference_object: { type: 'choice', choice: table.id, confidence: .98, probabilities: { [table.id]: .98 } },
+    }));
+    expect(result.decision.reference).toEqual({ objectId: table.id, name: 'Tavolo' });
+    expect(result.blenderPlan.operations.at(-1)?.value.vector).toEqual([2, 0, 1]);
+  });
+
+  it('orients the selected subject toward a named scene object', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    character.name = 'Personaggio';
+    character.transform.position = [0, 0, 1];
+    const table = createSceneObject('cube', 2);
+    table.name = 'Tavolo';
+    table.transform.position = [4, 0, 1];
+    project.objects.push(character, table);
+    const input = { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'mantieni il Tavolo in vista' };
+    const result = compileJevAction(project, character, input, response({
+      motion: { type: 'choice', choice: 'look_at_object', confidence: .96, probabilities: { look_at_object: .96 } },
+      reference_object: { type: 'choice', choice: table.id, confidence: .98, probabilities: { [table.id]: .98 } },
+    }));
+    expect(result.decision.reference).toEqual({ objectId: table.id, name: 'Tavolo' });
+    expect(result.blenderPlan.operations.at(-1)?.property).toBe('rotation');
+    expect(result.blenderPlan.operations.at(-1)?.value.vector).toEqual([0, 0, 90]);
   });
 
   it('sends a compact description of the stroke to Jev', () => {
