@@ -106,6 +106,9 @@ describe('Punti e maniglie del movimento', () => {
     expect(overview).toBeVisible();
     expect(container.querySelectorAll('.collapsed-scene-segment')).toHaveLength(2);
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
+    expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Registra movimenti' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla barra cumulativa' }));
+    expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
   });
 
   it('trascinare un punto sposta solo quel punto e non riscala gli altri tempi', () => {

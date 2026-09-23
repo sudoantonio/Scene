@@ -41,6 +41,18 @@ export const JevActionResponseSchema = z.object({
     rotate_x: JevChoiceAnswerSchema.optional(),
     rotate_y: JevChoiceAnswerSchema.optional(),
     rotate_z: JevChoiceAnswerSchema.optional(),
+    translate_x_positive: JevNoulAnswerSchema.optional(),
+    translate_x_negative: JevNoulAnswerSchema.optional(),
+    translate_y_positive: JevNoulAnswerSchema.optional(),
+    translate_y_negative: JevNoulAnswerSchema.optional(),
+    translate_z_positive: JevNoulAnswerSchema.optional(),
+    translate_z_negative: JevNoulAnswerSchema.optional(),
+    rotate_x_positive: JevNoulAnswerSchema.optional(),
+    rotate_x_negative: JevNoulAnswerSchema.optional(),
+    rotate_y_positive: JevNoulAnswerSchema.optional(),
+    rotate_y_negative: JevNoulAnswerSchema.optional(),
+    rotate_z_positive: JevNoulAnswerSchema.optional(),
+    rotate_z_negative: JevNoulAnswerSchema.optional(),
     rotation_amount: JevScoreAnswerSchema.optional(),
   }),
   usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional(),
@@ -145,6 +157,15 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
     };
   });
   const standardContent = project.animationStandard?.content ?? '';
+  const lexicalAxes = explicitAxisIntent(input.instruction, input.target === 'camera');
+  const axisTriggerHints = [
+    lexicalAxes.translation[0] === 1 ? 'translate_x_positive' : lexicalAxes.translation[0] === -1 ? 'translate_x_negative' : null,
+    lexicalAxes.translation[1] === 1 ? 'translate_y_positive' : lexicalAxes.translation[1] === -1 ? 'translate_y_negative' : null,
+    lexicalAxes.translation[2] === 1 ? 'translate_z_positive' : lexicalAxes.translation[2] === -1 ? 'translate_z_negative' : null,
+    lexicalAxes.rotation[0] === 1 ? 'rotate_x_positive' : lexicalAxes.rotation[0] === -1 ? 'rotate_x_negative' : null,
+    lexicalAxes.rotation[1] === 1 ? 'rotate_y_positive' : lexicalAxes.rotation[1] === -1 ? 'rotate_y_negative' : null,
+    lexicalAxes.rotation[2] === 1 ? 'rotate_z_positive' : lexicalAxes.rotation[2] === -1 ? 'rotate_z_negative' : null,
+  ].filter((entry): entry is string => Boolean(entry));
   return {
     model: 'jev-latest',
     state: {
@@ -163,6 +184,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
         animation_standard: project.animationStandard ? { name: project.animationStandard.name, content: standardContent.slice(0, 20_000), truncated: standardContent.length > 20_000 } : null,
       },
       instruction: input.instruction,
+      axis_trigger_hints: axisTriggerHints,
       current_frame: input.frame,
       scene_end_frame: sceneEnd,
       fps: project.settings.fps,
@@ -192,12 +214,18 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       camera_duration: { type: 'score', instructions: 'Quanto deve durare il movimento della camera?', criteria: ['Scatto: 0,25 s', 'Rapido: 0,5 s', 'Normale: 1 s', 'Lento: 2 s', 'Molto lento: 4 s'] },
       camera_path: { type: 'choice', instructions: 'Come deve muoversi la camera?', criteria: { direct: 'Movimento lineare e meccanico.', smooth: 'Movimento cinematografico morbido.', arc: 'Movimento curvo o orbitale.' } },
       stroke_target: { type: 'choice', instructions: 'Se è presente un tratto disegnato, quale movimento rappresenta in base alla descrizione?', criteria: { subject: 'La traiettoria del soggetto selezionato.', camera: 'La traiettoria della camera attiva.' } },
-      translate_x: { type: 'choice', instructions: 'Lungo X il soggetto selezionato va avanti, indietro o resta fermo?', criteria: { increase: 'Incremento X: avanti.', decrease: 'Decremento X: indietro.', hold: 'Nessun movimento lungo X.' } },
-      translate_y: { type: 'choice', instructions: 'Lungo Y il soggetto selezionato va a destra, a sinistra o resta fermo?', criteria: { increase: 'Incremento Y: destra.', decrease: 'Decremento Y: sinistra.', hold: 'Nessun movimento lungo Y.' } },
-      translate_z: { type: 'choice', instructions: 'Lungo Z il soggetto selezionato sale, scende o resta alla stessa quota?', criteria: { increase: 'Incremento Z: sale o salta.', decrease: 'Decremento Z: scende o cade.', hold: 'Nessun movimento lungo Z.' } },
-      rotate_x: { type: 'choice', instructions: 'Il roll sull’asse X aumenta, diminuisce o resta fermo?', criteria: { increase: 'Roll positivo.', decrease: 'Roll negativo.', hold: 'Nessuna rotazione X.' } },
-      rotate_y: { type: 'choice', instructions: 'Il pitch sull’asse Y aumenta, diminuisce o resta fermo?', criteria: { increase: 'Pitch positivo: guarda verso l’alto.', decrease: 'Pitch negativo: guarda verso il basso.', hold: 'Nessuna rotazione Y.' } },
-      rotate_z: { type: 'choice', instructions: 'Lo yaw sull’asse Z aumenta, diminuisce o resta fermo?', criteria: { increase: 'Yaw positivo: gira verso destra.', decrease: 'Yaw negativo: gira verso sinistra.', hold: 'Nessuna rotazione Z.' } },
+      translate_z_positive: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di aumentare Z, cioè salire o saltare? Rispondi falso se deve stare fermo su Z o scendere.' },
+      translate_z_negative: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di diminuire Z, cioè scendere o cadere? Rispondi falso se deve stare fermo su Z o salire.' },
+      translate_y_positive: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di aumentare Y, cioè spostarsi a destra? “Guardare a destra” è una rotazione e qui vale falso.' },
+      translate_y_negative: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di diminuire Y, cioè spostarsi a sinistra? “Guardare a sinistra” è una rotazione e qui vale falso.' },
+      translate_x_positive: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di aumentare X, cioè andare avanti? Rispondi falso se deve stare fermo su X o andare indietro.' },
+      translate_x_negative: { type: 'noul', instructions: 'La richiesta ordina al soggetto selezionato di diminuire X, cioè andare indietro? Rispondi falso se deve stare fermo su X o andare avanti.' },
+      rotate_y_positive: { type: 'noul', instructions: 'La richiesta ordina pitch positivo sull’asse Y, cioè guardare verso l’alto? Salire senza cambiare sguardo qui vale falso.' },
+      rotate_y_negative: { type: 'noul', instructions: 'La richiesta ordina pitch negativo sull’asse Y, cioè guardare verso il basso? Scendere senza cambiare sguardo qui vale falso.' },
+      rotate_x_positive: { type: 'noul', instructions: 'La richiesta ordina roll positivo sull’asse X, cioè inclinarsi da un lato? Rispondi falso per una traslazione laterale.' },
+      rotate_x_negative: { type: 'noul', instructions: 'La richiesta ordina roll negativo sull’asse X, cioè inclinarsi dal lato opposto? Rispondi falso per una traslazione laterale.' },
+      rotate_z_positive: { type: 'noul', instructions: 'La richiesta ordina yaw positivo sull’asse Z, cioè girare o guardare verso destra? Spostarsi a destra senza ruotare qui vale falso.' },
+      rotate_z_negative: { type: 'noul', instructions: 'La richiesta ordina yaw negativo sull’asse Z, cioè girare o guardare verso sinistra? Spostarsi a sinistra senza ruotare qui vale falso.' },
       rotation_amount: { type: 'score', instructions: 'Quanto deve essere ampia la rotazione?', criteria: ['Minima: 10°', 'Piccola: 20°', 'Media: 45°', 'Ampia: 90°', 'Completa: 180°'] },
     },
   } as const;
@@ -490,6 +518,29 @@ function answerAxis(answer: JevActionResponse['answers']['translate_x'], explici
   return answer.choice === 'increase' ? 1 : answer.choice === 'decrease' ? -1 : 0;
 }
 
+function answerBinaryAxis(
+  positive: JevActionResponse['answers']['translate_x_positive'],
+  negative: JevActionResponse['answers']['translate_x_negative'],
+  legacy: JevActionResponse['answers']['translate_x'],
+  explicit: number | undefined,
+) {
+  if (explicit !== undefined) return explicit;
+  if (!positive && !negative) return answerAxis(legacy, undefined);
+  const positiveScore = positive?.noul ?? 0;
+  const negativeScore = negative?.noul ?? 0;
+  const strongest = Math.max(positiveScore, negativeScore);
+  if (strongest < .62 || Math.abs(positiveScore - negativeScore) < .15) return 0;
+  return positiveScore > negativeScore ? 1 : -1;
+}
+
+function binaryAxisConflict(
+  positive: JevActionResponse['answers']['translate_x_positive'],
+  negative: JevActionResponse['answers']['translate_x_negative'],
+) {
+  if (!positive || !negative) return false;
+  return positive.noul >= .62 && negative.noul >= .62 && Math.abs(positive.noul - negative.noul) < .15;
+}
+
 function explicitMeasurement(instruction: string, unit: 'distance' | 'duration' | 'rotation') {
   const text = normalizedInstruction(instruction);
   const pattern = unit === 'distance' ? /(\d+(?:[.,]\d+)?)\s*(centimetr\w*|cm|metr\w*|m)\b/
@@ -511,8 +562,29 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const duration = explicitMeasurement(input.instruction, 'duration') ?? nearestLevel(answers.duration.score, durations);
   const rotationAmount = explicitMeasurement(input.instruction, 'rotation') ?? [10, 20, 45, 90, 180][Math.max(0, Math.min(4, Math.round(answers.rotation_amount?.score ?? answers.distance.score)))]!;
   const explicitAxes = explicitAxisIntent(input.instruction, cameraOnly);
-  const translationAxes: Vec3 = [answerAxis(answers.translate_x, explicitAxes.translation[0]), answerAxis(answers.translate_y, explicitAxes.translation[1]), answerAxis(answers.translate_z, explicitAxes.translation[2])];
-  const rotationAxes: Vec3 = [answerAxis(answers.rotate_x, explicitAxes.rotation[0]), answerAxis(answers.rotate_y, explicitAxes.rotation[1]), answerAxis(answers.rotate_z, explicitAxes.rotation[2])];
+  const translationAxes: Vec3 = [
+    answerBinaryAxis(answers.translate_x_positive, answers.translate_x_negative, answers.translate_x, explicitAxes.translation[0]),
+    answerBinaryAxis(answers.translate_y_positive, answers.translate_y_negative, answers.translate_y, explicitAxes.translation[1]),
+    answerBinaryAxis(answers.translate_z_positive, answers.translate_z_negative, answers.translate_z, explicitAxes.translation[2]),
+  ];
+  const rotationAxes: Vec3 = [
+    answerBinaryAxis(answers.rotate_x_positive, answers.rotate_x_negative, answers.rotate_x, explicitAxes.rotation[0]),
+    answerBinaryAxis(answers.rotate_y_positive, answers.rotate_y_negative, answers.rotate_y, explicitAxes.rotation[1]),
+    answerBinaryAxis(answers.rotate_z_positive, answers.rotate_z_negative, answers.rotate_z, explicitAxes.rotation[2]),
+  ];
+  const hasBinaryAxisAnswers = [
+    answers.translate_x_positive, answers.translate_x_negative, answers.translate_y_positive, answers.translate_y_negative,
+    answers.translate_z_positive, answers.translate_z_negative, answers.rotate_x_positive, answers.rotate_x_negative,
+    answers.rotate_y_positive, answers.rotate_y_negative, answers.rotate_z_positive, answers.rotate_z_negative,
+  ].some(Boolean);
+  const hasAxisConflict = [
+    [answers.translate_x_positive, answers.translate_x_negative],
+    [answers.translate_y_positive, answers.translate_y_negative],
+    [answers.translate_z_positive, answers.translate_z_negative],
+    [answers.rotate_x_positive, answers.rotate_x_negative],
+    [answers.rotate_y_positive, answers.rotate_y_negative],
+    [answers.rotate_z_positive, answers.rotate_z_negative],
+  ].some(([positive, negative]) => binaryAxisConflict(positive, negative));
   const hasAxisTranslation = translationAxes.some((entry) => entry !== 0);
   const hasAxisRotation = rotationAxes.some((entry) => entry !== 0);
   const drawnFullOrbit = closedStroke(input.gesture?.points) && /(?:gira\w*|ruota\w*|orbit\w*)[^.!?]{0,30}(?:attorno|intorno)|(?:attorno|intorno)[^.!?]{0,30}(?:personaggi|soggett|element)/.test(normalizedInstruction(input.instruction));
@@ -542,6 +614,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
   let endRotation = objectTransform?.rotation ?? [0, 0, 0];
   let action = object ? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action.choice) ? answers.action.choice : 'move') : cameraIntent && answers.action.choice !== 'jump' ? 'move' : answers.action.choice) : 'hold';
+  if (object && hasBinaryAxisAnswers && !hasAxisTranslation && !hasAxisRotation && !input.gesture && action !== 'jump') action = 'hold';
   if (object && hasAxisTranslation && action !== 'jump') action = translationAxes[2] !== 0 && translationAxes[0] === 0 && translationAxes[1] === 0 ? (translationAxes[2] > 0 ? 'rise' : 'descend') : 'move';
   if (object && hasAxisRotation && !hasAxisTranslation && action !== 'jump') action = 'turn';
   if (object && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(hasAxisTranslation && !cameraIntent ? normalizeVector(translationAxes, direction) : direction, distance));
@@ -659,6 +732,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   }
   const actionable = object ? answers.actionable.noul : 1;
   const warnings = confidence < .55 || actionable < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [];
+  if (hasAxisConflict) warnings.push('Decisioni opposte sullo stesso asse: il movimento in conflitto è stato mantenuto fermo.');
   if (!operations.length) warnings.push('La descrizione non contiene un movimento applicabile al soggetto selezionato o alla camera.');
   const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `${engineLabel} · Regia: ${input.instruction}`, assumptions: ['Le direzioni del soggetto sono relative alla camera attiva; i movimenti camera mantengono il soggetto selezionato come riferimento.'], warnings, operations };
   return JevActionPlanSchema.parse({

@@ -424,6 +424,18 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
         <strong className="timecode">{timecode}</strong>
       </div>
       <div className="timeline-center-stack">
+        {collapsed && <div className="collapsed-scene-row">
+          <div className="collapsed-scene-overview" role="group" aria-label="Barra cumulativa delle scene">
+            {scenes.map((scene, index) => {
+              const nextFrame = scenes[index + 1]?.frame ?? end + 1;
+              const stripLeft = ((scene.frame - start) / Math.max(1, end - start + 1)) * 100;
+              const stripWidth = ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100;
+              return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scena ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={scene.name ?? `Scena ${index + 1}`} style={{ left: `${stripLeft}%`, width: `${stripWidth}%`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
+            })}
+            <i className="collapsed-scene-playhead" style={{ left: left(frame) }} />
+          </div>
+          <button type="button" className="collapsed-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla barra cumulativa" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={13} /></button>
+        </div>}
         <div className="transport timeline-transport">
           <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Taglia la clip al cursore" aria-label="Taglia la clip al cursore"><Scissors size={15} /></button>
           <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
@@ -434,15 +446,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
           <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
           <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
         </div>
-        {collapsed && <div className="collapsed-scene-overview" role="group" aria-label="Barra cumulativa delle scene">
-          {scenes.map((scene, index) => {
-            const nextFrame = scenes[index + 1]?.frame ?? end + 1;
-            const stripLeft = ((scene.frame - start) / Math.max(1, end - start + 1)) * 100;
-            const stripWidth = ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100;
-            return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scena ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={scene.name ?? `Scena ${index + 1}`} style={{ left: `${stripLeft}%`, width: `${stripWidth}%`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
-          })}
-          <i className="collapsed-scene-playhead" style={{ left: left(frame) }} />
-        </div>}
       </div>
       <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={viewportFullscreen ? 'Ripristina pannelli' : 'Inquadratura a schermo intero'} onClick={onToggleViewportFullscreen}>{viewportFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
     </header>
