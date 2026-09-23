@@ -29,18 +29,18 @@ describe('Laya local runtime', () => {
       },
     };
 
-    const result = await runLayaQuestions(runtime as unknown as LayaSystemOneRuntime, { instruction: 'vai avanti', scene_context: { very_large: 'x'.repeat(20_000) }, axis_trigger_hints: ['translate_x_positive'] }, {
-      translate_x_positive: { type: 'noul', instructions: 'Muovi su X' },
+    const result = await runLayaQuestions(runtime as unknown as LayaSystemOneRuntime, { instruction: 'vai avanti', scene_context: { very_large: 'x'.repeat(20_000) }, natural_language_hints: { action: 'move', direction: 'forward' } }, {
+      translate_x: { type: 'choice', instructions: 'Muovi su X', criteria: { increase: 'avanti', decrease: 'indietro', hold: 'fermo' } },
       move_y: { type: 'noul', instructions: 'Move on Y' },
       rotate_z: { type: 'noul', instructions: 'Rotate on Z' },
     });
 
-    expect(calls).toEqual([['translate_x_positive'], ['move_y'], ['rotate_z']]);
-    expect(Object.keys(result.answers)).toEqual(['translate_x_positive', 'move_y', 'rotate_z']);
+    expect(calls).toEqual([['translate_x'], ['move_y'], ['rotate_z']]);
+    expect(Object.keys(result.answers)).toEqual(['translate_x', 'move_y', 'rotate_z']);
     expect(result.usage).toEqual({ input_tokens: 30, output_tokens: 3 });
-    expect(states[0]).toEqual(expect.objectContaining({ instruction: 'vai avanti', axis_trigger_hints: ['translate_x_positive'] }));
+    expect(states[0]).toEqual(expect.objectContaining({ instruction: 'vai avanti', local_interpretation: { action: 'move', direction: 'forward' } }));
     expect(JSON.stringify(states[0])).not.toContain('very_large');
-    expect(instructions[0]).toMatch(/^Should the selected target increase X/);
+    expect(instructions[0]).toMatch(/^Along X/);
   });
 
   it('keeps the compact state below the English checkpoint context budget', () => {

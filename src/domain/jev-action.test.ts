@@ -38,14 +38,14 @@ describe('Jev action compiler', () => {
     const sceneId = project.cameraCuts[0].id;
     const right = compileJevAction(project, character, { objectId: character.id, sceneId, frame: 1, startPosition: character.transform.position, instruction: 'gira a destra' }, response({
       action: { type: 'choice', choice: 'turn', confidence: .95, probabilities: { turn: .95 } },
-      rotate_z_positive: { type: 'noul', noul: .98 }, rotate_z_negative: { type: 'noul', noul: .02 },
+      rotate_z: { type: 'choice', choice: 'increase', confidence: .95, probabilities: { increase: .95 } },
     }));
     const afterRight = applyPlan(project, right.blenderPlan);
     const middleFrame = Math.max(...right.blenderPlan.operations.map((operation) => operation.frame));
     const updatedCharacter = afterRight.objects.find((candidate) => candidate.id === character.id)!;
     const left = compileJevAction(afterRight, updatedCharacter, { objectId: character.id, sceneId, frame: middleFrame, startPosition: evaluateTransform(updatedCharacter, middleFrame).position, instruction: 'gira a sinistra' }, response({
       action: { type: 'choice', choice: 'turn', confidence: .95, probabilities: { turn: .95 } },
-      rotate_z_positive: { type: 'noul', noul: .02 }, rotate_z_negative: { type: 'noul', noul: .98 },
+      rotate_z: { type: 'choice', choice: 'decrease', confidence: .95, probabilities: { decrease: .95 } },
     }));
     const merged = mergeJevSequencePlans([right, left], 'gira a destra e sinistra');
     const rotations = merged.blenderPlan.operations.filter((operation) => operation.property === 'rotation');
@@ -65,11 +65,11 @@ describe('Jev action compiler', () => {
     expect(request.state.scene_context.objects).toEqual(expect.arrayContaining([expect.objectContaining({ id: character.id, name: character.name, transform: expect.objectContaining({ position: character.transform.position }) })]));
     expect(request.state.scene_context.active_scene).toMatchObject({ id: project.cameraCuts[0].id, framing: project.cameraCuts[0].framing });
     expect(request.questions.action.type).toBe('choice');
-    expect(request.questions.translate_x_positive.type).toBe('noul');
-    expect(request.questions.translate_x_negative.type).toBe('noul');
-    expect(request.questions.rotate_z_positive.type).toBe('noul');
-    expect(request.questions.rotate_z_negative.type).toBe('noul');
-    expect(request.state.axis_trigger_hints).toEqual(['translate_y_positive']);
+    expect(request.questions.translate_x.type).toBe('choice');
+    expect(request.questions.translate_y.type).toBe('choice');
+    expect(request.questions.rotate_z.type).toBe('choice');
+    expect(request.questions).not.toHaveProperty('translate_x_positive');
+    expect(request.state).not.toHaveProperty('axis_trigger_hints');
   });
 
   it('sends a compact description of the stroke to Jev', () => {
@@ -101,12 +101,12 @@ describe('Jev action compiler', () => {
       actionable: { type: 'noul', noul: .05 },
       action: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
       direction: { type: 'choice', choice: 'forward', confidence: .2, probabilities: { forward: .2 } },
-      translate_x_positive: { type: 'noul', noul: .05 }, translate_x_negative: { type: 'noul', noul: .05 },
-      translate_y_positive: { type: 'noul', noul: .05 }, translate_y_negative: { type: 'noul', noul: .05 },
-      translate_z_positive: { type: 'noul', noul: .05 }, translate_z_negative: { type: 'noul', noul: .05 },
-      rotate_x_positive: { type: 'noul', noul: .05 }, rotate_x_negative: { type: 'noul', noul: .05 },
-      rotate_y_positive: { type: 'noul', noul: .05 }, rotate_y_negative: { type: 'noul', noul: .05 },
-      rotate_z_positive: { type: 'noul', noul: .05 }, rotate_z_negative: { type: 'noul', noul: .05 },
+      translate_x: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      translate_y: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      translate_z: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      rotate_x: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      rotate_y: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      rotate_z: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
     });
     const turn = compileJevAction(project, character, { engine: 'laya', objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'si volta verso destra' }, layaHold);
     expect(turn.status).toBe('ready');
@@ -204,54 +204,6 @@ describe('Jev action compiler', () => {
     expect(endPosition[1]).toBeCloseTo(3 / Math.sqrt(2));
     expect(endPosition[2]).toBe(1);
     expect(endRotation).toEqual([0, 0, 90]);
-  });
-
-  it('combines separate positive and negative binary decisions without confusing translation and rotation', () => {
-    const project = createProject();
-    project.settings.frameEnd = 200;
-    const character = createSceneObject('sphere', 1);
-    project.objects.push(character);
-    const result = compileJevAction(project, character, {
-      objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1],
-      instruction: 'procedi diagonalmente e cambia orientamento',
-    }, response({
-      translate_x_positive: { type: 'noul', noul: .92 },
-      translate_x_negative: { type: 'noul', noul: .04 },
-      translate_y_positive: { type: 'noul', noul: .89 },
-      translate_y_negative: { type: 'noul', noul: .08 },
-      translate_z_positive: { type: 'noul', noul: .1 },
-      translate_z_negative: { type: 'noul', noul: .12 },
-      rotate_x_positive: { type: 'noul', noul: .05 },
-      rotate_x_negative: { type: 'noul', noul: .08 },
-      rotate_y_positive: { type: 'noul', noul: .04 },
-      rotate_y_negative: { type: 'noul', noul: .06 },
-      rotate_z_positive: { type: 'noul', noul: .9 },
-      rotate_z_negative: { type: 'noul', noul: .07 },
-    }));
-    const endPosition = result.blenderPlan.operations.find((operation) => operation.property === 'position' && operation.frame === 25)!.value.vector!;
-    const endRotation = result.blenderPlan.operations.find((operation) => operation.property === 'rotation' && operation.frame === 25)!.value.vector!;
-    expect(endPosition[0]).toBeCloseTo(2 / Math.sqrt(2));
-    expect(endPosition[1]).toBeCloseTo(2 / Math.sqrt(2));
-    expect(endPosition[2]).toBe(1);
-    expect(endRotation).toEqual([0, 0, 90]);
-  });
-
-  it('holds an axis when opposite binary decisions conflict', () => {
-    const project = createProject();
-    const character = createSceneObject('sphere', 1);
-    project.objects.push(character);
-    const result = compileJevAction(project, character, {
-      objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1],
-      instruction: 'resta quasi fermo',
-    }, response({
-      translate_x_positive: { type: 'noul', noul: .81 },
-      translate_x_negative: { type: 'noul', noul: .75 },
-      translate_y_positive: { type: 'noul', noul: .1 },
-      translate_y_negative: { type: 'noul', noul: .1 },
-      translate_z_positive: { type: 'noul', noul: .1 },
-      translate_z_negative: { type: 'noul', noul: .1 },
-    }));
-    expect(result.blenderPlan.operations).toHaveLength(0);
   });
 
   it('turns a curved canvas stroke into intermediate subject keyframes', () => {
