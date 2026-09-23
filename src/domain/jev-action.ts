@@ -425,7 +425,7 @@ export const JevActionPlanSchema = z.object({
 });
 export type JevActionPlan = z.infer<typeof JevActionPlanSchema>;
 
-const sequenceVerbs = '(?:gira|ruota|volta|orienta|guarda|inclina|piega|va|vai|muove|sposta|trasla|dirige|scivola|avanza|arretra|indietreggia|sale|scende|salta|balza|cade|corre|cammina|marcia|orbita|segue)\\w*';
+const sequenceVerbs = '(?:gir|ruot|volt|orient|guard|inclin|pieg|va|vai|muov|spost|trasl|dirig|scivol|avanz|arretr|indietreggi|sal|scend|salt|balz|cad|corr|cammin|marci|orbit|segu|avvicin|allontan|string|allarg|entr|esc|alz|abbass|sollev|insegu|accompagn|punt|carrell|scorr)\\w*';
 const sequenceDirections = '(?:destra|sinistra|alto|basso|su|giù|giu|avanti|indietro)';
 
 /** Separates ordered actions without breaking ordinary descriptive conjunctions. */

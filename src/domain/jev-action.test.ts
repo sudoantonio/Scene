@@ -27,6 +27,10 @@ describe('Jev action compiler', () => {
     ]);
     expect(splitJevInstruction('avanza, poi salta e gira a sinistra')).toEqual(['avanza', 'salta', 'gira a sinistra']);
     expect(splitJevInstruction('gira a destra e poi a sinistra')).toEqual(['gira a destra', 'gira a sinistra']);
+    expect(splitJevInstruction('la camera si avvicina e poi si allontana dal personaggio')).toEqual([
+      'la camera si avvicina',
+      'si allontana dal personaggio',
+    ]);
     expect(splitJevInstruction('si sposta in alto a destra')).toEqual(['si sposta in alto a destra']);
   });
 
@@ -39,6 +43,10 @@ describe('Jev action compiler', () => {
     ]);
     expect(resolveTemporalStructure('avanza e gira a destra', 'simultaneous')).toBe('simultaneous');
     expect(splitMotionTimeline('avanza e gira a destra', 'simultaneous')).toEqual([{ instructions: ['avanza', 'gira a destra'] }]);
+    expect(splitMotionTimeline('la camera si avvicina e poi si allontana dal personaggio', 'sequential')).toEqual([
+      { instructions: ['la camera si avvicina'] },
+      { instructions: ['si allontana dal personaggio'] },
+    ]);
   });
 
   it('merges consecutive rotations without duplicate boundary keyframes', () => {
