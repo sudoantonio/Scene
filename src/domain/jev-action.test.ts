@@ -92,6 +92,34 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations.some((operation) => operation.rationale.includes('Laya'))).toBe(true);
   });
 
+  it('uses natural-language intent when Laya returns hold and low axis scores', () => {
+    const project = createProject();
+    project.settings.frameEnd = 120;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const layaHold = response({
+      actionable: { type: 'noul', noul: .05 },
+      action: { type: 'choice', choice: 'hold', confidence: .9, probabilities: { hold: .9 } },
+      direction: { type: 'choice', choice: 'forward', confidence: .2, probabilities: { forward: .2 } },
+      translate_x_positive: { type: 'noul', noul: .05 }, translate_x_negative: { type: 'noul', noul: .05 },
+      translate_y_positive: { type: 'noul', noul: .05 }, translate_y_negative: { type: 'noul', noul: .05 },
+      translate_z_positive: { type: 'noul', noul: .05 }, translate_z_negative: { type: 'noul', noul: .05 },
+      rotate_x_positive: { type: 'noul', noul: .05 }, rotate_x_negative: { type: 'noul', noul: .05 },
+      rotate_y_positive: { type: 'noul', noul: .05 }, rotate_y_negative: { type: 'noul', noul: .05 },
+      rotate_z_positive: { type: 'noul', noul: .05 }, rotate_z_negative: { type: 'noul', noul: .05 },
+    });
+    const turn = compileJevAction(project, character, { engine: 'laya', objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'si volta verso destra' }, layaHold);
+    expect(turn.status).toBe('ready');
+    expect(turn.decision).toMatchObject({ action: 'turn', direction: 'right' });
+    expect(turn.blenderPlan.operations.filter((operation) => operation.property === 'rotation')).toHaveLength(2);
+    const walk = compileJevAction(project, character, { engine: 'laya', objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'cammina con calma' }, layaHold);
+    expect(walk.decision).toMatchObject({ action: 'move', direction: 'forward' });
+    expect(walk.blenderPlan.operations.filter((operation) => operation.property === 'position')).toHaveLength(2);
+    const rotate = compileJevAction(project, character, { engine: 'laya', objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: character.transform.position, instruction: 'ruota su se stesso di 180 gradi' }, layaHold);
+    expect(rotate.decision).toMatchObject({ action: 'turn', direction: 'right' });
+    expect(rotate.blenderPlan.operations.at(-1)?.value.vector?.[2]).toBe(180);
+  });
+
   it('compiles a typed move decision into position keyframes', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
