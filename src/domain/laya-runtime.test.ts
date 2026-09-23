@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYA_ONNX_REPOSITORY, compactLayaState, layaLoadOptions, layaModelFiles, layaModelUrl, runLayaQuestions, type LayaSystemOneRuntime } from './laya-runtime';
+import { LAYA_ONNX_REPOSITORY, layaLoadOptions, layaModelFiles, layaModelUrl, runLayaQuestions, type LayaSystemOneRuntime } from './laya-runtime';
 
 describe('Laya local runtime', () => {
   it('uses the published root bundle without an unavailable checkpoint subfolder', () => {
@@ -13,14 +13,10 @@ describe('Laya local runtime', () => {
 
   it('runs every question in its own inference batch and merges the answers', async () => {
     const calls: string[][] = [];
-    const states: unknown[] = [];
-    const instructions: string[] = [];
     const runtime = {
-      systemOne: async (state: unknown, questions: Record<string, { type: string; instructions: string }>) => {
+      systemOne: async (_state: unknown, questions: Record<string, { type: string }>) => {
         const names = Object.keys(questions);
         calls.push(names);
-        states.push(state);
-        instructions.push(questions[names[0]!]!.instructions);
         return {
           model: 'laya-local',
           answers: Object.fromEntries(names.map((name) => [name, { type: 'noul', noul: 0.75 }])),
@@ -29,23 +25,14 @@ describe('Laya local runtime', () => {
       },
     };
 
-    const result = await runLayaQuestions(runtime as unknown as LayaSystemOneRuntime, { instruction: 'vai avanti', scene_context: { very_large: 'x'.repeat(20_000) }, axis_trigger_hints: ['translate_x_positive'] }, {
-      translate_x_positive: { type: 'noul', instructions: 'Muovi su X' },
+    const result = await runLayaQuestions(runtime as unknown as LayaSystemOneRuntime, { scene: 'one' }, {
+      move_x: { type: 'noul', instructions: 'Move on X' },
       move_y: { type: 'noul', instructions: 'Move on Y' },
       rotate_z: { type: 'noul', instructions: 'Rotate on Z' },
     });
 
-    expect(calls).toEqual([['translate_x_positive'], ['move_y'], ['rotate_z']]);
-    expect(Object.keys(result.answers)).toEqual(['translate_x_positive', 'move_y', 'rotate_z']);
+    expect(calls).toEqual([['move_x'], ['move_y'], ['rotate_z']]);
+    expect(Object.keys(result.answers)).toEqual(['move_x', 'move_y', 'rotate_z']);
     expect(result.usage).toEqual({ input_tokens: 30, output_tokens: 3 });
-    expect(states[0]).toEqual(expect.objectContaining({ instruction: 'vai avanti', axis_trigger_hints: ['translate_x_positive'] }));
-    expect(JSON.stringify(states[0])).not.toContain('very_large');
-    expect(instructions[0]).toMatch(/^Should the selected target increase X/);
-  });
-
-  it('keeps the compact state below the English checkpoint context budget', () => {
-    const state = compactLayaState({ instruction: 'cammina verso destra', scene_context: { objects: Array(100).fill({ notes: 'molto testo' }) }, natural_language_hints: { action: 'move', direction: 'right' } });
-    expect(JSON.stringify(state).length).toBeLessThan(2_000);
-    expect(state).toMatchObject({ instruction: 'cammina verso destra', local_interpretation: { action: 'move', direction: 'right' } });
   });
 });

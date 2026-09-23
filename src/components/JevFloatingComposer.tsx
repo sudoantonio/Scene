@@ -82,7 +82,7 @@ export default function JevFloatingComposer() {
     event.preventDefault(); void generate();
   };
   const placeholder = selected
-    ? `${selected.name}: azione, direzione, distanza e durata…`
+    ? `Descrivi cosa deve fare ${selected.name}…`
     : 'Seleziona una camera o un elemento…';
 
   if (!activeScene) return null;
