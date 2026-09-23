@@ -8,7 +8,7 @@ import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan }
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
 import { validatePlan } from '../src/domain/animation';
 import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest } from '../src/domain/jev-action';
-import { layaLoadOptions } from '../src/domain/laya-runtime';
+import { layaLoadOptions, runLayaQuestions } from '../src/domain/laya-runtime';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
 import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
@@ -487,7 +487,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
     });
     modelLoadMs = Date.now() - loadStartedAt;
     decisionStartedAt = Date.now();
-    raw = await laya.systemOne(request.state, request.questions as never);
+    raw = await runLayaQuestions(laya, request.state, request.questions as never);
   } else {
     const settings = await readSettings();
     if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
