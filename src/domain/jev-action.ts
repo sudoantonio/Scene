@@ -19,12 +19,24 @@ export const JevScoreAnswerSchema = z.object({
 });
 export const JevNoulAnswerSchema = z.object({ type: z.literal('noul'), noul: z.number().min(0).max(1) });
 
+export const SemanticMotionSchema = z.enum([
+  'hold', 'move_forward', 'move_backward', 'move_left', 'move_right',
+  'move_forward_left', 'move_forward_right', 'move_backward_left', 'move_backward_right',
+  'move_up', 'move_down', 'jump_in_place', 'jump_forward',
+  'turn_left', 'turn_right', 'look_up', 'look_down', 'roll_left', 'roll_right',
+  'move_away_camera', 'move_toward_camera', 'follow_drawn_path',
+  'dolly_in', 'dolly_out', 'truck_left', 'truck_right', 'pedestal_up', 'pedestal_down',
+  'pan_left', 'pan_right', 'tilt_up', 'tilt_down', 'orbit_left', 'orbit_right', 'follow_subject',
+]);
+export type SemanticMotion = z.infer<typeof SemanticMotionSchema>;
+
 export const JevActionResponseSchema = z.object({
   model: z.string(),
   answers: z.object({
     actionable: JevNoulAnswerSchema,
-    action: JevChoiceAnswerSchema,
-    direction: JevChoiceAnswerSchema,
+    motion: JevChoiceAnswerSchema.optional(),
+    action: JevChoiceAnswerSchema.optional(),
+    direction: JevChoiceAnswerSchema.optional(),
     distance: JevScoreAnswerSchema,
     duration: JevScoreAnswerSchema,
     energy: JevScoreAnswerSchema,
@@ -71,42 +83,65 @@ export const JevActionInputSchema = z.object({
 });
 export type JevActionInput = z.infer<typeof JevActionInputSchema>;
 
-const actionCriteria = {
-  move: 'Il personaggio cambia posizione sul piano o nello spazio.',
-  rise: 'Il personaggio sale o prende quota.',
-  descend: 'Il personaggio scende o perde quota.',
-  jump: 'Il personaggio compie un salto e torna a una quota di appoggio.',
-  turn: 'Il personaggio cambia orientamento senza una traslazione significativa.',
-  hold: 'Il personaggio resta nella posizione indicata; la richiesta descrive una pausa o immobilità.',
+const subjectMotionCriteria = {
+  hold: 'Resta fermo.',
+  move_forward: 'Avanza dentro la scena.',
+  move_backward: 'Arretra.',
+  move_left: 'Si sposta a sinistra nell’inquadratura.',
+  move_right: 'Si sposta a destra nell’inquadratura.',
+  move_forward_left: 'Avanza in diagonale verso sinistra.',
+  move_forward_right: 'Avanza in diagonale verso destra.',
+  move_backward_left: 'Arretra in diagonale verso sinistra.',
+  move_backward_right: 'Arretra in diagonale verso destra.',
+  move_up: 'Sale lungo Z.',
+  move_down: 'Scende lungo Z.',
+  jump_in_place: 'Salta e atterra nello stesso punto.',
+  jump_forward: 'Salta avanzando.',
+  turn_left: 'Gira su se stesso verso sinistra.',
+  turn_right: 'Gira su se stesso verso destra.',
+  look_up: 'Ruota il pitch verso l’alto.',
+  look_down: 'Ruota il pitch verso il basso.',
+  roll_left: 'Si inclina sul lato sinistro.',
+  roll_right: 'Si inclina sul lato destro.',
+  move_away_camera: 'Si allontana radialmente dalla camera attiva.',
+  move_toward_camera: 'Si avvicina radialmente alla camera attiva.',
+  follow_drawn_path: 'Segue il tratto disegnato; sceglilo solo quando il tratto è presente.',
 };
 
-const directionCriteria = {
-  forward: 'Dentro l’inquadratura, seguendo la direzione di vista della camera.',
-  backward: 'Fuori dall’inquadratura, nel verso opposto alla direzione di vista della camera.',
-  away_camera: 'Si allontana radialmente dalla posizione della camera attiva.',
-  toward_camera: 'Si avvicina radialmente alla posizione della camera attiva.',
-  left: 'Verso il lato sinistro dell’inquadratura.',
-  right: 'Verso il lato destro dell’inquadratura.',
-  up: 'Verso Z positivo.',
-  down: 'Verso Z negativo.',
-};
-
-const cameraActionCriteria = {
+const cameraMotionCriteria = {
   hold: 'La camera resta ferma.',
-  push_in: 'La camera avanza verso il soggetto o stringe l’inquadratura.',
-  pull_out: 'La camera arretra dal soggetto o allarga l’inquadratura.',
+  dolly_in: 'La camera avanza verso il soggetto e stringe l’inquadratura.',
+  dolly_out: 'La camera arretra dal soggetto e allarga l’inquadratura.',
   truck_left: 'La camera trasla verso sinistra mantenendo il soggetto in quadro.',
   truck_right: 'La camera trasla verso destra mantenendo il soggetto in quadro.',
-  rise: 'La camera sale.',
-  descend: 'La camera scende.',
+  pedestal_up: 'La camera sale.',
+  pedestal_down: 'La camera scende.',
   pan_left: 'La camera ruota o sposta lo sguardo verso sinistra dalla posizione attuale.',
   pan_right: 'La camera ruota o sposta lo sguardo verso destra dalla posizione attuale.',
   tilt_up: 'La camera inclina lo sguardo verso l’alto.',
   tilt_down: 'La camera inclina lo sguardo verso il basso.',
+  roll_left: 'La camera ruota sul proprio asse verso sinistra.',
+  roll_right: 'La camera ruota sul proprio asse verso destra.',
   orbit_left: 'La camera orbita attorno al soggetto verso sinistra.',
   orbit_right: 'La camera orbita attorno al soggetto verso destra.',
   follow_subject: 'La camera segue lo spostamento del soggetto mantenendo la distanza.',
+  follow_drawn_path: 'La camera segue il tratto disegnato; sceglilo solo quando il tratto è presente.',
 };
+
+const semanticMotionLabels: Record<SemanticMotion, string> = {
+  hold: 'resta fermo', move_forward: 'avanza', move_backward: 'arretra', move_left: 'va a sinistra', move_right: 'va a destra',
+  move_forward_left: 'avanza a sinistra', move_forward_right: 'avanza a destra', move_backward_left: 'arretra a sinistra', move_backward_right: 'arretra a destra',
+  move_up: 'sale', move_down: 'scende', jump_in_place: 'salta sul posto', jump_forward: 'salta in avanti', turn_left: 'gira a sinistra', turn_right: 'gira a destra',
+  look_up: 'guarda in alto', look_down: 'guarda in basso', roll_left: 'si inclina a sinistra', roll_right: 'si inclina a destra',
+  move_away_camera: 'si allontana dalla camera', move_toward_camera: 'si avvicina alla camera', follow_drawn_path: 'segue il tratto',
+  dolly_in: 'camera avanti', dolly_out: 'camera indietro', truck_left: 'camera a sinistra', truck_right: 'camera a destra', pedestal_up: 'camera sale', pedestal_down: 'camera scende',
+  pan_left: 'pan a sinistra', pan_right: 'pan a destra', tilt_up: 'tilt in alto', tilt_down: 'tilt in basso', orbit_left: 'orbita a sinistra', orbit_right: 'orbita a destra', follow_subject: 'segue il soggetto',
+};
+
+export function semanticMotionLabel(motion: string) {
+  const parsed = SemanticMotionSchema.safeParse(motion);
+  return parsed.success ? semanticMotionLabels[parsed.data] : motion.replaceAll('_', ' ');
+}
 
 function gestureSummary(points: [number, number][] | undefined) {
   if (!points || points.length < 2) return null;
@@ -146,6 +181,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
   });
   const standardContent = project.animationStandard?.content ?? '';
   const naturalIntent = naturalMotionIntent(input.instruction, input.target === 'camera');
+  const naturalMotion = naturalMotionPrimitive(input.instruction, input.target === 'camera', input.gesture);
   return {
     model: 'jev-latest',
     state: {
@@ -164,7 +200,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
         animation_standard: project.animationStandard ? { name: project.animationStandard.name, content: standardContent.slice(0, 20_000), truncated: standardContent.length > 20_000 } : null,
       },
       instruction: input.instruction,
-      natural_language_hints: { action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
+      natural_language_hints: { motion: naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
       camera_action_hint: explicitCameraMotion(input.instruction, input.target === 'camera') ?? null,
       current_frame: input.frame,
       scene_end_frame: sceneEnd,
@@ -176,31 +212,18 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       spatial_rules: 'I movimenti ordinari restano sul piano XY e mantengono la quota Z iniziale. Z cambia solo con una richiesta esplicita di salita, discesa o salto. Un’orbita camera chiusa resta su un piano orizzontale, conserva il raggio camera-soggetto e mantiene il soggetto al centro.',
-      decision_rules: 'Valuta separatamente ogni asse. X positivo=avanti, X negativo=indietro; Y positivo=destra, Y negativo=sinistra; Z positivo=salire, Z negativo=scendere. Rotazione X=roll, Y=pitch, Z=yaw. Non dedurre movimenti della camera quando il soggetto selezionato non è una camera, e non animare elementi diversi dal soggetto selezionato.',
+      decision_rules: 'Scegli una sola primitiva semantica che rappresenti l’azione richiesta in questo segmento. Scene convertirà la primitiva in coordinate, rotazioni e keyframe deterministici. Non animare elementi diversi dal soggetto selezionato.',
       constraint: input.target === 'camera'
         ? 'La camera attiva è il soggetto selezionato: interpreta la richiesta esclusivamente come movimento o rotazione della camera. Non animare altri elementi.'
         : 'Interpreta una sola azione principale del soggetto selezionato. Non aggiungere eventi, oggetti o dialoghi non richiesti.',
     },
     questions: {
       actionable: { type: 'noul', instructions: 'La richiesta descrive un movimento o una posa abbastanza chiari da convertire in keyframe?' },
-      action: { type: 'choice', instructions: 'Qual è l’azione principale richiesta?', criteria: actionCriteria },
-      direction: { type: 'choice', instructions: 'Qual è la direzione principale? “Allontanarsi dalla camera” significa away_camera; “avvicinarsi alla camera” significa toward_camera. Per turn usa left o right; per rise usa up; per descend usa down.', criteria: directionCriteria },
+      motion: { type: 'choice', instructions: input.target === 'camera' ? 'Quale singola primitiva descrive meglio il movimento della camera selezionata?' : 'Quale singola primitiva descrive meglio il movimento del soggetto selezionato?', criteria: input.target === 'camera' ? cameraMotionCriteria : subjectMotionCriteria },
       distance: { type: 'score', instructions: 'Quanto deve essere ampio lo spostamento?', criteria: ['Minimo: 0,25 m', 'Piccolo: 0,5 m', 'Medio: 1 m', 'Ampio: 2 m', 'Molto ampio: 4 m'] },
       duration: { type: 'score', instructions: 'Quanto deve durare l’azione?', criteria: ['Scatto: 0,25 s', 'Rapida: 0,5 s', 'Normale: 1 s', 'Lenta: 2 s', 'Molto lenta: 4 s'] },
       energy: { type: 'score', instructions: 'Qual è l’energia espressiva del movimento?', criteria: ['Quasi immobile', 'Controllata', 'Naturale', 'Decisa', 'Esplosiva'] },
       path: { type: 'choice', instructions: 'Che forma deve avere il tragitto?', criteria: { direct: 'Traiettoria diretta e lineare.', smooth: 'Movimento morbido con accelerazione e decelerazione.', arc: 'Traiettoria ad arco, adatta soprattutto a un salto.' } },
-      camera_requested: { type: 'noul', instructions: 'La richiesta contiene un movimento, una rotazione o un comportamento esplicito della camera?' },
-      camera_action: { type: 'choice', instructions: 'Qual è il movimento principale richiesto per la camera?', criteria: cameraActionCriteria },
-      camera_distance: { type: 'score', instructions: 'Quanto deve essere ampio il movimento della camera?', criteria: ['Minimo: 0,25 m', 'Piccolo: 0,5 m', 'Medio: 1 m', 'Ampio: 2 m', 'Molto ampio: 4 m'] },
-      camera_duration: { type: 'score', instructions: 'Quanto deve durare il movimento della camera?', criteria: ['Scatto: 0,25 s', 'Rapido: 0,5 s', 'Normale: 1 s', 'Lento: 2 s', 'Molto lento: 4 s'] },
-      camera_path: { type: 'choice', instructions: 'Come deve muoversi la camera?', criteria: { direct: 'Movimento lineare e meccanico.', smooth: 'Movimento cinematografico morbido.', arc: 'Movimento curvo o orbitale.' } },
-      stroke_target: { type: 'choice', instructions: 'Se è presente un tratto disegnato, quale movimento rappresenta in base alla descrizione?', criteria: { subject: 'La traiettoria del soggetto selezionato.', camera: 'La traiettoria della camera attiva.' } },
-      translate_x: { type: 'choice', instructions: 'Lungo X il soggetto selezionato va avanti, indietro o resta fermo?', criteria: { increase: 'Incremento X: avanti.', decrease: 'Decremento X: indietro.', hold: 'Nessun movimento lungo X.' } },
-      translate_y: { type: 'choice', instructions: 'Lungo Y il soggetto selezionato va a destra, a sinistra o resta fermo?', criteria: { increase: 'Incremento Y: destra.', decrease: 'Decremento Y: sinistra.', hold: 'Nessun movimento lungo Y.' } },
-      translate_z: { type: 'choice', instructions: 'Lungo Z il soggetto selezionato sale, scende o resta alla stessa quota?', criteria: { increase: 'Incremento Z: sale o salta.', decrease: 'Decremento Z: scende o cade.', hold: 'Nessun movimento lungo Z.' } },
-      rotate_x: { type: 'choice', instructions: 'Il roll sull’asse X aumenta, diminuisce o resta fermo?', criteria: { increase: 'Roll positivo.', decrease: 'Roll negativo.', hold: 'Nessuna rotazione X.' } },
-      rotate_y: { type: 'choice', instructions: 'Il pitch sull’asse Y aumenta, diminuisce o resta fermo?', criteria: { increase: 'Pitch positivo: guarda verso l’alto.', decrease: 'Pitch negativo: guarda verso il basso.', hold: 'Nessuna rotazione Y.' } },
-      rotate_z: { type: 'choice', instructions: 'Lo yaw sull’asse Z aumenta, diminuisce o resta fermo?', criteria: { increase: 'Yaw positivo: gira verso destra.', decrease: 'Yaw negativo: gira verso sinistra.', hold: 'Nessuna rotazione Z.' } },
       rotation_amount: { type: 'score', instructions: 'Quanto deve essere ampia la rotazione?', criteria: ['Minima: 10°', 'Piccola: 20°', 'Media: 45°', 'Ampia: 90°', 'Completa: 180°'] },
     },
   } as const;
@@ -263,6 +286,8 @@ export const JevActionPlanSchema = z.object({
     warm: z.boolean(),
   }).optional(),
   decision: z.object({
+    motion: SemanticMotionSchema.optional(),
+    sequence: z.array(z.object({ instruction: z.string(), motion: SemanticMotionSchema })).optional(),
     action: z.string(), direction: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), energy: z.number(), path: z.string(), actionable: z.number(),
     camera: z.object({ requested: z.boolean(), action: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), path: z.string() }).optional(),
     gesture: z.object({ target: z.enum(['subject', 'camera']), points: z.number().int().positive() }).optional(),
@@ -318,6 +343,10 @@ export function mergeJevSequencePlans(plans: JevActionPlan[], instruction: strin
     ...last,
     instruction,
     objectId: first.objectId,
+    decision: {
+      ...last.decision,
+      sequence: plans.flatMap((plan) => plan.decision.sequence ?? (plan.decision.motion ? [{ instruction: plan.instruction, motion: plan.decision.motion }] : [])),
+    },
     confidence: Math.min(...plans.map((plan) => plan.confidence)),
     status: plans.every((plan) => plan.status === 'ready') && combinedOperations.length ? 'ready' : 'review',
     blenderPlan: {
@@ -493,6 +522,8 @@ function explicitCameraMotion(instruction: string, selectedCamera = false) {
   if (named || !selectedCamera) return named;
   const selectedPatterns: [string, RegExp][] = [
     ['follow_subject', /\b(?:segue|insegue|accompagna)\b/],
+    ['orbit_left', /\borbit\w*[^.!?]{0,24}(?:sinistra|antiorari)/],
+    ['orbit_right', /\borbit\w*[^.!?]{0,24}(?:destra|orari)/],
     ['orbit_left', /(?:orbita|gira)[^.!?]{0,24}(?:attorno|intorno)[^.!?]{0,24}(?:sinistra|antiorari)/],
     ['orbit_right', /(?:orbita|gira)[^.!?]{0,24}(?:attorno|intorno)/],
     ['pan_left', /(?:gira|ruota|volta|orienta)[^.!?]{0,18}\bsinistra\b/],
@@ -575,6 +606,101 @@ function naturalMotionIntent(instruction: string, cameraOnly: boolean): NaturalM
   return { axes, action, direction };
 }
 
+type SemanticIntent = {
+  action: string;
+  direction: string;
+  translation: Vec3;
+  rotation: Vec3;
+  cameraAction?: string;
+};
+
+function semanticMotionIntent(motion: SemanticMotion): SemanticIntent {
+  const intents: Record<SemanticMotion, SemanticIntent> = {
+    hold: { action: 'hold', direction: 'forward', translation: [0, 0, 0], rotation: [0, 0, 0], cameraAction: 'hold' },
+    move_forward: { action: 'move', direction: 'forward', translation: [1, 0, 0], rotation: [0, 0, 0] },
+    move_backward: { action: 'move', direction: 'backward', translation: [-1, 0, 0], rotation: [0, 0, 0] },
+    move_left: { action: 'move', direction: 'left', translation: [0, -1, 0], rotation: [0, 0, 0] },
+    move_right: { action: 'move', direction: 'right', translation: [0, 1, 0], rotation: [0, 0, 0] },
+    move_forward_left: { action: 'move', direction: 'forward', translation: [1, -1, 0], rotation: [0, 0, 0] },
+    move_forward_right: { action: 'move', direction: 'forward', translation: [1, 1, 0], rotation: [0, 0, 0] },
+    move_backward_left: { action: 'move', direction: 'backward', translation: [-1, -1, 0], rotation: [0, 0, 0] },
+    move_backward_right: { action: 'move', direction: 'backward', translation: [-1, 1, 0], rotation: [0, 0, 0] },
+    move_up: { action: 'rise', direction: 'up', translation: [0, 0, 1], rotation: [0, 0, 0] },
+    move_down: { action: 'descend', direction: 'down', translation: [0, 0, -1], rotation: [0, 0, 0] },
+    jump_in_place: { action: 'jump', direction: 'up', translation: [0, 0, 0], rotation: [0, 0, 0] },
+    jump_forward: { action: 'jump', direction: 'forward', translation: [1, 0, 0], rotation: [0, 0, 0] },
+    turn_left: { action: 'turn', direction: 'left', translation: [0, 0, 0], rotation: [0, 0, -1] },
+    turn_right: { action: 'turn', direction: 'right', translation: [0, 0, 0], rotation: [0, 0, 1] },
+    look_up: { action: 'turn', direction: 'up', translation: [0, 0, 0], rotation: [0, 1, 0] },
+    look_down: { action: 'turn', direction: 'down', translation: [0, 0, 0], rotation: [0, -1, 0] },
+    roll_left: { action: 'turn', direction: 'left', translation: [0, 0, 0], rotation: [-1, 0, 0], cameraAction: 'hold' },
+    roll_right: { action: 'turn', direction: 'right', translation: [0, 0, 0], rotation: [1, 0, 0], cameraAction: 'hold' },
+    move_away_camera: { action: 'move', direction: 'away_camera', translation: [0, 0, 0], rotation: [0, 0, 0] },
+    move_toward_camera: { action: 'move', direction: 'toward_camera', translation: [0, 0, 0], rotation: [0, 0, 0] },
+    follow_drawn_path: { action: 'move', direction: 'forward', translation: [1, 0, 0], rotation: [0, 0, 0], cameraAction: 'hold' },
+    dolly_in: { action: 'hold', direction: 'forward', translation: [1, 0, 0], rotation: [0, 0, 0], cameraAction: 'push_in' },
+    dolly_out: { action: 'hold', direction: 'backward', translation: [-1, 0, 0], rotation: [0, 0, 0], cameraAction: 'pull_out' },
+    truck_left: { action: 'hold', direction: 'left', translation: [0, -1, 0], rotation: [0, 0, 0], cameraAction: 'truck_left' },
+    truck_right: { action: 'hold', direction: 'right', translation: [0, 1, 0], rotation: [0, 0, 0], cameraAction: 'truck_right' },
+    pedestal_up: { action: 'hold', direction: 'up', translation: [0, 0, 1], rotation: [0, 0, 0], cameraAction: 'rise' },
+    pedestal_down: { action: 'hold', direction: 'down', translation: [0, 0, -1], rotation: [0, 0, 0], cameraAction: 'descend' },
+    pan_left: { action: 'hold', direction: 'left', translation: [0, 0, 0], rotation: [0, 0, -1], cameraAction: 'pan_left' },
+    pan_right: { action: 'hold', direction: 'right', translation: [0, 0, 0], rotation: [0, 0, 1], cameraAction: 'pan_right' },
+    tilt_up: { action: 'hold', direction: 'up', translation: [0, 0, 0], rotation: [0, 1, 0], cameraAction: 'tilt_up' },
+    tilt_down: { action: 'hold', direction: 'down', translation: [0, 0, 0], rotation: [0, -1, 0], cameraAction: 'tilt_down' },
+    orbit_left: { action: 'hold', direction: 'left', translation: [0, 0, 0], rotation: [0, 0, 0], cameraAction: 'orbit_left' },
+    orbit_right: { action: 'hold', direction: 'right', translation: [0, 0, 0], rotation: [0, 0, 0], cameraAction: 'orbit_right' },
+    follow_subject: { action: 'hold', direction: 'forward', translation: [0, 0, 0], rotation: [0, 0, 0], cameraAction: 'follow_subject' },
+  };
+  return intents[motion];
+}
+
+function naturalMotionPrimitive(instruction: string, cameraOnly: boolean, gesture?: JevActionInput['gesture']): SemanticMotion | undefined {
+  const text = normalizedInstruction(instruction);
+  if (cameraOnly) {
+    const explicit = explicitCameraMotion(instruction, true);
+    const cameraMap: Record<string, SemanticMotion> = {
+      push_in: 'dolly_in', pull_out: 'dolly_out', truck_left: 'truck_left', truck_right: 'truck_right',
+      rise: 'pedestal_up', descend: 'pedestal_down', pan_left: 'pan_left', pan_right: 'pan_right',
+      tilt_up: 'tilt_up', tilt_down: 'tilt_down', orbit_left: 'orbit_left', orbit_right: 'orbit_right', follow_subject: 'follow_subject',
+    };
+    if (explicit) return cameraMap[explicit];
+    const axes = explicitAxisIntent(instruction, true);
+    if (axes.rotation[0] === 1) return 'roll_right';
+    if (axes.rotation[0] === -1) return 'roll_left';
+    if (gesture) return 'follow_drawn_path';
+    if (/\b(?:resta|rimani|ferma|immobile|stop)\w*\b/.test(text)) return 'hold';
+    return undefined;
+  }
+  const intent = naturalMotionIntent(instruction, false);
+  const [forward, right, vertical] = intent.axes.translation;
+  const [roll, pitch, yaw] = intent.axes.rotation;
+  if (gesture) return 'follow_drawn_path';
+  const radial = explicitCameraDirection(instruction);
+  if (radial === 'away_camera') return 'move_away_camera';
+  if (radial === 'toward_camera') return 'move_toward_camera';
+  if (intent.action === 'hold') return 'hold';
+  if (intent.action === 'jump') return forward === 1 ? 'jump_forward' : 'jump_in_place';
+  if ([roll, pitch, yaw].some((value) => value !== undefined) && [forward, right, vertical].some((value) => value !== undefined)) return undefined;
+  if (roll === 1) return 'roll_right';
+  if (roll === -1) return 'roll_left';
+  if (pitch === 1) return 'look_up';
+  if (pitch === -1) return 'look_down';
+  if (yaw === 1 && forward === undefined && right === undefined && vertical === undefined) return 'turn_right';
+  if (yaw === -1 && forward === undefined && right === undefined && vertical === undefined) return 'turn_left';
+  if (vertical === 1 && forward === undefined && right === undefined) return 'move_up';
+  if (vertical === -1 && forward === undefined && right === undefined) return 'move_down';
+  if (forward === 1 && right === 1) return 'move_forward_right';
+  if (forward === 1 && right === -1) return 'move_forward_left';
+  if (forward === -1 && right === 1) return 'move_backward_right';
+  if (forward === -1 && right === -1) return 'move_backward_left';
+  if (forward === 1) return 'move_forward';
+  if (forward === -1) return 'move_backward';
+  if (right === 1) return 'move_right';
+  if (right === -1) return 'move_left';
+  return undefined;
+}
+
 function answerAxis(answer: JevActionResponse['answers']['translate_x'], explicit: number | undefined) {
   if (explicit !== undefined) return explicit;
   if (!answer || answer.confidence < .62) return 0;
@@ -602,23 +728,28 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const duration = explicitMeasurement(input.instruction, 'duration') ?? nearestLevel(answers.duration.score, durations);
   const rotationAmount = explicitMeasurement(input.instruction, 'rotation') ?? [10, 20, 45, 90, 180][Math.max(0, Math.min(4, Math.round(answers.rotation_amount?.score ?? answers.distance.score)))]!;
   const naturalIntent = naturalMotionIntent(input.instruction, cameraOnly);
+  const localMotion = naturalMotionPrimitive(input.instruction, cameraOnly, input.gesture);
+  const parsedModelMotion = SemanticMotionSchema.safeParse(answers.motion?.choice);
+  const modelMotion = parsedModelMotion.success ? parsedModelMotion.data : undefined;
+  const motion = localMotion ?? modelMotion;
+  const semanticIntent = motion ? semanticMotionIntent(motion) : undefined;
   const explicitAxes = naturalIntent.axes;
-  const translationAxes: Vec3 = [answerAxis(answers.translate_x, explicitAxes.translation[0]), answerAxis(answers.translate_y, explicitAxes.translation[1]), answerAxis(answers.translate_z, explicitAxes.translation[2])];
-  const rotationAxes: Vec3 = [answerAxis(answers.rotate_x, explicitAxes.rotation[0]), answerAxis(answers.rotate_y, explicitAxes.rotation[1]), answerAxis(answers.rotate_z, explicitAxes.rotation[2])];
+  const translationAxes: Vec3 = semanticIntent?.translation ?? [answerAxis(answers.translate_x, explicitAxes.translation[0]), answerAxis(answers.translate_y, explicitAxes.translation[1]), answerAxis(answers.translate_z, explicitAxes.translation[2])];
+  const rotationAxes: Vec3 = semanticIntent?.rotation ?? [answerAxis(answers.rotate_x, explicitAxes.rotation[0]), answerAxis(answers.rotate_y, explicitAxes.rotation[1]), answerAxis(answers.rotate_z, explicitAxes.rotation[2])];
   const hasAxisTranslation = translationAxes.some((entry) => entry !== 0);
   const hasAxisRotation = rotationAxes.some((entry) => entry !== 0);
   const drawnFullOrbit = closedStroke(input.gesture?.points) && /(?:gira\w*|ruota\w*|orbit\w*)[^.!?]{0,30}(?:attorno|intorno)|(?:attorno|intorno)[^.!?]{0,30}(?:personaggi|soggett|element)/.test(normalizedInstruction(input.instruction));
   const explicitCameraAction = explicitCameraMotion(input.instruction, cameraOnly) ?? (drawnFullOrbit ? drawnOrbitDirection(input.gesture?.points) : undefined);
-  const cameraAction = explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
+  const cameraAction = semanticIntent?.cameraAction ?? explicitCameraAction ?? answers.camera_action?.choice ?? 'hold';
   const gestureTarget = input.gesture ? (cameraOnly ? 'camera' : 'subject') : undefined;
   const cameraRequested = cameraOnly;
-  const subjectConfidences = object ? [answers.action.confidence, answers.direction.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence] : [];
-  const cameraConfidences = cameraRequested ? [answers.camera_action?.confidence, answers.camera_distance?.confidence, answers.camera_duration?.confidence, answers.camera_path?.confidence].filter((entry): entry is number => entry !== undefined) : [];
+  const subjectConfidences = object ? [answers.motion?.confidence ?? answers.action?.confidence, answers.direction?.confidence, answers.distance.confidence, answers.duration.confidence, answers.energy.confidence, answers.path.confidence].filter((entry): entry is number => entry !== undefined) : [];
+  const cameraConfidences = cameraRequested ? [answers.motion?.confidence ?? answers.camera_action?.confidence, answers.distance.confidence, answers.duration.confidence, answers.path.confidence].filter((entry): entry is number => entry !== undefined) : [];
   const confidences = [...subjectConfidences, ...cameraConfidences];
   const modelConfidence = Math.min(...(confidences.length ? confidences : [0]));
-  const confidence = input.engine === 'laya' && naturalIntent.action ? Math.max(.9, modelConfidence) : modelConfidence;
+  const confidence = input.engine === 'laya' && motion && motion === localMotion ? Math.max(.9, modelConfidence) : modelConfidence;
   const cameraIntent = explicitCameraDirection(input.instruction);
-  const directionChoice = cameraIntent ?? naturalIntent.direction ?? answers.direction.choice;
+  const directionChoice = semanticIntent?.direction ?? cameraIntent ?? naturalIntent.direction ?? answers.direction?.choice ?? 'forward';
   const startPosition = input.startPosition ?? (object ? evaluateTransform(object, input.frame).position : [0, 0, 0]);
   const directions: Record<string, Vec3> = { ...cameraRelativeDirections(project, input.sceneId, input.frame), ...radialCameraDirections(project, input.sceneId, input.frame, startPosition) };
   const drawnBasis = input.gesture?.viewRotation ? cameraBasis(input.gesture.viewRotation).map((axis) => axis.toArray() as Vec3) : undefined;
@@ -634,18 +765,19 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   let endPosition = startPosition;
   const objectTransform = object ? evaluateTransform(object, input.frame) : undefined;
   let endRotation = objectTransform?.rotation ?? [0, 0, 0];
-  let action = object ? (naturalIntent.action ?? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action.choice) ? answers.action.choice : 'move') : cameraIntent && answers.action.choice !== 'jump' ? 'move' : answers.action.choice)) : 'hold';
+  let action = object ? (semanticIntent?.action ?? naturalIntent.action ?? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action?.choice ?? '') ? answers.action!.choice : 'move') : cameraIntent && answers.action?.choice !== 'jump' ? 'move' : answers.action?.choice ?? 'hold')) : 'hold';
   if (object && hasAxisTranslation && action !== 'jump') action = translationAxes[2] !== 0 && translationAxes[0] === 0 && translationAxes[1] === 0 ? (translationAxes[2] > 0 ? 'rise' : 'descend') : 'move';
   if (object && hasAxisRotation && !hasAxisTranslation && action !== 'jump') action = 'turn';
-  if (object && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(hasAxisTranslation && !cameraIntent ? normalizeVector(translationAxes, direction) : direction, distance));
+  const subjectAxisDirection = normalizeVector(add(add(scale(directions.forward!, translationAxes[0]), scale(directions.right!, translationAxes[1])), [0, 0, translationAxes[2]]), direction);
+  if (object && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(hasAxisTranslation && !cameraIntent ? subjectAxisDirection : direction, distance));
   if (object && hasAxisRotation) {
     endRotation = objectTransform!.rotation.map((value, axis) => value + rotationAxes[axis]! * rotationAmount) as Vec3;
   } else if (object && action === 'turn') {
     const amount = rotationAmount;
-    endRotation = [objectTransform!.rotation[0], objectTransform!.rotation[1], objectTransform!.rotation[2] + (answers.direction.choice === 'left' ? -amount : amount)];
+    endRotation = [objectTransform!.rotation[0], objectTransform!.rotation[1], objectTransform!.rotation[2] + (directionChoice === 'left' ? -amount : amount)];
   }
   if (object && action === 'jump') {
-    const horizontal: Vec3 = answers.direction.choice === 'up' || answers.direction.choice === 'down' ? [0, 0, 0] : scale(direction, distance);
+    const horizontal: Vec3 = directionChoice === 'up' || directionChoice === 'down' ? [0, 0, 0] : scale(direction, distance);
     endPosition = add(startPosition, horizontal);
   }
   const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? drawnUp : drawnForward;
@@ -750,14 +882,14 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
       operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'rotation', value: value(cameraEndRotation), interpolation: cameraInterpolation, rationale: `Orientamento camera ${cameraAction} scelto da ${engineLabel}.`, commentIds: [] });
     }
   }
-  const actionable = object && naturalIntent.action && naturalIntent.action !== 'hold' ? Math.max(.9, answers.actionable.noul) : object ? answers.actionable.noul : 1;
+  const actionable = motion && motion !== 'hold' ? Math.max(.9, answers.actionable.noul) : object && naturalIntent.action && naturalIntent.action !== 'hold' ? Math.max(.9, answers.actionable.noul) : object ? answers.actionable.noul : 1;
   const warnings = confidence < .55 || actionable < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [];
   if (!operations.length) warnings.push('La descrizione non contiene un movimento applicabile al soggetto selezionato o alla camera.');
   const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `${engineLabel} · Regia: ${input.instruction}`, assumptions: ['Le direzioni del soggetto sono relative alla camera attiva; i movimenti camera mantengono il soggetto selezionato come riferimento.'], warnings, operations };
   return JevActionPlanSchema.parse({
     schemaVersion: 'JevActionPlanV1', objectId: object?.id ?? null, instruction: input.instruction, model: response.model,
     status: confidence >= .55 && actionable >= .6 && operations.length ? 'ready' : 'review', confidence,
-    decision: { action, direction: directionChoice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable, camera: { requested: cameraRequested, action: cameraAction, distanceMeters: cameraDistance, durationSeconds: cameraDuration, path: answers.camera_path?.choice ?? 'smooth' }, gesture: gestureTarget && input.gesture ? { target: gestureTarget, points: input.gesture.points.length } : undefined },
+    decision: { motion, action, direction: directionChoice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable, camera: { requested: cameraRequested, action: cameraAction, distanceMeters: cameraDistance, durationSeconds: cameraDuration, path: answers.camera_path?.choice ?? answers.path.choice }, gesture: gestureTarget && input.gesture ? { target: gestureTarget, points: input.gesture.points.length } : undefined },
     blenderPlan: plan,
   });
 }

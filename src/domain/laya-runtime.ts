@@ -23,6 +23,7 @@ export type LayaSystemOneRuntime = Pick<Laya, 'systemOne'>;
 
 const englishQuestionInstructions: Record<string, string> = {
   actionable: 'Does the user clearly request a movement or pose that can be converted to keyframes?',
+  motion: 'Which single semantic motion primitive best represents the requested action? Use local_interpretation.motion when it is present.',
   action: 'What is the main requested action? Use the local_interpretation hint when present.',
   direction: 'What is the main direction? Use the local_interpretation when present.',
   distance: 'How large should the movement be?',
@@ -45,6 +46,15 @@ const englishQuestionInstructions: Record<string, string> = {
 };
 
 const englishQuestionCriteria: Record<string, Record<string, string> | string[]> = {
+  motion: {
+    hold: 'remain still', move_forward: 'move forward into the scene', move_backward: 'move backward', move_left: 'move screen-left', move_right: 'move screen-right',
+    move_forward_left: 'move diagonally forward-left', move_forward_right: 'move diagonally forward-right', move_backward_left: 'move diagonally backward-left', move_backward_right: 'move diagonally backward-right',
+    move_up: 'move upward', move_down: 'move downward', jump_in_place: 'jump and land in place', jump_forward: 'jump forward', turn_left: 'turn left in place', turn_right: 'turn right in place',
+    look_up: 'pitch upward', look_down: 'pitch downward', roll_left: 'roll left', roll_right: 'roll right', move_away_camera: 'move radially away from camera', move_toward_camera: 'move radially toward camera',
+    follow_drawn_path: 'follow the supplied drawn path', dolly_in: 'camera moves toward subject', dolly_out: 'camera moves away from subject', truck_left: 'camera translates left', truck_right: 'camera translates right',
+    pedestal_up: 'camera rises', pedestal_down: 'camera descends', pan_left: 'camera pans left', pan_right: 'camera pans right', tilt_up: 'camera tilts up', tilt_down: 'camera tilts down',
+    orbit_left: 'camera orbits left around subject', orbit_right: 'camera orbits right around subject', follow_subject: 'camera follows subject',
+  },
   action: { move: 'change position', rise: 'move upward', descend: 'move downward', jump: 'jump and land', turn: 'change orientation', hold: 'remain still' },
   direction: { forward: 'forward into the scene', backward: 'backward', away_camera: 'away from camera', toward_camera: 'toward camera', left: 'left', right: 'right', up: 'up', down: 'down' },
   distance: ['0.25 meters', '0.5 meters', '1 meter', '2 meters', '4 meters'],
@@ -85,7 +95,11 @@ export function compactLayaState(state: unknown) {
 
 export function prepareLayaQuestion(name: string, question: Question): Question {
   const instructions = englishQuestionInstructions[name];
-  const criteria = englishQuestionCriteria[name];
+  const translated = englishQuestionCriteria[name];
+  const original = (question as { criteria?: Record<string, string> | string[] }).criteria;
+  const criteria = translated && original && !Array.isArray(translated) && !Array.isArray(original)
+    ? Object.fromEntries(Object.keys(original).map((key) => [key, translated[key] ?? original[key]]))
+    : translated;
   return instructions ? { ...question, instructions, ...(criteria ? { criteria } : {}) } as Question : question;
 }
 

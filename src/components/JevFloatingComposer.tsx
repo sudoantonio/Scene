@@ -1,7 +1,7 @@
 import { ArrowUp, LoaderCircle, Pencil, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
-import type { DecisionEngine } from '../domain/jev-action';
+import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
 import { useEditor } from '../store/editor';
 
 const engineStorageKey = 'scene-decision-engine';
@@ -72,7 +72,10 @@ export default function JevFloatingComposer() {
           ? ` · totale ${formatDuration(plan.performance.totalMs)}, decisione ${formatDuration(plan.performance.decisionMs)}`
           : ` · ${formatDuration(plan.performance.decisionMs)}`
         : '';
-      clearStroke(); setInstruction(''); setMessage(`${engineLabel} · Movimento applicato a ${selected.name}${timing}.`);
+      const motions = plan.decision?.sequence?.map((step) => semanticMotionLabel(step.motion))
+        ?? (plan.decision?.motion ? [semanticMotionLabel(plan.decision.motion)] : []);
+      const interpretation = motions.length ? `: ${motions.join(' → ')}` : '';
+      clearStroke(); setInstruction(''); setMessage(`${engineLabel} · Movimento applicato${interpretation} a ${selected.name}${timing}.`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : `${engineLabel} non ha completato la richiesta.`);
     } finally { setBusy(false); }
@@ -82,7 +85,7 @@ export default function JevFloatingComposer() {
     event.preventDefault(); void generate();
   };
   const placeholder = selected
-    ? `${selected.name}: azione, direzione, distanza e durata…`
+    ? `${selected.name}: descrivi cosa deve fare…`
     : 'Seleziona una camera o un elemento…';
 
   if (!activeScene) return null;

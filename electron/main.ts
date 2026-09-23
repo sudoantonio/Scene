@@ -489,7 +489,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
     if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
     jevApiKey = settings.jevApiKey;
   }
-  const steps = parsed.gesture ? [parsed.instruction] : splitJevInstruction(parsed.instruction);
+  const steps = splitJevInstruction(parsed.instruction);
   let workingProject = project;
   let currentFrame = parsed.frame;
   let decisionMs = 0;

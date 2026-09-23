@@ -51,6 +51,7 @@ describe('Jev action compiler', () => {
     const rotations = merged.blenderPlan.operations.filter((operation) => operation.property === 'rotation');
     expect(rotations.map((operation) => operation.frame)).toEqual([1, middleFrame, Math.max(...left.blenderPlan.operations.map((operation) => operation.frame))]);
     expect(rotations.map((operation) => operation.value.vector![2])).toEqual([0, 90, 0]);
+    expect(merged.decision.sequence?.map((step) => step.motion)).toEqual(['turn_right', 'turn_left']);
     expect(validatePlan(project, merged.blenderPlan)).toEqual([]);
   });
   it('sends the selected character and the coordinate convention as state', () => {
@@ -64,12 +65,38 @@ describe('Jev action compiler', () => {
     expect(request.state.active_camera?.rotation_degrees).toEqual([90, 0, 0]);
     expect(request.state.scene_context.objects).toEqual(expect.arrayContaining([expect.objectContaining({ id: character.id, name: character.name, transform: expect.objectContaining({ position: character.transform.position }) })]));
     expect(request.state.scene_context.active_scene).toMatchObject({ id: project.cameraCuts[0].id, framing: project.cameraCuts[0].framing });
-    expect(request.questions.action.type).toBe('choice');
-    expect(request.questions.translate_x.type).toBe('choice');
-    expect(request.questions.translate_y.type).toBe('choice');
-    expect(request.questions.rotate_z.type).toBe('choice');
-    expect(request.questions).not.toHaveProperty('translate_x_positive');
-    expect(request.state).not.toHaveProperty('axis_trigger_hints');
+    expect(request.questions.motion.type).toBe('choice');
+    expect(request.state.natural_language_hints.motion).toBe('move_right');
+    expect(request.questions).not.toHaveProperty('action');
+    expect(request.questions).not.toHaveProperty('direction');
+    expect(request.questions).not.toHaveProperty('translate_x');
+    expect(request.questions).not.toHaveProperty('rotate_z');
+  });
+
+  it('compiles one model-selected semantic primitive into deterministic geometry', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.objects[0].transform.rotation = [90, 0, 0];
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const result = compileJevAction(project, character, {
+      objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1,
+      startPosition: [0, 0, 1], instruction: 'esegui il movimento concordato',
+    }, response({ motion: { type: 'choice', choice: 'move_forward_right', confidence: .96, probabilities: { move_forward_right: .96 } } }));
+    expect(result.decision.motion).toBe('move_forward_right');
+    const end = result.blenderPlan.operations.at(-1)!.value.vector!;
+    expect(end[0]).toBeCloseTo(Math.SQRT2);
+    expect(end[1]).toBeCloseTo(Math.SQRT2);
+    expect(end[2]).toBe(1);
+  });
+
+  it('offers camera primitives only when the selected target is a camera', () => {
+    const project = createProject();
+    const camera = project.objects[0];
+    const request = jevActionRequest(project, undefined, { objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0].id, frame: 1, startPosition: null, instruction: 'orbita verso destra' });
+    expect(request.questions.motion.criteria).toHaveProperty('orbit_right');
+    expect(request.questions.motion.criteria).not.toHaveProperty('jump_forward');
+    expect(request.state.natural_language_hints.motion).toBe('orbit_right');
   });
 
   it('sends a compact description of the stroke to Jev', () => {
@@ -79,7 +106,8 @@ describe('Jev action compiler', () => {
     const request = jevActionRequest(project, character, { objectId: character.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'segui il tratto', gesture: { target: 'auto', points: [[.1, .6], [.5, .2], [.9, .6]] } });
     expect(request.state.drawn_stroke).toMatchObject({ start: [.1, .6], end: [.9, .6] });
     expect(request.state.drawn_stroke!.curvature_ratio).toBeGreaterThan(1);
-    expect(request.questions.stroke_target.type).toBe('choice');
+    expect(request.questions.motion.type).toBe('choice');
+    expect(request.state.natural_language_hints.motion).toBe('follow_drawn_path');
   });
 
   it('labels the compiled plan with the selected Laya engine', () => {
@@ -130,7 +158,7 @@ describe('Jev action compiler', () => {
     expect(result.status).toBe('ready');
     expect(result.decision).toMatchObject({ action: 'move', direction: 'right', distanceMeters: 2, durationSeconds: 1, path: 'smooth' });
     expect(result.blenderPlan.operations).toHaveLength(2);
-    expect(result.blenderPlan.operations[1].value.vector).toEqual([1, 4, 0]);
+    expect(result.blenderPlan.operations[1].value.vector).toEqual([3, 2, 0]);
     expect(result.blenderPlan.operations[1].frame).toBe(34);
   });
 
@@ -185,6 +213,7 @@ describe('Jev action compiler', () => {
   it('combines independent axes and respects exact metres, seconds and degrees', () => {
     const project = createProject();
     project.settings.frameEnd = 200;
+    project.objects[0].transform.rotation = [90, 0, 0];
     const character = createSceneObject('sphere', 1);
     project.objects.push(character);
     const result = compileJevAction(project, character, {

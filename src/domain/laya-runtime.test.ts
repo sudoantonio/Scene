@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYA_ONNX_REPOSITORY, compactLayaState, layaLoadOptions, layaModelFiles, layaModelUrl, runLayaQuestions, type LayaSystemOneRuntime } from './laya-runtime';
+import { LAYA_ONNX_REPOSITORY, compactLayaState, layaLoadOptions, layaModelFiles, layaModelUrl, prepareLayaQuestion, runLayaQuestions, type LayaSystemOneRuntime } from './laya-runtime';
 
 describe('Laya local runtime', () => {
   it('uses the published root bundle without an unavailable checkpoint subfolder', () => {
@@ -44,8 +44,15 @@ describe('Laya local runtime', () => {
   });
 
   it('keeps the compact state below the English checkpoint context budget', () => {
-    const state = compactLayaState({ instruction: 'cammina verso destra', scene_context: { objects: Array(100).fill({ notes: 'molto testo' }) }, natural_language_hints: { action: 'move', direction: 'right' } });
+    const state = compactLayaState({ instruction: 'cammina verso destra', scene_context: { objects: Array(100).fill({ notes: 'molto testo' }) }, natural_language_hints: { motion: 'move_right', action: 'move', direction: 'right' } });
     expect(JSON.stringify(state).length).toBeLessThan(2_000);
-    expect(state).toMatchObject({ instruction: 'cammina verso destra', local_interpretation: { action: 'move', direction: 'right' } });
+    expect(state).toMatchObject({ instruction: 'cammina verso destra', local_interpretation: { motion: 'move_right', action: 'move', direction: 'right' } });
+  });
+
+  it('translates only the semantic primitives allowed for the selected target', () => {
+    const question = { type: 'choice', instructions: 'Scegli movimento', criteria: { orbit_right: 'orbita', dolly_in: 'avanza' } } as const;
+    const translated = prepareLayaQuestion('motion', question as never) as typeof question;
+    expect(translated.instructions).toMatch(/^Which single semantic/);
+    expect(translated.criteria).toEqual({ orbit_right: 'camera orbits right around subject', dolly_in: 'camera moves toward subject' });
   });
 });
