@@ -6,8 +6,8 @@ import path from 'node:path';
 import OpenAI from 'openai';
 import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan } from '../src/domain/schema';
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
-import { validatePlan } from '../src/domain/animation';
-import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest } from '../src/domain/jev-action';
+import { applyPlan, evaluateTransform, validatePlan } from '../src/domain/animation';
+import { compileJevAction, JevActionInputSchema, JevActionResponseSchema, jevActionRequest, mergeJevSequencePlans, splitJevInstruction, type JevActionPlan } from '../src/domain/jev-action';
 import { layaLoadOptions, runLayaQuestions } from '../src/domain/laya-runtime';
 import { nextExportVersion } from '../src/domain/versioning';
 import { BLENDER_BUILD_SCRIPT } from './blender-template';
@@ -474,38 +474,62 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
   const sceneIndex = scenes.findIndex((scene) => scene.id === parsed.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
   if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
-  const jevInput = { engine, objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: parsed.frame, startPosition: parsed.startPosition, instruction: parsed.instruction, gesture: parsed.gesture };
-  const request = jevActionRequest(project, object, jevInput);
   const wasWarm = engine === 'laya' && Boolean(layaRuntimePromise);
   const loadStartedAt = Date.now();
-  let raw: unknown;
   let modelLoadMs = 0;
-  let decisionStartedAt = loadStartedAt;
+  let laya: LayaRuntime | undefined;
+  let jevApiKey: string | undefined;
   if (engine === 'laya') {
-    const laya = await loadLayaRuntime((progress) => {
+    laya = await loadLayaRuntime((progress) => {
       if (!event.sender.isDestroyed()) event.sender.send('laya:progress', progress);
     });
     modelLoadMs = Date.now() - loadStartedAt;
-    decisionStartedAt = Date.now();
-    raw = await runLayaQuestions(laya, request.state, request.questions as never);
   } else {
     const settings = await readSettings();
     if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
-    decisionStartedAt = Date.now();
-    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
-    }
-    raw = await response.json();
+    jevApiKey = settings.jevApiKey;
   }
-  const decisionMs = Date.now() - decisionStartedAt;
-  const compiled = compileJevAction(project, object, jevInput, JevActionResponseSchema.parse(raw));
+  const steps = parsed.gesture ? [parsed.instruction] : splitJevInstruction(parsed.instruction);
+  let workingProject = project;
+  let currentFrame = parsed.frame;
+  let decisionMs = 0;
+  const plans: JevActionPlan[] = [];
+  let truncated = false;
+  for (const [stepIndex, instruction] of steps.entries()) {
+    if (currentFrame >= sceneEnd) { truncated = true; break; }
+    const currentSelected = parsed.objectId ? workingProject.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
+    const currentObject = parsed.target === 'camera' ? undefined : currentSelected;
+    const startPosition = currentObject ? evaluateTransform(currentObject, currentFrame).position : null;
+    const jevInput = { engine, objectId: parsed.objectId, target: parsed.target, sceneId: parsed.sceneId, frame: currentFrame, startPosition, instruction, gesture: stepIndex === 0 ? parsed.gesture : undefined };
+    const request = jevActionRequest(workingProject, currentObject, jevInput);
+    const decisionStartedAt = Date.now();
+    let raw: unknown;
+    if (engine === 'laya') raw = await runLayaQuestions(laya!, request.state, request.questions as never);
+    else {
+      const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${jevApiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
+      }
+      raw = await response.json();
+    }
+    decisionMs += Date.now() - decisionStartedAt;
+    const compiled = compileJevAction(workingProject, currentObject, jevInput, JevActionResponseSchema.parse(raw));
+    plans.push(compiled);
+    if (!compiled.blenderPlan.operations.length) continue;
+    workingProject = applyPlan(workingProject, compiled.blenderPlan);
+    currentFrame = Math.max(currentFrame, ...compiled.blenderPlan.operations.map((operation) => operation.frame));
+  }
+  if (!plans.length) throw new Error('La scena non ha spazio sufficiente per creare la sequenza richiesta.');
+  const compiled = mergeJevSequencePlans(plans, parsed.instruction);
+  if (truncated) compiled.blenderPlan.warnings.push('La sequenza è stata fermata alla fine della scena: aumenta la durata della scena per includere tutte le azioni.');
+  const errors = validatePlan(project, compiled.blenderPlan);
+  if (errors.length) throw new Error(`La sequenza generata non è valida:\n${errors.join('\n')}`);
   return { ...compiled, performance: { engine, totalMs: Date.now() - startedAt, decisionMs, modelLoadMs, warm: engine === 'jev' || wasWarm } };
 });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createProject, createSceneObject } from './schema';
-import { applyPlan, evaluateTransform } from './animation';
-import { compileJevAction, jevActionRequest, type JevActionResponse } from './jev-action';
+import { applyPlan, evaluateTransform, validatePlan } from './animation';
+import { compileJevAction, jevActionRequest, mergeJevSequencePlans, splitJevInstruction, type JevActionResponse } from './jev-action';
 import { useEditor } from '../store/editor';
 
 const response = (overrides: Partial<JevActionResponse['answers']> = {}): JevActionResponse => ({
@@ -20,6 +20,39 @@ const response = (overrides: Partial<JevActionResponse['answers']> = {}): JevAct
 });
 
 describe('Jev action compiler', () => {
+  it('splits opposite directions into ordered actions instead of cancelling them', () => {
+    expect(splitJevInstruction('il personaggio si gira a destra e sinistra')).toEqual([
+      'il personaggio si gira a destra',
+      'il personaggio si gira a sinistra',
+    ]);
+    expect(splitJevInstruction('avanza, poi salta e gira a sinistra')).toEqual(['avanza', 'salta', 'gira a sinistra']);
+    expect(splitJevInstruction('gira a destra e poi a sinistra')).toEqual(['gira a destra', 'gira a sinistra']);
+    expect(splitJevInstruction('si sposta in alto a destra')).toEqual(['si sposta in alto a destra']);
+  });
+
+  it('merges consecutive rotations without duplicate boundary keyframes', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const character = createSceneObject('sphere', 1);
+    project.objects.push(character);
+    const sceneId = project.cameraCuts[0].id;
+    const right = compileJevAction(project, character, { objectId: character.id, sceneId, frame: 1, startPosition: character.transform.position, instruction: 'gira a destra' }, response({
+      action: { type: 'choice', choice: 'turn', confidence: .95, probabilities: { turn: .95 } },
+      rotate_z_positive: { type: 'noul', noul: .98 }, rotate_z_negative: { type: 'noul', noul: .02 },
+    }));
+    const afterRight = applyPlan(project, right.blenderPlan);
+    const middleFrame = Math.max(...right.blenderPlan.operations.map((operation) => operation.frame));
+    const updatedCharacter = afterRight.objects.find((candidate) => candidate.id === character.id)!;
+    const left = compileJevAction(afterRight, updatedCharacter, { objectId: character.id, sceneId, frame: middleFrame, startPosition: evaluateTransform(updatedCharacter, middleFrame).position, instruction: 'gira a sinistra' }, response({
+      action: { type: 'choice', choice: 'turn', confidence: .95, probabilities: { turn: .95 } },
+      rotate_z_positive: { type: 'noul', noul: .02 }, rotate_z_negative: { type: 'noul', noul: .98 },
+    }));
+    const merged = mergeJevSequencePlans([right, left], 'gira a destra e sinistra');
+    const rotations = merged.blenderPlan.operations.filter((operation) => operation.property === 'rotation');
+    expect(rotations.map((operation) => operation.frame)).toEqual([1, middleFrame, Math.max(...left.blenderPlan.operations.map((operation) => operation.frame))]);
+    expect(rotations.map((operation) => operation.value.vector![2])).toEqual([0, 90, 0]);
+    expect(validatePlan(project, merged.blenderPlan)).toEqual([]);
+  });
   it('sends the selected character and the coordinate convention as state', () => {
     const project = createProject();
     const character = createSceneObject('sphere', 1);

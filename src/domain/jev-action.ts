@@ -296,6 +296,65 @@ export const JevActionPlanSchema = z.object({
 });
 export type JevActionPlan = z.infer<typeof JevActionPlanSchema>;
 
+const sequenceVerbs = '(?:gira|ruota|guarda|inclina|piega|va|vai|muove|sposta|trasla|avanza|arretra|sale|scende|salta|cade|corre|cammina|orbita|segue)\\w*';
+const sequenceDirections = '(?:destra|sinistra|alto|basso|su|giù|giu|avanti|indietro)';
+
+/** Separates ordered actions without breaking ordinary descriptive conjunctions. */
+export function splitJevInstruction(instruction: string): string[] {
+  const clean = instruction.trim().replace(/\s+/g, ' ');
+  if (!clean) return [];
+  const sequenced = clean.replace(/\be\s+poi\b/giu, 'e');
+  const clauses = sequenced.split(/\s*(?:[.;]|,\s*(?=poi\b)|\b(?:poi|quindi|successivamente|dopodiché|dopodiche)\b)\s*/iu).filter(Boolean);
+  const result: string[] = [];
+  const opposite = new Set(['destra:sinistra', 'sinistra:destra', 'alto:basso', 'basso:alto', 'su:giu', 'giu:su', 'avanti:indietro', 'indietro:avanti']);
+
+  for (const clause of clauses) {
+    const paired = clause.match(new RegExp(`^(.*?\\b${sequenceVerbs}.*?)\\b(?:(a|in|verso)\\s+)?(${sequenceDirections})\\s+e\\s+(?:(a|in|verso)\\s+)?(${sequenceDirections})(.*)$`, 'iu'));
+    if (paired) {
+      const [, prefix, firstPreposition, firstDirection, secondPreposition, secondDirection, suffix] = paired;
+      const normalizedFirst = normalizedInstruction(firstDirection).replace('giù', 'giu');
+      const normalizedSecond = normalizedInstruction(secondDirection).replace('giù', 'giu');
+      if (opposite.has(`${normalizedFirst}:${normalizedSecond}`)) {
+        const preposition = firstPreposition ? `${firstPreposition} ` : '';
+        const nextPreposition = secondPreposition ? `${secondPreposition} ` : preposition;
+        result.push(`${prefix}${preposition}${firstDirection}`.trim(), `${prefix}${nextPreposition}${secondDirection}${suffix}`.trim());
+        continue;
+      }
+    }
+    const actionParts = clause.split(new RegExp(`\\s+e\\s+(?=(?:(?:il|la)\\s+(?:personaggio|camera)\\s+)?(?:si\\s+)?${sequenceVerbs}\\b)`, 'iu')).filter(Boolean);
+    result.push(...actionParts.map((part) => part.trim()));
+  }
+  return result.slice(0, 8);
+}
+
+/** Combines consecutive compiled actions into one conflict-free plan for a single apply. */
+export function mergeJevSequencePlans(plans: JevActionPlan[], instruction: string): JevActionPlan {
+  if (!plans.length) throw new Error('La sequenza non contiene azioni compilate.');
+  if (plans.length === 1) return JevActionPlanSchema.parse({ ...plans[0], instruction });
+  const operations = new Map<string, BlenderPlan['operations'][number]>();
+  plans.forEach((plan) => plan.blenderPlan.operations.forEach((operation) => {
+    operations.set(`${operation.type}:${operation.objectId}:${operation.frame}:${operation.property}`, operation);
+  }));
+  const first = plans[0]!;
+  const last = plans.at(-1)!;
+  const engineLabel = first.blenderPlan.summary.split(' · ')[0] ?? 'Jev';
+  const combinedOperations = [...operations.values()];
+  return JevActionPlanSchema.parse({
+    ...last,
+    instruction,
+    objectId: first.objectId,
+    confidence: Math.min(...plans.map((plan) => plan.confidence)),
+    status: plans.every((plan) => plan.status === 'ready') && combinedOperations.length ? 'ready' : 'review',
+    blenderPlan: {
+      schemaVersion: 'BlenderPlanV1',
+      summary: `${engineLabel} · Sequenza di ${plans.length} azioni: ${instruction}`,
+      assumptions: [...new Set(plans.flatMap((plan) => plan.blenderPlan.assumptions))],
+      warnings: [...new Set(plans.flatMap((plan) => plan.blenderPlan.warnings))],
+      operations: combinedOperations,
+    },
+  });
+}
+
 const normalizeVector = (vector: Vec3, fallback: Vec3): Vec3 => {
   const length = Math.hypot(...vector);
   return length < .0001 ? fallback : vector.map((entry) => entry / length) as Vec3;
