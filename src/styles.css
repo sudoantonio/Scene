@@ -2063,7 +2063,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 
 /* Correzioni finali: superfici uniformi, timeline ritagliata e segmenti squadrati. */
 .timeline { overflow: hidden !important; border-radius: 14px !important; }
-.timeline-toolbar { overflow: hidden; border-radius: 14px 14px 0 0 !important; }
+.timeline-toolbar { border-radius: 14px 14px 0 0 !important; }
 .timeline.collapsed .timeline-toolbar { border-radius: 14px !important; }
 .collapsed-scene-content { min-width: 0; flex: none; }
 .app-shell .collapsed-scene-segment { border-radius: 0 !important; }

@@ -540,3 +540,27 @@
 .app-shell :is(.camera-frame-guide, .live-camera-preview-canvas, .live-camera-preview-open) { border-radius: 0 !important; }
 .app-shell .inspector-group > summary,
 .app-shell .inspector-group-fixed > .inspector-group-summary { border: 0 !important; border-radius: 0 !important; }
+
+/* Finitura 0.58: la cornice usa la stessa superficie dei pannelli. */
+body:has(.app-shell.theme-dark),
+body:has(.app-shell.theme-dark) #root,
+.app-shell.theme-dark,
+.app-shell.theme-dark .workspace { background: #232323 !important; }
+body:has(.app-shell.theme-light),
+body:has(.app-shell.theme-light) #root,
+.app-shell.theme-light,
+.app-shell.theme-light .workspace { background: #eeeeeb !important; }
+
+/* I pannelli principali e le sezioni dell'ispettore mantengono gli angoli arrotondati. */
+.app-shell :is(.viewport, .timeline, .floating-inspector) { border-radius: 14px !important; }
+.app-shell .floating-inspector { overflow: hidden; }
+.app-shell .inspector-group,
+.app-shell .inspector-group-fixed { border-radius: 10px !important; overflow: hidden; }
+.app-shell .inspector-group > summary,
+.app-shell .inspector-group-fixed > .inspector-group-summary { border-radius: 10px 10px 0 0 !important; }
+
+/* La riga comandi della timeline ridotta resta interamente visibile sotto le scene. */
+.app-shell .timeline.collapsed,
+.app-shell .timeline.collapsed .timeline-toolbar { height: 84px; min-height: 84px; }
+.app-shell .timeline.collapsed .timeline-toolbar { overflow: visible; }
+.app-shell .timeline.collapsed .timeline-control-row { display: grid; visibility: visible; opacity: 1; }

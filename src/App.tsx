@@ -265,7 +265,7 @@ export default function App() {
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [setGizmoMode, setPlaying]);
 
-  const timelineHeight = collapsed.timeline ? 68 : layout.timeline;
+  const timelineHeight = collapsed.timeline ? 84 : layout.timeline;
   const toggleViewportFullscreen = () => {
     setViewportFullscreen((value) => {
       if (!value) setCameraView(true);
