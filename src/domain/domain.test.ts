@@ -468,6 +468,25 @@ describe('scene indipendenti', () => {
     expect(cube.keyframes.some((key) => key.frame === 37 && ['position', 'rotation', 'scale'].includes(key.property))).toBe(false);
   });
 
+  it('spostando un punto elimina eventuali duplicati dello stesso fotogramma', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(cubeId, sceneId);
+    useEditor.getState().setFrame(25);
+    useEditor.getState().setTransform(cubeId, { position: [6, 0, 1], rotation: [0, 0, 20], scale: [1.2, 1.2, 1.2] });
+    const damaged = structuredClone(useEditor.getState().project);
+    const object = damaged.objects.find((item) => item.id === cubeId)!;
+    const point = object.keyframes.find((key) => key.property === 'position' && key.frame === 25)!;
+    object.keyframes.push({ ...structuredClone(point), id: crypto.randomUUID(), value: [99, 99, 99] });
+    useEditor.setState({ project: damaged });
+    useEditor.getState().moveMotionPoint(cubeId, point.id, 37);
+    const moved = useEditor.getState().project.objects.find((item) => item.id === cubeId)!.keyframes;
+    expect(moved.filter((key) => key.property === 'position' && key.frame === 37)).toHaveLength(1);
+    expect(moved.filter((key) => ['position', 'rotation', 'scale'].includes(key.property) && key.frame === 37)).toHaveLength(3);
+  });
+
   it('allunga una scena oltre i tre secondi', () => {
     const project = createProject();
     const sceneId = project.cameraCuts[0].id;

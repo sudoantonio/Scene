@@ -1096,6 +1096,7 @@ export const useEditor = create<EditorState>((set, get) => {
       key.value = structuredClone(position);
       key.purpose = 'motion';
       key.source = 'user';
+      object.keyframes = object.keyframes.filter((item) => item.id === key.id || item.property !== 'position' || item.frame !== key.frame);
       commit(next);
     },
     insertMotionPoint: (objectId, sceneId, requestedFrame, position) => {
@@ -1106,12 +1107,14 @@ export const useEditor = create<EditorState>((set, get) => {
       const range = sceneRange(next, sceneId);
       if (!object || !range || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace) return undefined;
       const frame = Math.max(range.scene.frame, Math.min(range.end - 1, Math.round(requestedFrame)));
-      let key = object.keyframes.find((item) => item.frame === frame && item.property === 'position');
+      const existingKeys = object.keyframes.filter((item) => item.frame === frame && item.property === 'position');
+      let key = existingKeys[0];
       if (key) Object.assign(key, { value: structuredClone(position), interpolation: state.interpolation, source: 'user', purpose: 'motion', commentIds: [] });
       else {
         key = { id: crypto.randomUUID(), frame, property: 'position', value: structuredClone(position), interpolation: state.interpolation, source: 'user', purpose: 'motion', commentIds: [] };
         object.keyframes.push(key);
       }
+      object.keyframes = object.keyframes.filter((item) => item.id === key!.id || item.property !== 'position' || item.frame !== frame);
       closePreviousScene(object, range.scene.frame);
       commit(next);
       return key.id;
@@ -1144,11 +1147,13 @@ export const useEditor = create<EditorState>((set, get) => {
       if (!scene) return;
       const sceneEnd = scenes[sceneIndex + 1]?.frame ?? next.settings.frameEnd + 1;
       const frame = Math.max(scene.frame, Math.min(sceneEnd - 1, Math.round(requestedFrame)));
-      if (frame === reference.frame) return;
       const startTransform = evaluateTransform(object, scene.frame);
-      const moving = object.keyframes.filter((key) => key.frame === reference.frame && ['position', 'rotation', 'scale'].includes(key.property) && (key.purpose === 'motion' || (key.purpose === undefined && key.frame !== scene.frame)));
+      const sourceKeys = object.keyframes.filter((key) => key.frame === reference.frame && ['position', 'rotation', 'scale'].includes(key.property) && (key.purpose === 'motion' || (key.purpose === undefined && key.frame !== scene.frame)));
+      const uniqueByProperty = new Map<string, typeof reference>();
+      for (const key of sourceKeys) if (!uniqueByProperty.has(key.property) || key.id === reference.id) uniqueByProperty.set(key.property, key);
+      const moving = [...uniqueByProperty.values()];
       const properties = new Set(moving.map((key) => key.property));
-      object.keyframes = object.keyframes.filter((key) => !moving.includes(key) && !(key.frame === frame && properties.has(key.property)));
+      object.keyframes = object.keyframes.filter((key) => !sourceKeys.includes(key) && !(key.frame === frame && properties.has(key.property)));
       for (const key of moving) object.keyframes.push({ ...key, frame });
       for (const property of ['position', 'rotation', 'scale'] as const) {
         if (!object.keyframes.some((key) => key.frame === scene.frame && key.property === property)) putKey(object, scene.frame, property, startTransform[property], 'constant', false, 'snapshot');

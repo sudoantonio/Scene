@@ -2081,3 +2081,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .collapsed-scene-content::after { height: 5px; background: repeating-linear-gradient(to right, rgba(220,220,215,.3) 0 1px, transparent 1px calc(var(--timeline-second-width) / 4)); }
 .app-shell .collapsed-add-scene { color: #1e1807 !important; background: #d9a928 !important; }
 .app-shell .collapsed-add-scene:hover { color: #0d0b05 !important; background: #edbd3b !important; }
+
+/* Timeline aperta: comandi più alti e nessun separatore sopra le tracce. */
+.timeline:not(.collapsed) .timeline-toolbar { border-bottom: 0 !important; }
+.timeline:not(.collapsed) .timeline-control-row { padding-bottom: 11px; border-top: 0; }

@@ -73,8 +73,10 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const [presencePreview, setPresencePreview] = useState<{ objectId: string; sceneId: string; start: number; end: number }>();
   const [motionRangePreview, setMotionRangePreview] = useState<{ objectId: string; sceneId: string; start: number; end: number }>();
   const motionPointDragged = useRef(false);
+  const motionPointDragCleanup = useRef<(() => void) | undefined>(undefined);
   const selectedTimelineObjectIdsRef = useRef(selectedTimelineObjectIds);
   selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
+  useEffect(() => () => motionPointDragCleanup.current?.(), []);
   const start = project.settings.frameStart, end = project.settings.frameEnd;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const timelineObjects = project.objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light'));
@@ -218,6 +220,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   };
   const beginMoveMotionPoint = (object: SceneObject, sceneId: string, sceneFrame: number, sceneEnd: number, keyframeId: string, keyframeFrame: number, event: React.PointerEvent<HTMLSpanElement>) => {
     event.preventDefault(); event.stopPropagation();
+    motionPointDragCleanup.current?.();
     const marker = event.currentTarget;
     const track = marker.closest('.movement-track') as HTMLElement | null;
     if (!track) return;
@@ -229,6 +232,17 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
     motionPointDragged.current = false;
     const startX = event.clientX;
     const pixels = Math.max(1, track.getBoundingClientRect().width);
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      marker.style.translate = '';
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', cancel);
+      if (motionPointDragCleanup.current === cleanup) motionPointDragCleanup.current = undefined;
+    };
     const move = (pointer: PointerEvent) => {
       const delta = pointer.clientX - startX;
       if (Math.abs(delta) < 3) return;
@@ -236,19 +250,25 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       marker.style.translate = `${delta}px 0`;
     };
     const finish = (pointer: PointerEvent) => {
+      if (finished) return;
       const deltaFrames = Math.round(((pointer.clientX - startX) / pixels) * (end - start + 1));
       const nextFrame = Math.max(sceneFrame, Math.min(sceneEnd - 1, keyframeFrame + deltaFrames));
-      marker.style.translate = '';
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', finish);
+      cleanup();
       if (motionPointDragged.current) {
         moveMotionPoint(object.id, keyframeId, nextFrame);
         if (cameraView) setFrame(nextFrame);
         window.setTimeout(() => { motionPointDragged.current = false; }, 0);
       } else if (cameraView) setFrame(keyframeFrame);
     };
+    const cancel = () => {
+      cleanup();
+      motionPointDragged.current = false;
+    };
+    motionPointDragCleanup.current = cleanup;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', cancel, { once: true });
+    window.addEventListener('blur', cancel, { once: true });
   };
   const beginResizeMotion = (object: SceneObject, sceneId: string, sceneStart: number, sceneEnd: number, motionStart: number, motionEnd: number, edge: 'start' | 'end', event: React.PointerEvent<HTMLSpanElement>) => {
     event.preventDefault(); event.stopPropagation();
@@ -281,7 +301,8 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       const motionObject = camera ? project.objects.find((item) => item.id === scene.cameraId && item.kind === 'camera') : object;
       if (!motionObject) return [];
       const sceneEnd = scenes[index + 1]?.frame ?? end + 1;
-      const keys = motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= scene.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const positionKeys = motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= scene.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const keys = [...new Map(positionKeys.map((key) => [key.frame, key])).values()];
       const realPoints = keys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== scene.frame));
       if (!realPoints.length) return [];
       const firstFrame = Math.min(...realPoints.map((key) => key.frame));

@@ -779,9 +779,11 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
   const ref = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
   const drag = useRef<{ pointerId: number; x: number; y: number; start: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3; worldPerPixel: number; moved: boolean } | undefined>(undefined);
+  const dragCleanup = useRef<(() => void) | undefined>(undefined);
   const setPlaying = useEditor((state) => state.setPlaying);
   const updateMotionPoint = useEditor((state) => state.updateMotionPoint);
   const position = keyframe.value as Vec3;
+  useEffect(() => () => dragCleanup.current?.(), []);
   useFrame(({ camera, size }) => {
     if (!ref.current) return;
     const distance = Math.max(.01, camera.position.distanceTo(ref.current.position));
@@ -802,32 +804,45 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     const depth = Math.max(.5, Math.abs(ref.current.position.clone().sub(event.camera.position).dot(forward)));
     const canvasHeight = Math.max(1, (event.nativeEvent.target as HTMLElement | null)?.getBoundingClientRect?.().height ?? 600);
     const worldPerPixel = event.camera instanceof THREE.PerspectiveCamera ? (2 * depth * Math.tan(THREE.MathUtils.degToRad(event.camera.fov / 2))) / canvasHeight : 2 / canvasHeight;
+    dragCleanup.current?.();
     drag.current = { pointerId: event.pointerId, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, start: ref.current.position.clone(), right, up, worldPerPixel, moved: false };
-    const target = event.nativeEvent.target;
-    if (target instanceof Element) target.setPointerCapture?.(event.pointerId);
     onDragChange(true);
-  };
-  const moveDrag = (event: ThreeEvent<PointerEvent>) => {
-    const state = drag.current;
-    if (!state || state.pointerId !== event.pointerId || !ref.current) return;
-    event.stopPropagation();
-    const dx = event.nativeEvent.clientX - state.x, dy = event.nativeEvent.clientY - state.y;
-    if (Math.hypot(dx, dy) < 6) return;
-    ref.current.position.copy(state.start).addScaledVector(state.right, dx * state.worldPerPixel).addScaledVector(state.up, -dy * state.worldPerPixel);
-    state.moved = true;
-  };
-  const finishDrag = (event: ThreeEvent<PointerEvent>) => {
-    const state = drag.current;
-    if (!state || state.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    if (state.moved && ref.current) updateMotionPoint(objectId, keyframe.id, ref.current.position.toArray().map((value) => Number(value.toFixed(4))) as Vec3);
-    const target = event.nativeEvent.target;
-    if (target instanceof Element && target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId);
-    drag.current = undefined;
-    onDragChange(false);
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      window.removeEventListener('blur', finish);
+      if (dragCleanup.current === cleanup) dragCleanup.current = undefined;
+    };
+    const move = (pointer: PointerEvent) => {
+      const state = drag.current;
+      if (!state || state.pointerId !== pointer.pointerId || !ref.current) return;
+      const dx = pointer.clientX - state.x, dy = pointer.clientY - state.y;
+      if (Math.hypot(dx, dy) < 6) return;
+      ref.current.position.copy(state.start).addScaledVector(state.right, dx * state.worldPerPixel).addScaledVector(state.up, -dy * state.worldPerPixel);
+      state.moved = true;
+    };
+    const finish = (pointer?: PointerEvent | Event) => {
+      const state = drag.current;
+      if (!state || (pointer instanceof PointerEvent && state.pointerId !== pointer.pointerId)) return;
+      cleanup();
+      dragCleanup.current = undefined;
+      drag.current = undefined;
+      if (state.moved && ref.current) updateMotionPoint(objectId, keyframe.id, ref.current.position.toArray().map((value) => Number(value.toFixed(4))) as Vec3);
+      onDragChange(false);
+      document.body.style.cursor = hovered ? 'grab' : 'default';
+    };
+    dragCleanup.current = () => { cleanup(); drag.current = undefined; onDragChange(false); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', finish, { once: true });
+    window.addEventListener('blur', finish, { once: true });
   };
   return <>
-    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={finishDrag} onClick={(event) => { event.stopPropagation(); }} onDoubleClick={(event) => { event.stopPropagation(); }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
+    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onClick={(event) => { event.stopPropagation(); }} onDoubleClick={(event) => { event.stopPropagation(); }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
       <Billboard follow>
         {(hovered || selected) && <mesh rotation={[0, 0, Math.PI / 4]} scale={1.42} renderOrder={24}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff2a6' : selectedColor} transparent opacity={.46} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>}
         <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff7c9' : selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
@@ -900,7 +915,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   };
   if (points.length < 2) return null;
   return <group renderOrder={20}>
-    <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
+    <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} raycast={() => null} />
     <Line points={points} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
     {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); if (!isCameraMotion) select(objectId); selectMotion({ objectId, sceneId }); if (cameraView) setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
@@ -954,7 +969,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const sceneEnd = cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1;
     return objects.flatMap((object) => {
       if (object.kind === 'audio' || object.kind.includes('light') || object.screenSpace || (object.kind === 'camera' && object.id !== activeCut.cameraId)) return [];
-      const keys = object.keyframes.filter((key) => key.property === 'position' && key.frame >= activeCut.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const positionKeys = object.keyframes.filter((key) => key.property === 'position' && key.frame >= activeCut.frame && key.frame < sceneEnd).sort((a, b) => a.frame - b.frame);
+      const keys = [...new Map(positionKeys.map((key) => [key.frame, key])).values()];
       const handles = keys.filter((key) => key.purpose === 'motion' || (key.purpose === undefined && key.frame !== activeCut.frame));
       if (!handles.length || keys.length < 2) return [];
       const first = keys[0]!.frame, last = keys[keys.length - 1]!.frame;
