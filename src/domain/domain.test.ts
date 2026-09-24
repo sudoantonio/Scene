@@ -270,21 +270,18 @@ describe('scene indipendenti', () => {
     expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: secondScene.id });
   });
 
-  it('scrive la visuale nel movimento camera selezionato al frame corrente', () => {
+  it('non registra la visuale camera selezionata senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const cameraId = scene.cameraId;
     useEditor.getState().selectMotion({ objectId: cameraId, sceneId: scene.id });
     useEditor.getState().setFrame(scene.frame + 20);
     useEditor.getState().setCameraFraming(scene.id, [8, -5, 6], [70, 0, 28], [0, 0, 1]);
-    const state = useEditor.getState();
-    const camera = state.project.objects.find((object) => object.id === cameraId)!;
-    const positionKey = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 20);
-    expect(positionKey?.purpose).toBe('motion');
-    expect(positionKey?.value).toEqual([8, -5, 6]);
+    const camera = useEditor.getState().project.objects.find((object) => object.id === cameraId)!;
+    expect(camera.keyframes.some((key) => key.frame === scene.frame + 20)).toBe(false);
   });
 
-  it('crea sempre un keyframe controllabile quando la camera viene spostata tra due punti', () => {
+  it('non crea keyframe muovendo la camera in un frame intermedio senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const cameraId = scene.cameraId;
@@ -292,14 +289,11 @@ describe('scene indipendenti', () => {
     useEditor.getState().setCameraFraming(scene.id, [7, -4, 5], [68, 0, 24], [0, 0, 1]);
     const state = useEditor.getState();
     const camera = state.project.objects.find((object) => object.id === cameraId)!;
-    expect(camera.keyframes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ frame: scene.frame + 18, property: 'position', purpose: 'motion', value: [7, -4, 5] }),
-      expect.objectContaining({ frame: scene.frame + 18, property: 'rotation', purpose: 'motion', value: [68, 0, 24] }),
-    ]));
-    expect(state.selectedMotion).toEqual({ objectId: cameraId, sceneId: scene.id });
+    expect(camera.keyframes.some((key) => key.frame === scene.frame + 18)).toBe(false);
+    expect(state.selectedMotion).toBeUndefined();
   });
 
-  it('crea un keyframe anche spostando direttamente la camera nella vista libera', () => {
+  it('non crea keyframe spostando direttamente la camera nella vista libera senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
@@ -307,10 +301,37 @@ describe('scene indipendenti', () => {
     useEditor.getState().setTransform(camera.id, { position: [6, -3, 4], rotation: [65, 0, 20], scale: [1, 1, 1] });
     const state = useEditor.getState();
     const updated = state.project.objects.find((object) => object.id === scene.cameraId)!;
-    expect(updated.keyframes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ frame: scene.frame + 12, property: 'position', purpose: 'motion', value: [6, -3, 4] }),
-    ]));
-    expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: scene.id });
+    expect(updated.keyframes.some((key) => key.frame === scene.frame + 12)).toBe(false);
+    expect(state.selectedMotion).toBeUndefined();
+  });
+
+  it('REC mantiene continua una piccola rotazione camera oltre il bordo di 180 gradi', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().setCameraFraming(scene.id, [8, -10, 7], [0, 0, 179], [0, 0, 1]);
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setFrame(scene.frame + 12);
+    useEditor.getState().setCameraFraming(scene.id, [8, -10, 7], [0, 0, -179], [0, 0, 1]);
+    useEditor.getState().stopRecording();
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    const rotations = camera.keyframes.filter((key) => key.property === 'rotation' && key.purpose === 'motion').sort((a, b) => a.frame - b.frame);
+    const start = (rotations[0]!.value as [number, number, number])[2];
+    const end = (rotations.at(-1)!.value as [number, number, number])[2];
+    expect(Math.abs(end - start)).toBeCloseTo(2);
+  });
+
+  it('ripara le rotazioni camera discontinue già presenti nei progetti', () => {
+    const project = createProject();
+    const camera = project.objects[0];
+    camera.transform.rotation = [0, 0, 179];
+    camera.keyframes = [
+      { id: crypto.randomUUID(), frame: 1, property: 'rotation', value: [0, 0, 179], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] },
+      { id: crypto.randomUUID(), frame: 13, property: 'rotation', value: [0, 0, -179], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] },
+    ];
+    useEditor.getState().loadProject(project, '/tmp/rotazioni-camera.abaco.json');
+    const repaired = useEditor.getState().project.objects[0].keyframes.filter((key) => key.property === 'rotation').sort((a, b) => a.frame - b.frame);
+    expect((repaired[1]!.value as [number, number, number])[2]).toBe(181);
+    expect((evaluateTransform(useEditor.getState().project.objects[0], 7).rotation as [number, number, number])[2]).toBe(180);
   });
 
   it('compatta una registrazione continua in pochi punti senza perdere la posa finale', () => {
@@ -513,8 +534,12 @@ describe('scene indipendenti', () => {
   it('spostando la camera mantiene coerente la direzione dell’inquadratura', () => {
     const project = createProject();
     const cameraId = project.objects[0].id;
-    useEditor.setState({ project, currentFrame: 25, selectedId: cameraId, interpolation: 'linear', past: [], future: [], dirty: false });
+    const scene = project.cameraCuts[0];
+    useEditor.setState({ project, currentFrame: 1, selectedId: cameraId, interpolation: 'linear', past: [], future: [], dirty: false });
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setFrame(25);
     useEditor.getState().setTransform(cameraId, { position: [8, -7, 5], rotation: [60.255, 40.966, 20.538], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
     const target = useEditor.getState().project.cameraCuts[0].framing.target;
     expect(target[0]).toBeCloseTo(1, 3);
     expect(target[1]).toBeCloseTo(0, 3);

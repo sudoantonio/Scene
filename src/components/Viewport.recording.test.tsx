@@ -76,6 +76,26 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(screen.getByRole('button', { name: 'Scala' })).toBeDisabled();
   });
 
+  it('non salva una rotazione trackpad della camera quando REC è spento', () => {
+    const before = structuredClone(useEditor.getState().project);
+    const { container } = render(<Viewport />);
+    fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
+    act(() => vi.advanceTimersByTime(400));
+    expect(useEditor.getState().project).toEqual(before);
+  });
+
+  it('salva una rotazione trackpad della camera quando REC è acceso', () => {
+    const { container } = render(<><Viewport /><Timeline /></>);
+    const scene = useEditor.getState().project.cameraCuts[0];
+    fireEvent.click(screen.getByRole('button', { name: 'Registra movimenti' }));
+    act(() => useEditor.getState().setFrame(scene.frame + 12));
+    fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
+    act(() => vi.advanceTimersByTime(400));
+    fireEvent.click(screen.getByRole('button', { name: 'Ferma registrazione movimento' }));
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(camera.keyframes.some((key) => key.property === 'rotation' && key.purpose === 'motion' && key.frame === scene.frame + 12)).toBe(true);
+  });
+
   it.each([
     { sceneNumber: 1, paused: true, duration: 400 },
     { sceneNumber: 2, paused: true, duration: 400 },

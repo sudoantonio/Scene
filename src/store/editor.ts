@@ -100,6 +100,18 @@ const snapshot = (project: AbacoProject) => structuredClone(project);
 const normalizeProjectData = (project: AbacoProject) => {
   const next = snapshot(project);
   for (const object of next.objects) {
+    if (object.kind === 'camera') {
+      let reference = object.transform.rotation;
+      const rotationKeys = object.keyframes.filter((key) => key.property === 'rotation' && Array.isArray(key.value)).sort((a, b) => a.frame - b.frame);
+      for (const key of rotationKeys) {
+        const raw = key.value as Vec3;
+        const continuous = raw.map((angle, axis) => Math.abs(angle) <= 180
+          ? angle + 360 * Math.round((reference[axis] - angle) / 360)
+          : angle) as Vec3;
+        key.value = continuous;
+        reference = continuous;
+      }
+    }
     if (object.kind === 'audio') {
       object.audio.muted = false;
       object.audio.loop = false;
@@ -185,6 +197,8 @@ const putMotionKey = (object: SceneObject, sceneFrame: number, frame: number, pr
 
 const RECORDING_SAMPLE_INTERVAL = 12;
 const recordingProperties = ['position', 'rotation', 'scale'] as const;
+const unwrapRotation = (rotation: Vec3, reference: Vec3): Vec3 => rotation.map((angle, axis) =>
+  angle + 360 * Math.round((reference[axis] - angle) / 360)) as Vec3;
 const appendRecordingKey = (object: SceneObject, frame: number, property: typeof recordingProperties[number], value: KeyframeValue, interpolation: Interpolation) => {
   const key = { id: crypto.randomUUID(), frame, property, value: structuredClone(value), interpolation, source: 'user' as const, purpose: 'motion' as const, commentIds: [] };
   object.keyframes.push(key);
@@ -979,24 +993,23 @@ export const useEditor = create<EditorState>((set, get) => {
       if (!scene || !camera || ![...position, ...rotation, ...target].every(Number.isFinite)) return;
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       if (sceneFrame !== scene.frame) return;
-      const motionActive = state.recordingMotion?.objectId === camera.id && state.recordingMotion.sceneId === scene.id;
       const session = state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
       const sessionActive = Boolean(session);
-      const editingSelectedMotion = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id;
-      const editingBetweenKeys = state.currentFrame !== sceneFrame;
       const range = sceneRange(next, scene.id);
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
+      // Camera navigation outside REC is only a workspace view. It must never
+      // create or rewrite an animation key at an intermediate frame.
+      if (!session && state.currentFrame !== sceneFrame) return;
+      const referenceRotation = evaluateTransform(camera, Math.max(sceneFrame, recordFrame - 1)).rotation;
+      const continuousRotation = unwrapRotation(rotation, referenceRotation);
       let nextSession = session;
       if (session) {
         nextSession = recordTransformSample(camera, sceneFrame, range!.end, recordFrame, {
-          position, rotation, scale: evaluateTransform(camera, state.currentFrame).scale,
+          position, rotation: continuousRotation, scale: evaluateTransform(camera, state.currentFrame).scale,
         }, state.interpolation, session);
-      } else if (motionActive || editingSelectedMotion || editingBetweenKeys) {
-        putMotionKey(camera, sceneFrame, recordFrame, 'position', position, state.interpolation);
-        putMotionKey(camera, sceneFrame, recordFrame, 'rotation', rotation, state.interpolation);
       } else {
         putKey(camera, sceneFrame, 'position', position, 'constant', false, 'snapshot');
-        putKey(camera, sceneFrame, 'rotation', rotation, 'constant', false, 'snapshot');
+        putKey(camera, sceneFrame, 'rotation', continuousRotation, 'constant', false, 'snapshot');
       }
       scene.framing = {
         target: structuredClone(target),
@@ -1004,7 +1017,6 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       makeCameraShotIndependent(next, camera, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       if (nextSession) commitRecording(next, nextSession); else commit(next);
-      if (!session && (motionActive || editingSelectedMotion || editingBetweenKeys)) set({ selectedMotion: { objectId: camera.id, sceneId: scene.id } });
       if (previousCameraId && camera.id !== previousCameraId) set({
         ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
         ...(state.selectedMotion?.objectId === previousCameraId && state.selectedMotion.sceneId === scene.id
@@ -1036,19 +1048,26 @@ export const useEditor = create<EditorState>((set, get) => {
       const range = scene ? sceneRange(next, scene.id) : undefined;
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       const editingCameraBetweenKeys = object.kind === 'camera' && Boolean(scene) && state.currentFrame !== sceneFrame;
+      // Moving the camera object outside REC only manipulates the working view.
+      // Camera keyframes remain editable through their explicit path handles.
+      if (editingCameraBetweenKeys && !sessionActive) return;
       const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
       if (provisionalFrame !== undefined && provisionalFrame !== state.currentFrame) {
         object.keyframes = object.keyframes.filter((key) => key.frame !== provisionalFrame || key.purpose !== 'motion' || !['position', 'rotation', 'scale'].includes(key.property));
       }
       let nextSession = session;
       if (sessionActive && session) {
+        if (object.kind === 'camera') {
+          const referenceRotation = evaluateTransform(object, Math.max(sceneFrame, recordFrame - 1)).rotation;
+          transform = { ...transform, rotation: unwrapRotation(transform.rotation, referenceRotation) };
+        }
         nextSession = recordTransformSample(object, sceneFrame, range!.end, recordFrame, transform, state.interpolation, session);
       } else {
         for (const property of ['position', 'rotation', 'scale'] as const) {
           const editingExistingPoint = state.selectedMotion?.objectId === id
             && state.selectedMotion.sceneId === scene?.id
             && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
-          if (motionActive || editingExistingPoint || editingCameraBetweenKeys) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+          if ((motionActive && object.kind !== 'camera') || (editingExistingPoint && object.kind !== 'camera')) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
           else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
         }
       }
@@ -1064,10 +1083,9 @@ export const useEditor = create<EditorState>((set, get) => {
         makeCameraShotIndependent(next, object, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       if (sessionActive && nextSession) commitRecording(next, nextSession); else commit(next);
-      if (!session && editingCameraBetweenKeys && scene) set({ selectedMotion: { objectId: object.id, sceneId: scene.id } });
       if (object.id !== id) set({
         selectedId: object.id,
-        selectedMotion: motionActive || editingCameraBetweenKeys ? { objectId: object.id, sceneId: scene!.id } : undefined,
+        selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
         recordingMotion: motionActive ? { ...state.recordingMotion!, objectId: object.id, sceneId: scene!.id } : state.recordingMotion,
       });
     },

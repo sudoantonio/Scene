@@ -32,15 +32,16 @@ describe('camera-relative movement', () => {
     expect(useEditor.getState().project).toEqual(before);
   });
 
-  it('uses the chosen interpolation for new camera points', () => {
+  it('uses the chosen interpolation for camera points recorded with REC', () => {
     const project = createProject();
-    useEditor.setState({ project, currentFrame: 1, selectedMotion: undefined, interpolation: 'bezier', past: [], future: [] });
+    useEditor.setState({ project, currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [] });
     const camera = project.objects[0];
     const scene = project.cameraCuts[0];
-    useEditor.getState().startMotion(camera.id, scene.id);
     useEditor.getState().setTransitionMode(camera.id, scene.id, 'linear');
+    useEditor.getState().startRecording(scene.id);
     useEditor.getState().setFrame(25);
     useEditor.getState().setCameraFraming(scene.id, [9, -7, 5], camera.transform.rotation, [2, 0, 1]);
+    useEditor.getState().stopRecording();
     const changed = useEditor.getState().project.objects[0];
     expect(changed.keyframes.find((k) => k.property === 'position' && k.frame === 1)?.interpolation).toBe('linear');
     expect(evaluateTransform(changed, 13).position).toEqual([8, -7, 5]);

@@ -1082,6 +1082,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     // The keyboard RAF outlives scene changes. Resolve the destination when
     // sampling, not from the render captured when its listener was installed.
     const state = useEditor.getState();
+    // Camera navigation is persisted only while the global REC session is on.
+    if (!state.recordingSession) {
+      pendingCameraCommit.current = undefined;
+      if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
+      cameraCommitTimer.current = undefined;
+      return;
+    }
     const scene = state.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= state.currentFrame);
     const controls = shotOrbitRef.current;
     if (!controls || !scene || !state.project.objects.some((object) => object.id === scene.cameraId && object.kind === 'camera')) return;
@@ -1094,7 +1101,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       rotation: [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
       target: controls.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
     };
-    const recording = Boolean(state.recordingSession);
+    const recording = true;
     if (cameraCommitTimer.current) {
       if (recording) return;
       window.clearTimeout(cameraCommitTimer.current);
@@ -1144,9 +1151,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
-    // Durante REC il trackpad serve solo a orientarsi: il movimento della
-    // camera viene rifinito in seguito selezionando i punti nella timeline.
-    const persistCameraEdit = !useEditor.getState().recordingSession;
+    // Trackpad gestures alter the shot animation only while REC is active.
+    const persistCameraEdit = Boolean(useEditor.getState().recordingSession);
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
     if (event.ctrlKey) {
@@ -1239,7 +1245,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const flushFreeFlight = () => {
       if (!freeFlight) return;
       const editor = useEditor.getState();
-      editor.setCameraFraming(freeFlight.sceneId, freeFlight.position, freeFlight.rotation, freeFlight.target);
+      if (editor.recordingSession) editor.setCameraFraming(freeFlight.sceneId, freeFlight.position, freeFlight.rotation, freeFlight.target);
       freeFlight = undefined;
     };
     const keyDown = (event: KeyboardEvent) => {
@@ -1286,7 +1292,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
           if (movement.lengthSq() > 0) {
             movement.normalize().multiplyScalar(3 * deltaSeconds * speedModifier);
             const position = new THREE.Vector3(...transform.position).add(movement).toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
-            editor.setTransform(selected.id, { ...transform, position });
+            if (selected.kind !== 'camera' || editor.recordingSession) editor.setTransform(selected.id, { ...transform, position });
           }
           animationFrame = requestAnimationFrame(tick);
           return;
@@ -1357,11 +1363,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
             const position = camera.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
             const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
             const framingTarget = target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
-            if (cameraView) scheduleCameraCommit();
+            if (cameraView && editor.recordingSession) scheduleCameraCommit();
             else {
               const lastCommitTime = live?.lastCommitTime ?? time;
               freeFlight = { sceneId: currentScene.id, position, rotation, target: framingTarget, lastCommitTime };
-              if (time - lastCommitTime >= 100) {
+              if (editor.recordingSession && time - lastCommitTime >= 100) {
                 editor.setCameraFraming(currentScene.id, position, rotation, framingTarget);
                 freeFlight.lastCommitTime = time;
               }
