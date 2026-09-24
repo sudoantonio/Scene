@@ -1098,9 +1098,17 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     }
   };
 
+  const flushCameraEdit = () => {
+    if (cameraPanBuffer.current.timer) window.clearTimeout(cameraPanBuffer.current.timer);
+    if (cameraRotateBuffer.current.timer) window.clearTimeout(cameraRotateBuffer.current.timer);
+    cameraPanBuffer.current = { x: 0, y: 0, persist: true };
+    cameraRotateBuffer.current = { x: 0, y: 0, persist: true };
+    flushPendingCameraCommit();
+  };
+
   useEffect(() => {
-    window.addEventListener('abaco:flush-camera-edit', flushPendingCameraCommit);
-    return () => window.removeEventListener('abaco:flush-camera-edit', flushPendingCameraCommit);
+    window.addEventListener('abaco:flush-camera-edit', flushCameraEdit);
+    return () => window.removeEventListener('abaco:flush-camera-edit', flushCameraEdit);
   }, []);
 
   useEffect(() => {
@@ -1159,19 +1167,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     // The keyboard RAF outlives scene changes. Resolve the destination when
     // sampling, not from the render captured when its listener was installed.
     const state = useEditor.getState();
-    const selectedCameraPoint = state.selectedMotion?.keyframeId
-      ? state.project.objects
-        .find((object) => object.id === state.selectedMotion!.objectId && object.kind === 'camera')
-        ?.keyframes.some((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.property === 'position')
-      : false;
-    // REC crea nuovi campioni. Fuori da REC salviamo soltanto quando l'utente
-    // ha cliccato esplicitamente un keyframe camera già esistente.
-    if (!state.recordingSession && !selectedCameraPoint) {
-      pendingCameraCommit.current = undefined;
-      if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
-      cameraCommitTimer.current = undefined;
-      return;
-    }
     const scene = state.project.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= state.currentFrame);
     const controls = shotOrbitRef.current;
     if (!controls || !scene || !state.project.objects.some((object) => object.id === scene.cameraId && object.kind === 'camera')) return;
@@ -1234,11 +1229,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
-    const editor = useEditor.getState();
-    const persistCameraEdit = Boolean(editor.recordingSession || (editor.selectedMotion?.keyframeId
-      && editor.project.objects
-        .find((object) => object.id === editor.selectedMotion!.objectId && object.kind === 'camera')
-        ?.keyframes.some((key) => key.id === editor.selectedMotion!.keyframeId && key.frame === editor.currentFrame && key.property === 'position')));
+    const persistCameraEdit = Boolean(cameraView && activeCamera);
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
     if (event.ctrlKey) {
@@ -1377,7 +1368,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
           && object.kind !== 'audio'
           && !object.kind.includes('light')
           && evaluateProperty(object, 'visibility', editor.currentFrame));
-        if (selected && (selected.kind !== 'camera' || Boolean(editor.recordingSession))) {
+        if (selected && (selected.kind !== 'camera' || !cameraView || Boolean(editor.recordingSession))) {
           const transform = evaluateTransform(selected, editor.currentFrame);
           const controls = cameraView ? shotOrbitRef.current : orbitRef.current;
           const viewCamera = controls?.object;
@@ -1397,7 +1388,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
           if (movement.lengthSq() > 0) {
             movement.normalize().multiplyScalar(3 * deltaSeconds * speedModifier);
             const position = new THREE.Vector3(...transform.position).add(movement).toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
-            if (selected.kind !== 'camera' || editor.recordingSession) editor.setTransform(selected.id, { ...transform, position });
+            if (selected.kind !== 'camera' || !cameraView || editor.recordingSession) editor.setTransform(selected.id, { ...transform, position });
           }
           animationFrame = requestAnimationFrame(tick);
           return;
@@ -1485,6 +1476,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
     window.addEventListener('blur', clearKeys);
+    window.addEventListener('abaco:flush-camera-edit', flushFreeFlight);
     animationFrame = requestAnimationFrame(tick);
     return () => {
       flushFreeFlight();
@@ -1492,6 +1484,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
       window.removeEventListener('blur', clearKeys);
+      window.removeEventListener('abaco:flush-camera-edit', flushFreeFlight);
     };
   }, [cameraView]);
 

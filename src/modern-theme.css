@@ -660,3 +660,31 @@ body:has(.app-shell.theme-light) #root,
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
 .app-shell .jev-composer-expand:hover { background: var(--ui-raised); }
+
+/* Input contestuale: etichetta modello leggibile e azione realmente circolare. */
+.app-shell .jev-floating-composer.anchored .jev-composer-input {
+  grid-template-columns: 72px minmax(0, 1fr) 26px 26px;
+}
+.app-shell .jev-floating-composer.anchored .decision-engine-switch {
+  grid-column: 1;
+  grid-row: 2;
+  width: 72px;
+  min-width: 72px;
+  padding: 0 22px 0 7px;
+}
+.app-shell .jev-floating-composer.anchored .jev-composer-tool { grid-column: 3; grid-row: 2; }
+.app-shell .jev-floating-composer.anchored .jev-composer-send {
+  grid-column: 4;
+  grid-row: 2;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 999px !important;
+}
+
+/* La superficie vuota della timeline coincide con lo sfondo del programma. */
+.app-shell.theme-dark :is(.timeline, .timeline-toolbar, .timeline-scroll) {
+  background: #252525 !important;
+}

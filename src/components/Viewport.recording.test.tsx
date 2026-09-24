@@ -77,10 +77,35 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(screen.getByRole('button', { name: 'Scala' })).toBeDisabled();
   });
 
-  it('non salva una rotazione trackpad della camera quando REC è spento', () => {
+  it('salva la posa base modificata col trackpad anche quando REC è spento', () => {
     const before = structuredClone(useEditor.getState().project);
     const { container } = render(<Viewport />);
     fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
+    act(() => vi.advanceTimersByTime(400));
+    expect(useEditor.getState().project).not.toEqual(before);
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(camera.keyframes.filter((key) => key.purpose === 'motion')).toHaveLength(0);
+  });
+
+  it('crea un keyframe controllabile col trackpad fuori da REC su un frame intermedio', () => {
+    const scene = useEditor.getState().project.cameraCuts[0];
+    act(() => useEditor.getState().setFrame(scene.frame + 12));
+    const { container } = render(<Viewport />);
+    fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
+    act(() => vi.advanceTimersByTime(400));
+    const state = useEditor.getState();
+    const camera = state.project.objects.find((object) => object.id === scene.cameraId)!;
+    const point = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 12 && key.purpose === 'motion');
+    expect(point).toBeDefined();
+    expect(state.selectedMotion).toMatchObject({ objectId: camera.id, sceneId: scene.id, keyframeId: point!.id });
+  });
+
+  it('annulla il delta trackpad in attesa prima di cambiare frame', () => {
+    const before = structuredClone(useEditor.getState().project);
+    const { container } = render(<Viewport />);
+    fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
+    act(() => useEditor.getState().setFrame(14));
     act(() => vi.advanceTimersByTime(400));
     expect(useEditor.getState().project).toEqual(before);
   });
@@ -177,6 +202,25 @@ describe('controlli della vista libera', () => {
     const updated = useEditor.getState().project.objects.find((object) => object.id === cube.id)!;
     expect(evaluateTransform(updated, 1).position).not.toEqual(before);
     expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove Cubo 1');
+  });
+
+  it('muove e salva con WASD anche la camera selezionata fuori da REC', () => {
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    act(() => {
+      useEditor.getState().setFrame(scene.frame + 10);
+      useEditor.getState().select(camera.id);
+    });
+    render(<Viewport />);
+    const before = evaluateTransform(camera, scene.frame + 10).position;
+    fireEvent.keyDown(window, { code: 'KeyW', key: 'w' });
+    act(() => vi.advanceTimersByTime(80));
+    fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
+    const state = useEditor.getState();
+    const updated = state.project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(evaluateTransform(updated, scene.frame + 10).position).not.toEqual(before);
+    expect(updated.keyframes.some((key) => key.property === 'position' && key.frame === scene.frame + 10 && key.purpose === 'motion')).toBe(true);
+    expect(state.recordingSession).toBeUndefined();
   });
 
   it('ridà il controllo WASDQE alla viewport dopo aver scritto in un campo', () => {

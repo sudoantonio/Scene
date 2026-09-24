@@ -270,7 +270,7 @@ describe('scene indipendenti', () => {
     expect(state.selectedMotion).toEqual({ objectId: camera.id, sceneId: secondScene.id });
   });
 
-  it('non registra la visuale camera selezionata senza REC', () => {
+  it('salva la visuale camera come punto controllabile anche senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'bezier', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const cameraId = scene.cameraId;
@@ -278,10 +278,12 @@ describe('scene indipendenti', () => {
     useEditor.getState().setFrame(scene.frame + 20);
     useEditor.getState().setCameraFraming(scene.id, [8, -5, 6], [70, 0, 28], [0, 0, 1]);
     const camera = useEditor.getState().project.objects.find((object) => object.id === cameraId)!;
-    expect(camera.keyframes.some((key) => key.frame === scene.frame + 20)).toBe(false);
+    const point = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 20 && key.purpose === 'motion');
+    expect(point?.value).toEqual([8, -5, 6]);
+    expect(useEditor.getState().selectedMotion).toMatchObject({ objectId: cameraId, sceneId: scene.id, keyframeId: point!.id });
   });
 
-  it('non crea keyframe muovendo la camera in un frame intermedio senza REC', () => {
+  it('crea un keyframe muovendo la camera in un frame intermedio senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const cameraId = scene.cameraId;
@@ -289,11 +291,12 @@ describe('scene indipendenti', () => {
     useEditor.getState().setCameraFraming(scene.id, [7, -4, 5], [68, 0, 24], [0, 0, 1]);
     const state = useEditor.getState();
     const camera = state.project.objects.find((object) => object.id === cameraId)!;
-    expect(camera.keyframes.some((key) => key.frame === scene.frame + 18)).toBe(false);
-    expect(state.selectedMotion).toBeUndefined();
+    const point = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 18 && key.purpose === 'motion');
+    expect(point?.value).toEqual([7, -4, 5]);
+    expect(state.selectedMotion).toMatchObject({ objectId: cameraId, sceneId: scene.id, keyframeId: point!.id });
   });
 
-  it('non crea keyframe spostando direttamente la camera nella vista libera senza REC', () => {
+  it('crea un keyframe spostando direttamente la camera nella vista libera senza REC', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];
     const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
@@ -301,8 +304,9 @@ describe('scene indipendenti', () => {
     useEditor.getState().setTransform(camera.id, { position: [6, -3, 4], rotation: [65, 0, 20], scale: [1, 1, 1] });
     const state = useEditor.getState();
     const updated = state.project.objects.find((object) => object.id === scene.cameraId)!;
-    expect(updated.keyframes.some((key) => key.frame === scene.frame + 12)).toBe(false);
-    expect(state.selectedMotion).toBeUndefined();
+    const point = updated.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 12 && key.purpose === 'motion');
+    expect(point?.value).toEqual([6, -3, 4]);
+    expect(state.selectedMotion).toMatchObject({ objectId: camera.id, sceneId: scene.id, keyframeId: point!.id });
   });
 
   it('REC si arma senza avviare la riproduzione', () => {

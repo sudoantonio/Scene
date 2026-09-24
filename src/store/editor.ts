@@ -1009,18 +1009,19 @@ export const useEditor = create<EditorState>((set, get) => {
       const selectedKey = selectedCameraFrame === state.currentFrame
         ? camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position')
         : undefined;
-      // Senza REC la camera modifica la posa base della scena, senza creare
-      // punti intermedi. Un keyframe cliccato resta invece modificabile.
+      // Ogni riposizionamento manuale fuori da REC diventa un punto esplicito
+      // sul frame corrente. Alla partenza della scena aggiorna invece la posa base.
       const referenceRotation = evaluateTransform(camera, Math.max(sceneFrame, recordFrame - 1)).rotation;
       const continuousRotation = unwrapRotation(rotation, referenceRotation);
+      const manualMotionFrame = !session && (Boolean(selectedKey) || state.currentFrame !== sceneFrame) ? state.currentFrame : undefined;
       let nextSession = session;
       if (session) {
         nextSession = recordTransformSample(camera, sceneFrame, range!.end, recordFrame, {
           position, rotation: continuousRotation, scale: evaluateTransform(camera, state.currentFrame).scale,
         }, state.interpolation, session);
-      } else if (selectedKey) {
-        putMotionKey(camera, sceneFrame, state.currentFrame, 'position', position, state.interpolation);
-        putMotionKey(camera, sceneFrame, state.currentFrame, 'rotation', continuousRotation, state.interpolation);
+      } else if (manualMotionFrame !== undefined) {
+        putMotionKey(camera, sceneFrame, manualMotionFrame, 'position', position, state.interpolation);
+        putMotionKey(camera, sceneFrame, manualMotionFrame, 'rotation', continuousRotation, state.interpolation);
       } else {
         putKey(camera, sceneFrame, 'position', position, 'constant', false, 'snapshot');
         putKey(camera, sceneFrame, 'rotation', continuousRotation, 'constant', false, 'snapshot');
@@ -1031,12 +1032,21 @@ export const useEditor = create<EditorState>((set, get) => {
       };
       makeCameraShotIndependent(next, camera, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       if (nextSession) commitRecording(next, nextSession); else commit(next);
-      if (previousCameraId && camera.id !== previousCameraId) set({
-        ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
-        ...(state.selectedMotion?.objectId === previousCameraId && state.selectedMotion.sceneId === scene.id
-          ? { selectedMotion: { ...state.selectedMotion, objectId: camera.id, ...(selectedCameraFrame !== undefined ? { keyframeId: camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position' && key.purpose === 'motion')?.id } : {}) } }
-          : {}),
-      });
+      const manualKeyId = manualMotionFrame === undefined ? undefined : camera.keyframes.find((key) => key.frame === manualMotionFrame && key.property === 'position')?.id;
+      if (manualMotionFrame !== undefined) {
+        set({
+          ...(previousCameraId && state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
+          selectedMotion: { objectId: camera.id, sceneId: scene.id, keyframeId: manualKeyId },
+        });
+      } else if (previousCameraId && camera.id !== previousCameraId) {
+        const selectedMotion = state.selectedMotion;
+        set({
+          ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
+          ...(selectedMotion?.objectId === previousCameraId && selectedMotion.sceneId === scene.id
+            ? { selectedMotion: { ...selectedMotion, objectId: camera.id, ...(selectedCameraFrame !== undefined ? { keyframeId: camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position')?.id } : {}) } }
+            : {}),
+        });
+      }
     },
     alignObjectToGround: (id) => {
       const state = get();
@@ -1062,12 +1072,9 @@ export const useEditor = create<EditorState>((set, get) => {
       const range = scene ? sceneRange(next, scene.id) : undefined;
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       const selectedKey = state.selectedMotion?.objectId === id && state.selectedMotion.sceneId === scene?.id && state.selectedMotion.keyframeId
-        ? object.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.purpose === 'motion')
+        ? object.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.property === 'position')
         : undefined;
-      const editingCameraBetweenKeys = object.kind === 'camera' && Boolean(scene) && state.currentFrame !== sceneFrame;
-      // Moving the camera object outside REC only manipulates the working view.
-      // Camera keyframes remain editable through their explicit path handles.
-      if (editingCameraBetweenKeys && !sessionActive && !selectedKey) return;
+      const manualCameraPoint = object.kind === 'camera' && Boolean(scene) && !sessionActive && state.currentFrame !== sceneFrame;
       const provisionalFrame = motionActive ? state.recordingMotion?.provisionalFrame : undefined;
       if (provisionalFrame !== undefined && provisionalFrame !== state.currentFrame) {
         object.keyframes = object.keyframes.filter((key) => key.frame !== provisionalFrame || key.purpose !== 'motion' || !['position', 'rotation', 'scale'].includes(key.property));
@@ -1089,7 +1096,7 @@ export const useEditor = create<EditorState>((set, get) => {
             && state.selectedMotion?.objectId === id
             && state.selectedMotion.sceneId === scene?.id
             && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
-          if ((motionActive && object.kind !== 'camera') || selectedKey || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+          if ((motionActive && object.kind !== 'camera') || selectedKey || manualCameraPoint || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
           else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
         }
       }
@@ -1105,9 +1112,10 @@ export const useEditor = create<EditorState>((set, get) => {
         makeCameraShotIndependent(next, object, sceneFrame, !sessionActive && state.currentFrame === sceneFrame);
       } else closePreviousScene(object, sceneFrame);
       if (sessionActive && nextSession) commitRecording(next, nextSession); else commit(next);
-      if (object.id !== id) set({
+      const manualCameraKeyId = manualCameraPoint ? object.keyframes.find((key) => key.frame === state.currentFrame && key.property === 'position')?.id : undefined;
+      if (object.id !== id || manualCameraPoint) set({
         selectedId: object.id,
-        selectedMotion: motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
+        selectedMotion: manualCameraPoint ? { objectId: object.id, sceneId: scene!.id, keyframeId: manualCameraKeyId } : motionActive ? { objectId: object.id, sceneId: scene!.id } : undefined,
         recordingMotion: motionActive ? { ...state.recordingMotion!, objectId: object.id, sceneId: scene!.id } : state.recordingMotion,
       });
     },
