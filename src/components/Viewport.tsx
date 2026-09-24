@@ -138,7 +138,9 @@ function ImageBackground({ source }: { source: string }) {
 function ModelBackground({ source }: { source: string }) {
   const gltf = useLoader(GLTFLoader, source);
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
-  return <primitive object={model} />;
+  // L'export OBJ di Blender converte Z-up in Y-up. Il viewport di Scene usa
+  // invece Z-up: +90° su X ripristina l'orientamento originale del palco.
+  return <group rotation={[Math.PI / 2, 0, 0]}><primitive object={model} /></group>;
 }
 
 function ObjBackground({ source, materials }: { source: string; materials?: string }) {
