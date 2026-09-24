@@ -103,6 +103,7 @@ export function compactLayaState(state: unknown) {
     active_camera: source.active_camera,
     camera_focus_target: source.camera_focus_target,
     drawn_stroke: source.drawn_stroke,
+    stroke_interpretation: source.stroke_interpretation,
     coordinate_system: 'X forward/backward, Y right/left, Z up/down. Rotation X roll, Y pitch, Z yaw.',
   };
 }
@@ -137,6 +138,17 @@ export async function runLayaQuestions(
   const compactState = compactLayaState(state);
 
   for (const [name, question] of Object.entries(questions)) {
+    // ONNX TopK requires at least two candidates. A singleton choice is already decided.
+    if (question.type === 'choice') {
+      const criteria = (question as { criteria: Record<string, string> }).criteria;
+      const options = Object.keys(criteria);
+      if (!options.length) throw new Error(`La domanda ${name} non contiene opzioni.`);
+      if (options.length === 1) {
+        const selected = options[0]!;
+        answers[name] = { type: 'choice', choice: selected, confidence: 1, probabilities: { [selected]: 1 } } as Answer;
+        continue;
+      }
+    }
     const result = await runtime.systemOne(compactState, { [name]: prepareLayaQuestion(name, question) });
     model = result.model;
     Object.assign(answers, result.answers);

@@ -36,3 +36,25 @@ checked against the reference's actual distance.
   constraint guard fixes that case and has a regression test.
 - These two cases are smoke tests, not a broad language accuracy benchmark. Jev online was
   not exercised in this validation. Scripts/evaluate-direction.ts runs the local Laya cases.
+
+## Stroke interpretation fix, 2026-09-24
+
+The presence of a gesture no longer overrides a recognized action with follow_drawn_path.
+Text keeps the action meaning; stroke coordinates supply its trajectory. Family routing
+can choose a semantic family for a sketch, and the compiler retains that decision.
+Only the action that consumes the gesture receives it during interpretation.
+
+Vertical paths use world Z. When captured perspective metadata is available, screen rays
+intersect a vertical plane through the selected target. This preserves the projected
+sketch shape and scale from an oblique free view. Near-parallel views use the existing
+scaled mapping with world Z; a 2D top view alone cannot uniquely determine height.
+No movement primitive, input control, or user-facing mode was added.
+
+Singleton Laya choice questions now resolve locally (the only valid choice) instead of
+calling ONNX TopK, which requires at least two candidates. Empty choices are rejected.
+
+Validation: 199 tests passed, including perspective reconstruction of a drawn jump,
+world Z from a top view, and singleton choices without native inference. Local Laya
+also passed the complete planner for `il cubo salta` with a projected three-point arc
+(start Z=1, apex Z=3, landing Z=1), and `segui il tratto`. These are targeted regressions,
+not a general language/gesture benchmark. Jev online was not exercised.

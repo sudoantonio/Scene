@@ -330,6 +330,33 @@ describe('Jev action compiler', () => {
     expect(endRotation).toEqual([0, 0, 90]);
   });
 
+  it('keeps jump intent and reconstructs the drawn arc on a world-vertical plane', () => {
+    const project = createProject(); project.settings.frameEnd = 100;
+    const subject = createSceneObject('cube', 1); project.objects.push(subject);
+    const view = new THREE.PerspectiveCamera(45, 16 / 9, .01, 1000);
+    view.position.set(0, -8, 1 + 8 / Math.sqrt(3));
+    view.rotation.set(Math.PI / 3, 0, 0); view.updateMatrixWorld(true);
+    const intended: [number, number, number][] = [[0, 0, 1], [.5, 0, 3], [1, 0, 1]];
+    const points = intended.map((point) => { const p = new THREE.Vector3(...point).project(view); return [(p.x + 1) / 2, (1 - p.y) / 2] as [number, number]; });
+    const input = { objectId: subject.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: intended[0], instruction: 'il cubo salta', gesture: { target: 'subject' as const, points, viewMode: 'free' as const, viewRotation: [60, 0, 0] as [number, number, number], viewPosition: view.position.toArray() as [number, number, number], verticalFovDegrees: 45, aspect: 16 / 9 } };
+    expect(resolveMotionFamily(input, 'path')).toBe('vertical');
+    const plan = compileJevAction(project, subject, input, response({ motion: { type: 'choice', choice: 'follow_drawn_path', confidence: .9, probabilities: { follow_drawn_path: .9 } } }));
+    expect(plan.decision.action).toBe('jump');
+    const actual = plan.blenderPlan.operations.filter((op) => op.property === 'position');
+    expect(actual).toHaveLength(3);
+    actual.forEach((op, i) => op.value.vector!.forEach((value, axis) => expect(value).toBeCloseTo(intended[i][axis], 5)));
+  });
+
+  it('uses world height for a drawn jump even from a top view without projection data', () => {
+    const project = createProject(); project.settings.frameEnd = 100;
+    const subject = createSceneObject('cube', 1); project.objects.push(subject);
+    const result = compileJevAction(project, subject, { objectId: subject.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: [0, 0, 1], instruction: 'il cubo salta', gesture: { target: 'subject', viewRotation: [0, 0, 0], points: [[.5, .7], [.5, .2], [.5, .7]] } }, response());
+    const points = result.blenderPlan.operations.filter((op) => op.property === 'position').map((op) => op.value.vector!);
+    expect(points[1][2]).toBeGreaterThan(1);
+    expect(points.every((point) => point[0] === 0 && point[1] === 0)).toBe(true);
+    expect(points.at(-1)![2]).toBe(1);
+  });
+
   it('turns a curved canvas stroke into intermediate subject keyframes', () => {
     const project = createProject();
     project.settings.frameEnd = 100;

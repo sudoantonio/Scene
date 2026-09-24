@@ -11,6 +11,19 @@ describe('Laya local runtime', () => {
     expect(layaModelUrl('laya.onnx')).toBe('https://huggingface.co/receptron/laya-onnx/resolve/main/laya.onnx');
   });
 
+  it('resolves singleton choices without invoking ONNX TopK', async () => {
+    let calls = 0;
+    const runtime = { systemOne: async () => { calls++; throw new Error('TopK needs two options'); } };
+    const result = await runLayaQuestions(runtime as unknown as LayaSystemOneRuntime, {}, {
+      motion: { type: 'choice', instructions: 'Path', criteria: { follow_drawn_path: 'Follow stroke' } },
+      reference_object: { type: 'choice', instructions: 'Reference', criteria: { none: 'None' } },
+    });
+    expect(calls).toBe(0);
+    expect(result.answers.motion).toMatchObject({ choice: 'follow_drawn_path', confidence: 1 });
+    expect(result.answers.reference_object).toMatchObject({ choice: 'none' });
+    expect(result.usage.input_tokens).toBe(0);
+  });
+
   it('runs every question in its own inference batch and merges the answers', async () => {
     const calls: string[][] = [];
     const states: unknown[] = [];

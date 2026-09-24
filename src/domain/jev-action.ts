@@ -203,7 +203,7 @@ function criteriaForFamily(family: MotionFamily | undefined, cameraOnly: boolean
 export function resolveMotionFamily(input: Pick<JevActionInput, 'instruction' | 'target' | 'gesture'>, predicted?: string): MotionFamily {
   const cameraOnly = input.target === 'camera';
   const local = motionFamily(naturalMotionPrimitive(input.instruction, cameraOnly, input.gesture), cameraOnly);
-  if (local) return local;
+  if (local && local !== 'path') return local;
   const parsed = MotionFamilySchema.safeParse(predicted);
   const allowed = cameraOnly ? cameraFamilyCriteria : subjectFamilyCriteria;
   if (parsed.success && parsed.data in allowed) return parsed.data;
@@ -275,7 +275,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
   const standardContent = project.animationStandard?.content ?? '';
   const naturalIntent = naturalMotionIntent(input.instruction, input.target === 'camera');
   const naturalMotion = naturalMotionPrimitive(input.instruction, input.target === 'camera', input.gesture);
-  const naturalFamily = motionFamily(naturalMotion, input.target === 'camera');
+  const naturalFamily = naturalMotion === 'follow_drawn_path' ? undefined : motionFamily(naturalMotion, input.target === 'camera');
   return {
     model: 'jev-latest',
     state: {
@@ -296,7 +296,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       },
       instruction: input.instruction,
       context_instruction: input.contextInstruction,
-      natural_language_hints: { family: naturalFamily ?? null, motion: naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
+      natural_language_hints: { family: naturalFamily ?? null, motion: naturalMotion === 'follow_drawn_path' && family && family !== 'path' ? null : naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
       selected_motion_family: family ?? null,
       camera_action_hint: explicitCameraMotion(input.instruction, input.target === 'camera') ?? null,
       current_frame: input.frame,
@@ -309,6 +309,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       drawn_stroke_target_preference: input.gesture?.target ?? null,
       coordinate_system: 'Destra e sinistra seguono l’orizzontale dell’inquadratura. Avanti entra nella scena allontanandosi dalla camera; indietro si avvicina alla camera. Alto e basso seguono Z. Le distanze sono metri.',
       spatial_rules: 'I movimenti ordinari restano sul piano XY e mantengono la quota Z iniziale. Z cambia solo con una richiesta esplicita di salita, discesa o salto. Un’orbita camera chiusa resta su un piano orizzontale, conserva il raggio camera-soggetto e mantiene il soggetto al centro.',
+      stroke_interpretation: input.gesture ? 'Il testo definisce il tipo di azione, il tratto ne definisce la geometria. Un salto disegnato è un salto con quota Z variabile; camminare resta sul piano XY. Non scegliere follow_drawn_path soltanto perché esiste un disegno. Le coordinate del tratto sono normalizzate sullo schermo: Y cresce verso il basso.' : null,
       decision_rules: 'Scegli una sola primitiva semantica che rappresenti l’azione richiesta in questo segmento. Scene convertirà la primitiva in coordinate, rotazioni e keyframe deterministici. Non animare elementi diversi dal soggetto selezionato.',
       constraint: input.target === 'camera'
         ? 'La camera attiva è il soggetto selezionato: interpreta la richiesta esclusivamente come movimento o rotazione della camera. Non animare altri elementi.'
@@ -355,7 +356,7 @@ export function jevMotionFamilyRequest(project: AbacoProject, object: SceneObjec
     questions: {
       motion_family: {
         type: 'choice',
-        instructions: input.target === 'camera' ? 'A quale famiglia appartiene il movimento principale della camera?' : 'A quale famiglia appartiene il movimento principale del soggetto?',
+        instructions: input.target === 'camera' ? 'A quale famiglia appartiene il movimento della camera descritto dal testo e illustrato dal tratto?' : 'A quale famiglia appartiene l’azione descritta dal testo e illustrata dal tratto? Un disegno non sostituisce il significato del testo: saltare resta un salto.',
         criteria: input.target === 'camera' ? cameraFamilyCriteria : subjectFamilyCriteria,
       },
     },
@@ -639,10 +640,33 @@ function simplifyStroke(points: [number, number][], maxPoints: number) {
   return simplified;
 }
 
-function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 12, projection?: { horizontalSpan: number; verticalSpan: number }) {
+// Recover the sketched vertical path in world space using the view that captured it.
+// A nearly top-down view cannot determine height: retain world Z in the stable fallback.
+function verticalStrokeProjector(gesture: NonNullable<JevActionInput['gesture']>, origin: Vec3, right: Vec3) {
+  if (!gesture.viewPosition || !gesture.viewRotation || !gesture.verticalFovDegrees || !gesture.aspect) return undefined;
+  const camera = new THREE.PerspectiveCamera(gesture.verticalFovDegrees, gesture.aspect, .01, 10000);
+  camera.position.set(...gesture.viewPosition);
+  camera.rotation.set(...gesture.viewRotation.map(THREE.MathUtils.degToRad) as Vec3);
+  camera.updateMatrixWorld(true);
+  const normal = new THREE.Vector3(...right).cross(new THREE.Vector3(0, 0, 1)).normalize();
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, new THREE.Vector3(...origin));
+  const raycaster = new THREE.Raycaster();
+  const points = new Map<string, Vec3>();
+  for (const point of gesture.points) {
+    raycaster.setFromCamera(new THREE.Vector2(point[0] * 2 - 1, 1 - point[1] * 2), camera);
+    if (Math.abs(raycaster.ray.direction.dot(normal)) < .05) return undefined;
+    const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+    if (!hit || hit.distanceTo(camera.position) > 1000) return undefined;
+    points.set(point.join(','), hit.toArray() as Vec3);
+  }
+  return (point: [number, number]) => points.get(point.join(','))!;
+}
+
+function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 12, projection?: { horizontalSpan: number; verticalSpan: number }, projectPoint?: (point: [number, number]) => Vec3) {
   const samples = simplifyStroke(points, Math.min(maxPoints, points.length));
   const first = samples[0]!.point;
-  const rawOffsets = samples.map(({ point: [x, y] }) => add(
+  const projectedStart = projectPoint?.(first);
+  const rawOffsets = samples.map(({ point: [x, y] }) => projectedStart && projectPoint ? add(projectPoint([x, y]), scale(projectedStart, -1)) : add(
     scale(horizontal, (x - first[0]) * (projection?.horizontalSpan ?? 1)),
     scale(vertical, (first[1] - y) * (projection?.verticalSpan ?? 1)),
   ));
@@ -899,7 +923,6 @@ function naturalMotionPrimitive(instruction: string, cameraOnly: boolean, gestur
   const intent = naturalMotionIntent(instruction, false);
   const [forward, right, vertical] = intent.axes.translation;
   const [roll, pitch, yaw] = intent.axes.rotation;
-  if (gesture) return 'follow_drawn_path';
   const radial = explicitCameraDirection(instruction);
   if (radial === 'away_camera') return 'move_away_camera';
   if (radial === 'toward_camera') return 'move_toward_camera';
@@ -922,6 +945,7 @@ function naturalMotionPrimitive(instruction: string, cameraOnly: boolean, gestur
   if (forward === -1) return 'move_backward';
   if (right === 1) return 'move_right';
   if (right === -1) return 'move_left';
+  if (gesture) return 'follow_drawn_path';
   return undefined;
 }
 
@@ -970,7 +994,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const localMotion = naturalMotionPrimitive(input.instruction, cameraOnly, input.gesture);
   const parsedModelMotion = SemanticMotionSchema.safeParse(answers.motion?.choice);
   const modelMotion = parsedModelMotion.success ? parsedModelMotion.data : undefined;
-  const motion = localMotion ?? modelMotion;
+  const motion = localMotion === 'follow_drawn_path' && modelMotion && modelMotion !== 'hold' ? modelMotion : localMotion ?? modelMotion;
   const semanticIntent = motion ? semanticMotionIntent(motion) : undefined;
   const referenceObject = resolveInstructionReference(project, input, input.objectId, answers.reference_object?.choice);
   const requiresReference = motion === 'move_toward_object' || motion === 'move_away_object' || motion === 'look_at_object';
@@ -1032,8 +1056,8 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const horizontal: Vec3 = directionChoice === 'up' || directionChoice === 'down' ? [0, 0, 0] : scale(direction, distance);
     endPosition = add(startPosition, horizontal);
   }
-  const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? drawnUp : drawnForward;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition)) : undefined;
+  const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? [0, 0, 1] : drawnForward;
+  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition), ['jump', 'rise', 'descend'].includes(action) ? verticalStrokeProjector(input.gesture, startPosition, drawnRight) : undefined) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -1095,7 +1119,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
-        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? drawnUp : drawnForward, cameraDistance, Math.min(12, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart))
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? [0, 0, 1] : drawnForward, cameraDistance, Math.min(12, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart), ['rise', 'descend'].includes(cameraAction) ? verticalStrokeProjector(input.gesture, cameraTransform.position, drawnRight) : undefined)
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];

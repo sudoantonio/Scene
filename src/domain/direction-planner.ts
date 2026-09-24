@@ -87,7 +87,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
   const drafts = [];
   // Resolve the entire request before mutating or compiling any scene state.
   for (const [draftIndex, clause] of interpreted.actions.entries()) {
-    const actionInput = { ...input, instruction: clause.instruction, contextInstruction: fullInstruction };
+    const actionInput = { ...input, gesture: draftIndex === 0 ? input.gesture : undefined, instruction: clause.instruction, contextInstruction: fullInstruction };
     const object = input.target === 'camera' ? undefined : selected;
     const stored = previousPlan?.actions[draftIndex];
     let raw;
