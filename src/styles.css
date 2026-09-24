@@ -2071,6 +2071,16 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-light :is(.app-shell, .workspace, .slim-headbar, .timeline, .timeline-toolbar) { background: #eeeeeb !important; }
 .decision-engine-switch, .jev-composer-tool, .jev-composer-send { transform: translateY(-3px); }
 
+/* Follow-up Jev/Laya: modello e tipo di intervento restano nello stesso input. */
+.jev-composer-input { position: relative; grid-template-columns: 68px 142px minmax(0, 1fr) 26px 26px; }
+.jev-composer-input textarea { grid-column: 1 / 6; padding-right: 24px; }
+.decision-engine-switch { grid-column: 1; }
+.jev-direction-mode { grid-column: 2; grid-row: 2; width: 142px; height: 26px; padding: 0 20px 0 4px; color: #bdbdb8; background: transparent; border: 0; font-size: 11px; transform: translateY(-3px); }
+.jev-composer-tool { grid-column: 4; }
+.jev-composer-send { grid-column: 5; }
+.jev-composer-collapse { position: absolute; top: 8px; right: 9px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; color: #8f8f8a; background: transparent; border: 0; }
+.jev-composer-collapse:hover { color: #e2e2dc; }
+
 /* Timeline ridotta: scala leggibile, contenuto a filo e comando scena in evidenza. */
 .timeline.collapsed { border-bottom: 0 !important; box-shadow: none !important; }
 .timeline.collapsed .timeline-mini-row { padding-left: 0; padding-right: 0; }

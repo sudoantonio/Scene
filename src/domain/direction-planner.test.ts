@@ -80,6 +80,35 @@ describe('Persistent direction planning', () => {
     expect(evaluateTransform(final.objects[0]!, 90).position[1]).toBeCloseTo(-7);
   });
 
+  it('continues an existing direction and retains the earlier actions as model context', async () => {
+    const { project, input } = fixture();
+    const first = await planDirection(project, input, runner);
+    const direction = first.blenderPlan.directionPlan!;
+    const updated = applyPlan(project, first.blenderPlan);
+    updated.directionPlans = [direction];
+    const continued = await planDirection(updated, { ...input, instruction: 'poi si avvicina al personaggio', directionPlanId: direction.id, directionMode: 'continue' }, runner);
+    const result = continued.blenderPlan.directionPlan!;
+    expect(result.id).toBe(direction.id);
+    expect(result.actions.map((action) => action.motion)).toEqual(['dolly_in', 'dolly_out', 'dolly_in']);
+    expect(result.actions.slice(0, 2).map((action) => action.id)).toEqual(direction.actions.map((action) => action.id));
+    expect(result.prompts?.map((prompt) => prompt.mode)).toEqual(['new', 'continue']);
+    expect(result.endFrame).toBeLessThanOrEqual(90);
+  });
+
+  it('adds a follow-up constraint without turning it into another movement', async () => {
+    const { project, input } = fixture();
+    const first = await planDirection(project, input, runner);
+    const direction = first.blenderPlan.directionPlan!;
+    const updated = applyPlan(project, first.blenderPlan);
+    updated.directionPlans = [direction];
+    const refined = await planDirection(updated, { ...input, instruction: 'mantieni sempre il personaggio inquadrato', directionPlanId: direction.id, directionMode: 'refine' }, runner);
+    const result = refined.blenderPlan.directionPlan!;
+    expect(result.actions).toHaveLength(2);
+    expect(result.actions.every((action) => action.keepInFrame)).toBe(true);
+    expect(result.constraints).toContain('mantieni sempre il personaggio inquadrato');
+    expect(result.prompts?.at(-1)).toEqual({ instruction: 'mantieni sempre il personaggio inquadrato', mode: 'refine' });
+  });
+
   it('does not apply a partial plan when requested durations exceed the scene', async () => {
     const { project, input } = fixture();
     input.instruction = 'la camera si avvicina in 4 secondi e poi si allontana in 4 secondi dal personaggio';

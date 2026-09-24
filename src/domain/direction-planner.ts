@@ -77,9 +77,27 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
   const end = (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
   const previousPlan = input.directionPlanId ? project.directionPlans?.find((plan) => plan.id === input.directionPlanId && plan.objectId === input.objectId && plan.sceneId === input.sceneId) : undefined;
   if (input.editActionId && !previousPlan?.actions.some((action) => action.id === input.editActionId)) throw new Error('Il movimento da modificare non esiste più.');
-  const interpreted = previousPlan && input.editActionId
-    ? { actions: previousPlan.actions.map((action) => ({ instruction: action.id === input.editActionId ? input.instruction : action.instruction, relation: action.relation })), constraints: previousPlan.constraints ?? [] }
-    : await interpretDirection(input.instruction, run);
+  const directionMode = previousPlan ? (input.editActionId ? 'correct' : input.directionMode ?? 'refine') : 'new';
+  let interpreted;
+  if (previousPlan && input.editActionId) {
+    interpreted = { actions: previousPlan.actions.map((action) => ({ instruction: action.id === input.editActionId ? input.instruction : action.instruction, relation: action.relation })), constraints: previousPlan.constraints ?? [] };
+  } else if (previousPlan && directionMode === 'continue') {
+    const continuationInstruction = input.instruction.replace(/^\s*(?:e\s+poi|poi|quindi|successivamente|dopodich[eé])\s+/iu, '');
+    const continuation = await interpretDirection(continuationInstruction, run);
+    interpreted = {
+      actions: [
+        ...previousPlan.actions.map((action) => ({ instruction: action.instruction, relation: action.relation })),
+        ...continuation.actions.map((action, index) => ({ ...action, relation: index === 0 ? 'then' as const : action.relation })),
+      ],
+      constraints: [...new Set([...(previousPlan.constraints ?? []), ...continuation.constraints])],
+    };
+  } else if (previousPlan && directionMode === 'refine') {
+    const previousActions = previousPlan.actions.map((action, actionIndex) => `${actionIndex ? action.relation === 'with' ? 'mentre ' : 'poi ' : ''}${action.instruction}`).join(' ');
+    const refinement = await interpretDirection(`${previousActions}, ${input.instruction}`, run);
+    interpreted = { ...refinement, constraints: [...new Set([...(previousPlan.constraints ?? []), ...refinement.constraints])] };
+  } else {
+    interpreted = await interpretDirection(input.instruction, run);
+  }
   if (previousPlan) input = { ...input, frame: previousPlan.startFrame, gesture: input.gesture ?? JevActionInputSchema.shape.gesture.parse(previousPlan.gesture) };
   const fullInstruction = previousPlan ? interpreted.actions.map((clause, index) => `${index ? clause.relation === 'with' ? 'mentre ' : 'poi ' : ''}${clause.instruction}`).join(' ') + (interpreted.constraints.length ? ', ' + interpreted.constraints.join(', ') : '') : input.instruction;
   const selected = project.objects.find((object) => object.id === input.objectId)!;
@@ -91,14 +109,16 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
     const object = input.target === 'camera' ? undefined : selected;
     const stored = previousPlan?.actions[draftIndex];
     let raw;
-    if (stored?.decision && stored.id !== input.editActionId) raw = JevActionResponseSchema.parse(stored.decision);
+    if (stored?.decision && stored.id !== input.editActionId && stored.instruction === clause.instruction) raw = JevActionResponseSchema.parse(stored.decision);
     else {
       const family = familySchema.parse(await run(jevMotionFamilyRequest(project, object, actionInput))).answers.motion_family.choice;
       raw = JevActionResponseSchema.parse(await run(jevActionRequest(project, object, actionInput, resolveMotionFamily(actionInput, family))));
     }
     const seconds = explicitSeconds(clause.instruction);
     const inferred = [.25, .5, 1, 2, 4][Math.max(0, Math.min(4, Math.round(raw.answers.duration.score)))]!;
-    drafts.push({ clause, raw, stored, frames: stored && stored.id !== input.editActionId ? stored.endFrame - stored.startFrame : Math.max(1, Math.round((seconds ?? inferred) * project.settings.fps)), explicit: seconds !== undefined || Boolean(stored && stored.id !== input.editActionId) });
+    const unchanged = stored && stored.id !== input.editActionId && stored.instruction === clause.instruction;
+    const preserveTiming = unchanged && directionMode !== 'continue';
+    drafts.push({ clause, raw, stored: unchanged || stored?.id === input.editActionId ? stored : undefined, frames: unchanged ? stored.endFrame - stored.startFrame : Math.max(1, Math.round((seconds ?? inferred) * project.settings.fps)), explicit: seconds !== undefined || Boolean(preserveTiming || (unchanged && stored.durationExplicit)), durationExplicit: seconds !== undefined || Boolean(unchanged && stored.durationExplicit) });
   }
   const groups: typeof drafts[] = [];
   for (const draft of drafts) {
@@ -106,7 +126,11 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
     else groups.push([draft]);
   }
   const sizes = allocateDirectionFrames(groups.map((group) => ({ frames: Math.max(...group.map((draft) => draft.frames)), explicit: group.some((draft) => draft.explicit) })), end - input.frame);
-  const direction: DirectionPlan = { id: previousPlan?.id ?? crypto.randomUUID(), constraints: interpreted.constraints, gesture: input.gesture, sceneId: input.sceneId, objectId: input.objectId!, instruction: fullInstruction, startFrame: input.frame, endFrame: input.frame, actions: [] };
+  const direction: DirectionPlan = {
+    id: previousPlan?.id ?? crypto.randomUUID(), constraints: interpreted.constraints, gesture: input.gesture,
+    prompts: [...(previousPlan?.prompts ?? (previousPlan ? [{ instruction: previousPlan.instruction, mode: 'new' as const }] : [])), { instruction: input.instruction, mode: directionMode }],
+    sceneId: input.sceneId, objectId: input.objectId!, instruction: fullInstruction, startFrame: input.frame, endFrame: input.frame, actions: [],
+  };
   let working = project, frame = input.frame;
   const plans: JevActionPlan[] = [];
   for (const [groupIndex, group] of groups.entries()) {
@@ -124,7 +148,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
       // Stretch/compress the generated interval as a whole, preserving its internal timing.
       const last = Math.max(frame + 1, ...compiled.blenderPlan.operations.map((operation) => operation.frame));
       for (const operation of compiled.blenderPlan.operations) operation.frame = frame + Math.round((operation.frame - frame) * (actionUntil - frame) / (last - frame));
-      direction.actions.push({ id: draft.stored?.id ?? crypto.randomUUID(), decision: draft.raw, instruction: draft.clause.instruction, motion: compiled.decision.motion, relation: draft.clause.relation, startFrame: frame, endFrame: actionUntil, referenceId: ref?.id ?? compiled.decision.reference?.objectId, keepInFrame: interpreted.constraints.length > 0, distanceMeters: compiled.decision.distanceMeters, durationSeconds: (actionUntil - frame) / project.settings.fps });
+      direction.actions.push({ id: draft.stored?.id ?? crypto.randomUUID(), decision: draft.raw, instruction: draft.clause.instruction, motion: compiled.decision.motion, relation: draft.clause.relation, startFrame: frame, endFrame: actionUntil, referenceId: ref?.id ?? compiled.decision.reference?.objectId, keepInFrame: interpreted.constraints.length > 0, distanceMeters: compiled.decision.distanceMeters, durationSeconds: (actionUntil - frame) / project.settings.fps, durationExplicit: draft.durationExplicit });
       groupPlans.push(compiled);
     }
     const combined = groupPlans.length > 1 ? composeParallelJevPlans(working, groupPlans, group.map((draft) => draft.clause.instruction).join(' mentre ')) : groupPlans[0]!;

@@ -162,11 +162,15 @@ export const DirectionPlanSchema = z.object({
   instruction: z.string(), startFrame: z.number().int(), endFrame: z.number().int(),
   constraints: z.array(z.string()).optional(),
   gesture: z.unknown().optional(),
+  prompts: z.array(z.object({
+    instruction: z.string(),
+    mode: z.enum(['new', 'refine', 'continue', 'correct']),
+  })).optional(),
   actions: z.array(z.object({
     id: z.string().uuid(), instruction: z.string(), motion: z.string(),
     relation: z.enum(['then', 'with']), startFrame: z.number().int(), endFrame: z.number().int(),
     referenceId: z.string().uuid().optional(), keepInFrame: z.boolean(),
-    distanceMeters: z.number(), durationSeconds: z.number(),
+    distanceMeters: z.number(), durationSeconds: z.number(), durationExplicit: z.boolean().optional(),
     decision: z.record(z.unknown()).optional(),
   })),
 });

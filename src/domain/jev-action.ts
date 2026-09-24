@@ -94,6 +94,7 @@ export const JevActionInputSchema = z.object({
   contextInstruction: z.string().optional(),
   directionPlanId: z.string().uuid().optional(),
   editActionId: z.string().uuid().optional(),
+  directionMode: z.enum(['new', 'refine', 'continue']).optional(),
   referenceId: z.string().uuid().optional(),
   endFrame: z.number().int().positive().optional(),
   gesture: z.object({
