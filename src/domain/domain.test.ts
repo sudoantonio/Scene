@@ -86,6 +86,21 @@ describe('AbacoSceneV1', () => {
     expect(after).toBeGreaterThan(.5);
   });
 
+  it('vincola ogni segmento camera ai suoi due keyframe senza deviazioni inventate', () => {
+    const camera = createSceneObject('camera', 1);
+    camera.keyframes = [
+      { id: crypto.randomUUID(), frame: 1, property: 'position', value: [0, 0, 5], interpolation: 'bezier', source: 'user', purpose: 'motion', commentIds: [] },
+      { id: crypto.randomUUID(), frame: 11, property: 'position', value: [10, 0, 5], interpolation: 'bezier', source: 'user', purpose: 'motion', commentIds: [] },
+      { id: crypto.randomUUID(), frame: 21, property: 'position', value: [10, 10, 15], interpolation: 'bezier', source: 'user', purpose: 'motion', commentIds: [] },
+    ];
+
+    const firstSegment = evaluateTransform(camera, 6).position;
+    const secondSegment = evaluateTransform(camera, 16).position;
+
+    expect(firstSegment).toEqual([5, 0, 5]);
+    expect(secondSegment).toEqual([10, 5, 10]);
+  });
+
   it('mantiene un punto per la sosta configurata e poi riparte', () => {
     const object = createSceneObject('cube', 1);
     object.keyframes = [

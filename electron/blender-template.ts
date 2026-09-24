@@ -111,7 +111,32 @@ def interpolation_name(value):
 def set_interpolation(obj, frame, mode):
     for curve in action_fcurves(obj):
         for point in curve.keyframe_points:
-            if abs(point.co.x - frame) < 0.001: point.interpolation = interpolation_name(mode)
+            if abs(point.co.x - frame) < 0.001:
+                point.interpolation = interpolation_name(mode)
+                # Blender's automatic Bezier handles may overshoot a camera
+                # coordinate because of neighbouring keys. AUTO_CLAMPED keeps
+                # every camera segment inside the values of its two endpoints.
+                if obj.type == "CAMERA" and mode == "bezier":
+                    point.handle_left_type = "AUTO_CLAMPED"
+                    point.handle_right_type = "AUTO_CLAMPED"
+
+def constrain_camera_segments(obj):
+    if obj.type != "CAMERA": return
+    for curve in action_fcurves(obj):
+        if curve.data_path not in {"location", "rotation_euler"}: continue
+        points = list(curve.keyframe_points)
+        for index, point in enumerate(points):
+            # A smooth camera segment uses horizontal cubic handles. Its value
+            # therefore depends only on its two endpoints (smoothstep), exactly
+            # like the Scene preview, and never on a neighbouring keyframe.
+            if index > 0 and points[index - 1].interpolation == "BEZIER":
+                previous = points[index - 1]
+                point.handle_left_type = "FREE"
+                point.handle_left = (point.co.x - (point.co.x - previous.co.x) / 3, point.co.y)
+            if index + 1 < len(points) and point.interpolation == "BEZIER":
+                following = points[index + 1]
+                point.handle_right_type = "FREE"
+                point.handle_right = (point.co.x + (following.co.x - point.co.x) / 3, point.co.y)
 
 def apply_animation(obj, data):
     obj.hide_render = not data.get("visible", True)
@@ -136,6 +161,7 @@ def apply_animation(obj, data):
             elif prop == "scale": obj.scale = value; obj.keyframe_insert("scale", frame=hold_frame)
             elif prop == "lens" and obj.type == "CAMERA": obj.data.lens = value; obj.data.keyframe_insert("lens", frame=hold_frame)
             set_interpolation(obj, hold_frame, mode)
+    constrain_camera_segments(obj)
 
 def create_blend_asset(data):
     asset = data.get("asset", {})

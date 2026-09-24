@@ -22,17 +22,21 @@ export function evaluateProperty(object: SceneObject, property: AnimProperty, fr
   const holdUntil = Math.min(next.frame, previous.frame + (previous.holdFrames ?? 0));
   if (frame <= holdUntil) return previous.value;
   const segmentT = clamp01((frame - holdUntil) / Math.max(1, next.frame - holdUntil));
+  // A camera segment must be completely defined by its two visible keyframes.
+  // Spatial Catmull-Rom also considers neighbouring points and can therefore
+  // introduce an unrequested rise, dip or lateral overshoot between them.
+  const useSpatialSpline = object.kind !== 'camera'
+    && property === 'position'
+    && previous.interpolation === 'bezier'
+    && (previous.purpose === 'motion' || next.purpose === 'motion');
   // Catmull-Rom already supplies a continuous tangent through motion points.
   // Applying smoothstep too would force velocity to zero at every keyframe.
-  const t = property === 'position' && previous.interpolation === 'bezier'
-    && (previous.purpose === 'motion' || next.purpose === 'motion')
-    ? segmentT
-    : ease(segmentT, previous.interpolation);
+  const t = useSpatialSpline ? segmentT : ease(segmentT, previous.interpolation);
   if (typeof previous.value === 'number' && typeof next.value === 'number') return mix(previous.value, next.value, t);
   if (!Array.isArray(previous.value) || !Array.isArray(next.value)) return previous.value;
   const previousVector = previous.value as Vec3;
   const nextVector = next.value as Vec3;
-  if (property === 'position' && previous.interpolation === 'bezier' && (previous.purpose === 'motion' || next.purpose === 'motion')) {
+  if (useSpatialSpline) {
     const before = (keys[Math.max(0, nextIndex - 2)].value as Vec3) ?? previousVector;
     const afterCandidate = keys[Math.min(keys.length - 1, nextIndex + 1)];
     const after = afterCandidate?.purpose === 'motion' ? afterCandidate.value as Vec3 : nextVector;
