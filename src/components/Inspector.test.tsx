@@ -77,7 +77,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Laya', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Laya', commentIds: [] }] }, performance: { engine: 'laya', totalMs: 180, decisionMs: 120, modelLoadMs: 0, warm: true } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    fireEvent.click(screen.getByRole('button', { name: 'Laya' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Modello azione' }), { target: { value: 'laya' } });
     const input = screen.getByRole('textbox', { name: 'Azione Laya' });
     fireEvent.change(input, { target: { value: 'vai avanti' } });
     fireEvent.keyDown(input, { key: 'Enter' });

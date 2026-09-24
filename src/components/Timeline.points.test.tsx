@@ -45,8 +45,8 @@ describe('Punti e maniglie del movimento', () => {
   });
 
   it('al secondo clic su una scena torna al suo inizio', () => {
-    render(<Timeline />);
-    const scene = screen.getByTitle('Scena 1');
+    const { container } = render(<Timeline />);
+    const scene = container.querySelector<HTMLButtonElement>('.scene-image[title="Scena 1"]')!;
     vi.spyOn(scene, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
     fireEvent.click(scene, { clientX: 360 });
     expect(useEditor.getState().currentFrame).toBe(37);
@@ -102,12 +102,12 @@ describe('Punti e maniglie del movimento', () => {
   it('a timeline chiusa mostra tutte le scene nella barra cumulativa', () => {
     useEditor.getState().addShot();
     const { container } = render(<Timeline collapsed />);
-    const overview = screen.getByRole('group', { name: 'Barra cumulativa delle scene' });
+    const overview = screen.getByRole('group', { name: 'Timeline ridotta delle scene' });
     expect(overview).toBeVisible();
     expect(container.querySelectorAll('.collapsed-scene-segment')).toHaveLength(2);
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
     expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Registra movimenti' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla barra cumulativa' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla timeline ridotta' }));
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
   });
 

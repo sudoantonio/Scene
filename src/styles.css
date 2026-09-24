@@ -1211,6 +1211,34 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .track-comment-composer .icon { width: 28px; height: 28px; }
 .timeline-comment-badge { width: 18px; height: 18px; padding: 0; display: inline-grid; flex: 0 0 auto; place-items: center; color: #564a18; background: rgba(255,255,255,.48); border: 1px solid rgba(72,65,35,.22) !important; cursor: pointer; }
 .timeline-comment-badge:hover, .timeline-comment-badge:focus-visible { color: #241f09; background: rgba(255,255,255,.82); border-color: rgba(72,65,35,.46) !important; outline: none; }
+
+/* Timeline: una riga autonoma per l'anteprima delle scene, poi i controlli. */
+.timeline { grid-template-rows: 78px minmax(0, 1fr); }
+.timeline.collapsed { grid-template-rows: 38px; }
+.timeline-toolbar { display: grid; grid-template-columns: 1fr; grid-template-rows: 32px 46px; gap: 0; padding: 0; }
+.timeline.collapsed .timeline-toolbar { grid-template-rows: 38px; }
+.timeline-mini-row { min-width: 0; height: 32px; padding: 6px 12px 4px; background: inherit; }
+.timeline.collapsed .timeline-mini-row { height: 38px; padding-block: 9px; }
+.timeline-mini-row .collapsed-scene-row { width: 100%; max-width: none; grid-template-columns: minmax(0, 1fr) 22px; gap: 6px; }
+.collapsed-scene-overview { height: 22px; border-radius: 0; box-shadow: none; }
+.collapsed-add-scene { width: 22px; height: 22px; border-radius: 0; }
+.timeline-control-row { min-width: 0; height: 46px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; padding: 0 13px 7px; border-top: 1px solid rgba(0,0,0,.14); }
+.timeline-center-stack { grid-column: 2; grid-row: auto; align-self: end; }
+.timeline-actions { grid-column: 3; align-self: end; }
+.timeline-context { align-self: end; min-height: 28px; }
+.timeline .scene-clip, .timeline .motion-segment, .timeline .scene-image { border-radius: 0 !important; }
+.timeline-scroll { grid-template-columns: 180px max-content; min-width: 0; }
+.timeline-scroll > .ruler, .timeline-scroll > .track { width: max(var(--timeline-content-width), 800px); }
+
+/* Input AI: un solo pannello, senza icona, bordo o doppio sfondo. */
+.jev-composer-input { height: 42px; padding: 5px 7px; grid-template-columns: 68px minmax(0, 1fr) 30px 30px; grid-template-rows: 30px; gap: 6px; background: rgba(37,37,37,.97); border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.jev-composer-input:focus-within { box-shadow: none; }
+.jev-composer-mark { display: none; }
+.decision-engine-switch { grid-column: 1; grid-row: 1; width: 68px; height: 30px; padding: 0 22px 0 8px; color: #d8d8d5; background: transparent; border: 0; border-radius: 0; font-size: 11px; }
+.jev-composer-input textarea { grid-column: 2; grid-row: 1; height: 30px; min-height: 30px; max-height: 30px; padding: 5px 0; background: transparent; }
+.jev-composer-tool { grid-column: 3; grid-row: 1; border-radius: 0; }
+.jev-composer-send { grid-column: 4; grid-row: 1; border-radius: 0; }
+.jev-floating-composer { width: min(680px, calc(100% - 32px)); }
 .clip-title { width: 100%; display: flex; align-items: center; gap: 5px; overflow: hidden; }
 .clip-title > :first-child { min-width: 0; }
 .scene-clip .clip-comment { margin-left: auto; }
@@ -1973,3 +2001,30 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .jev-direction-editor > div { display: grid; gap: 4px; max-height: 180px; overflow: auto; margin-top: 6px; }
 .jev-direction-editor button { text-align: left; padding: 6px 10px; background: #3b3b3b; color: inherit; border: 0; cursor: pointer; }
 .jev-direction-editor button:hover { background: #4b4b4b; }
+
+/* Layout definitivo della timeline: anteprima separata, controlli nella fascia inferiore. */
+.timeline { grid-template-rows: 78px minmax(0, 1fr); }
+.timeline.collapsed { grid-template-rows: 38px; }
+.timeline-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 32px 46px; gap: 0; padding: 0; }
+.timeline.collapsed .timeline-toolbar { grid-template-rows: 38px; }
+.timeline-mini-row { height: 32px; min-width: 0; padding: 6px 12px 4px; }
+.timeline.collapsed .timeline-mini-row { height: 38px; padding-block: 9px; }
+.timeline-mini-row .collapsed-scene-row { width: 100%; max-width: none; grid-template-columns: minmax(0, 1fr) 22px; gap: 6px; }
+.collapsed-scene-overview, .collapsed-add-scene { height: 22px; border-radius: 0; box-shadow: none; }
+.collapsed-add-scene { width: 22px; }
+.timeline-control-row { min-width: 0; height: 46px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; padding: 0 13px 7px; border-top: 1px solid rgba(0,0,0,.14); }
+.timeline-context, .timeline-center-stack, .timeline-actions { align-self: end; }
+.timeline-center-stack { grid-column: 2; grid-row: auto; }
+.timeline-actions { grid-column: 3; }
+.timeline-scroll { grid-template-columns: 180px max(800px, var(--timeline-content-width)); min-width: 0; }
+.timeline-scroll > .ruler, .timeline-scroll > .track { width: 100%; }
+.timeline .scene-clip, .timeline .motion-segment, .timeline .scene-image { border-radius: 0 !important; }
+
+/* Input AI piatto: il menu sceglie il motore nel medesimo pannello. */
+.jev-composer-input { height: 42px; padding: 5px 7px; grid-template-columns: 68px minmax(0, 1fr) 30px 30px; grid-template-rows: 30px; gap: 6px; background: rgba(37,37,37,.97); border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.jev-composer-input:focus-within { box-shadow: none; }
+.jev-composer-mark { display: none; }
+.decision-engine-switch { grid-column: 1; grid-row: 1; width: 68px; height: 30px; padding: 0 22px 0 8px; color: #d8d8d5; background: transparent; border: 0; border-radius: 0; font-size: 11px; }
+.jev-composer-input textarea { grid-column: 2; grid-row: 1; height: 30px; min-height: 30px; max-height: 30px; padding: 5px 0; background: transparent; }
+.jev-composer-tool { grid-column: 3; grid-row: 1; border-radius: 0; }
+.jev-composer-send { grid-column: 4; grid-row: 1; border-radius: 0; }

@@ -1,4 +1,4 @@
-import { ArrowUp, LoaderCircle, Pencil, Sparkles } from 'lucide-react';
+import { ArrowUp, LoaderCircle, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
@@ -105,10 +105,10 @@ export default function JevFloatingComposer() {
     {editingAction && !message && <div className="jev-composer-message">Modifica movimento <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Annulla</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}
     <div className="jev-composer-input" aria-label="Input azione" title={selected ? `Soggetto: ${selected.name}` : 'Seleziona il soggetto nella scena'}>
-      <Sparkles className="jev-composer-mark" size={17} />
-      <div className="decision-engine-switch" role="group" aria-label="Modello azione">
-        {(['jev', 'laya'] as const).map((option) => <button key={option} type="button" className={engine === option ? 'active' : ''} aria-pressed={engine === option} disabled={busy} onClick={() => setEngine(option)}>{option === 'jev' ? 'Jev' : 'Laya'}</button>)}
-      </div>
+      <select className="decision-engine-switch" aria-label="Modello azione" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as DecisionEngine)}>
+        <option value="jev">Jev</option>
+        <option value="laya">Laya</option>
+      </select>
       <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={!selected || busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
       <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={!selected || busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
       <button className="jev-composer-send" aria-label="Crea movimento" title="Crea movimento · Invio" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
