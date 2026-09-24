@@ -988,7 +988,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const selectedCameraKey = state.selectedMotion?.sceneId === sceneId && state.selectedMotion.keyframeId
         ? state.project.objects
           .find((object) => object.id === state.selectedMotion!.objectId && object.kind === 'camera')
-          ?.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.purpose === 'motion')
+          ?.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.property === 'position')
         : undefined;
       const selectedCameraFrame = selectedCameraKey?.frame === state.currentFrame ? selectedCameraKey.frame : undefined;
       const next = snapshot(state.project);
@@ -1007,7 +1007,7 @@ export const useEditor = create<EditorState>((set, get) => {
       // In quel passaggio gli id dei keyframe cambiano: il frame selezionato è
       // quindi il riferimento stabile per continuare a modificare lo stesso punto.
       const selectedKey = selectedCameraFrame === state.currentFrame
-        ? camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position' && key.purpose === 'motion')
+        ? camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position')
         : undefined;
       // Senza REC la camera modifica la posa base della scena, senza creare
       // punti intermedi. Un keyframe cliccato resta invece modificabile.

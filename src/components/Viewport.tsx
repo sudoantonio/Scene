@@ -960,6 +960,43 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   </group>;
 }
 
+function SelectionAiAnchor() {
+  const selectedId = useEditor((state) => state.selectedId);
+  const frame = useEditor((state) => state.currentFrame);
+  const object = useEditor((state) => state.project.objects.find((candidate) => candidate.id === state.selectedId
+    && candidate.kind !== 'audio'
+    && !candidate.kind.includes('light')
+    && !candidate.screenSpace));
+  const previous = useRef('');
+
+  useEffect(() => () => { window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: undefined })); }, []);
+  useFrame(({ camera, size }) => {
+    if (!selectedId || !object) {
+      if (previous.current !== 'hidden') {
+        previous.current = 'hidden';
+        window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: undefined }));
+      }
+      return;
+    }
+    const transform = evaluateTransform(object, frame);
+    const scale = Math.max(...transform.scale.map(Math.abs), .5);
+    const point = new THREE.Vector3(...transform.position);
+    point.z += object.kind === 'camera' ? .55 : THREE.MathUtils.clamp(scale * .65, .45, 2.5);
+    point.project(camera);
+    const projectsIntoView = Number.isFinite(point.x) && Number.isFinite(point.y) && point.z >= -1 && point.z <= 1;
+    const rawX = projectsIntoView ? (point.x * .5 + .5) * size.width : size.width * .5;
+    const rawY = projectsIntoView ? (-point.y * .5 + .5) * size.height : size.height - 62;
+    const x = Math.round(THREE.MathUtils.clamp(rawX, 18, size.width - 18));
+    const y = Math.round(THREE.MathUtils.clamp(rawY, 28, size.height - 28));
+    const side = x > size.width * .62 ? 'left' : 'right';
+    const signature = `${selectedId}:${x}:${y}:${side}`;
+    if (signature === previous.current) return;
+    previous.current = signature;
+    window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: { x, y, side } }));
+  });
+  return null;
+}
+
 export default function Viewport({ dark = false }: { dark?: boolean }) {
   const projectId = useEditor((state) => state.project.id);
   const objects = useEditor((state) => state.project.objects);
@@ -1125,7 +1162,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const selectedCameraPoint = state.selectedMotion?.keyframeId
       ? state.project.objects
         .find((object) => object.id === state.selectedMotion!.objectId && object.kind === 'camera')
-        ?.keyframes.some((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.purpose === 'motion')
+        ?.keyframes.some((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.property === 'position')
       : false;
     // REC crea nuovi campioni. Fuori da REC salviamo soltanto quando l'utente
     // ha cliccato esplicitamente un keyframe camera già esistente.
@@ -1201,7 +1238,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const persistCameraEdit = Boolean(editor.recordingSession || (editor.selectedMotion?.keyframeId
       && editor.project.objects
         .find((object) => object.id === editor.selectedMotion!.objectId && object.kind === 'camera')
-        ?.keyframes.some((key) => key.id === editor.selectedMotion!.keyframeId && key.frame === editor.currentFrame && key.purpose === 'motion')));
+        ?.keyframes.some((key) => key.id === editor.selectedMotion!.keyframeId && key.frame === editor.currentFrame && key.property === 'position')));
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
     if (event.ctrlKey) {
@@ -1466,6 +1503,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
+      <SelectionAiAnchor />
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
       <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
       <SceneBackground kind={activeCut?.background?.kind ?? 'none'} path={activeCut?.background?.path ?? ''} />

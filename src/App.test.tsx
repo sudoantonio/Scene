@@ -46,6 +46,7 @@ describe('Salvataggi e apertura progetto', () => {
   });
 
   it('riduce e riapre l’input AI', () => {
+    useEditor.getState().addObject('cube');
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Riduci input AI' }));
     expect(screen.queryByLabelText('Input azione')).not.toBeInTheDocument();

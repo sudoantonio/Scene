@@ -2094,3 +2094,66 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 /* Timeline aperta: comandi più alti e nessun separatore sopra le tracce. */
 .timeline:not(.collapsed) .timeline-toolbar { border-bottom: 0 !important; }
 .timeline:not(.collapsed) .timeline-control-row { padding-bottom: 11px; border-top: 0; }
+
+/* Input AI contestuale: compare accanto all'elemento selezionato e segue la vista. */
+.jev-floating-composer.anchored {
+  left: 50%;
+  top: 50%;
+  bottom: auto;
+  width: min(350px, calc(100% - 28px));
+  transform: translate(14px, -50%);
+  transition: left 80ms linear, top 80ms linear;
+}
+.jev-floating-composer.anchored.anchor-left { transform: translate(calc(-100% - 14px), -50%); }
+.jev-floating-composer.anchored .jev-composer-input {
+  height: 40px;
+  padding: 5px 6px;
+  grid-template-columns: 50px minmax(0, 1fr) 25px 25px;
+  grid-template-rows: 30px;
+  gap: 4px;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.32);
+}
+.jev-floating-composer.anchored .decision-engine-switch {
+  grid-column: 1;
+  grid-row: 1;
+  width: 50px;
+  height: 30px;
+  padding: 0 16px 0 5px;
+  transform: none;
+}
+.jev-floating-composer.anchored .jev-composer-input textarea {
+  grid-column: 2;
+  grid-row: 1;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 5px 0;
+}
+.jev-floating-composer.anchored .jev-composer-tool,
+.jev-floating-composer.anchored .jev-composer-send {
+  grid-row: 1;
+  width: 25px;
+  height: 25px;
+  transform: none;
+}
+.jev-floating-composer.anchored .jev-composer-tool { grid-column: 3; }
+.jev-floating-composer.anchored .jev-composer-send { grid-column: 4; }
+.jev-floating-composer.anchored .jev-composer-collapse {
+  top: -8px;
+  right: -7px;
+  width: 18px;
+  height: 18px;
+  color: #b7b7b2;
+  background: #333330;
+  border-radius: 50%;
+  box-shadow: 0 3px 9px rgba(0,0,0,.3);
+}
+.jev-floating-composer.anchored.collapsed { width: auto; }
+.jev-floating-composer.anchored .jev-direction-editor,
+.jev-floating-composer.anchored .jev-composer-message { max-width: min(350px, calc(100vw - 40px)); }
+
+/* Header compatto per lasciare più spazio alla scena. */
+.slim-headbar { min-height: 34px; }
+.headbar-logo { left: 72px; width: 74px; height: 22px; }
+.slim-add { min-height: 25px; padding-inline: 13px; font-size: 11px; }

@@ -13,10 +13,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; });
 
 describe('Pannelli contestuali', () => {
-  it('mostra solo l’input Jev e richiede la selezione del soggetto', () => {
+  it('nasconde l’input AI finché non viene selezionato un soggetto', () => {
     render(<JevFloatingComposer />);
-    expect(screen.getByRole('textbox', { name: 'Azione Jev' })).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'Azione Jev' })).toHaveAttribute('placeholder', 'Seleziona una camera o un elemento…');
+    expect(screen.queryByRole('textbox', { name: 'Azione Jev' })).not.toBeInTheDocument();
     expect(screen.queryByText('Soggetto di riferimento')).not.toBeInTheDocument();
     expect(screen.queryByText('Posizione iniziale')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Pannello principale Jev' })).not.toBeInTheDocument();

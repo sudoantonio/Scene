@@ -243,7 +243,7 @@ export default function App() {
 
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
-  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px` }}>
+  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px` }}>
     <AudioPlayback />
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />

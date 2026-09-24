@@ -331,6 +331,21 @@ describe('scene indipendenti', () => {
     expect(camera.keyframes.find((key) => key.property === 'rotation' && key.frame === 24)?.value).toEqual([70, 2, 35]);
   });
 
+  it('salva anche un keyframe camera precedente privo del marcatore motion quando viene cliccato', () => {
+    const project = createProject();
+    const scene = project.cameraCuts[0];
+    const camera = project.objects.find((object) => object.id === scene.cameraId)!;
+    camera.keyframes.push({ id: 'legacy-camera-point', frame: 18, property: 'position', value: [5, -6, 4], interpolation: 'linear', source: 'user', commentIds: [] });
+    camera.keyframes.push({ id: 'legacy-camera-rotation', frame: 18, property: 'rotation', value: [62, 0, 18], interpolation: 'linear', source: 'user', commentIds: [] });
+    useEditor.setState({ project, currentFrame: 18, selectedId: undefined, selectedMotion: { objectId: camera.id, sceneId: scene.id, keyframeId: 'legacy-camera-point' }, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
+
+    useEditor.getState().setCameraFraming(scene.id, [8, -4, 6], [70, 1, 32], [1, 0, 2]);
+
+    const updated = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(updated.keyframes.find((key) => key.property === 'position' && key.frame === 18)?.value).toEqual([8, -4, 6]);
+    expect(updated.keyframes.find((key) => key.property === 'rotation' && key.frame === 18)?.value).toEqual([70, 1, 32]);
+  });
+
   it('mantiene e aggiorna il keyframe camera selezionato quando la scena separa una camera condivisa', () => {
     const project = createProject();
     const firstScene = project.cameraCuts[0];

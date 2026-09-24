@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronDown, ChevronUp, LoaderCircle, Pencil } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
 import { describeMotionSpec } from '../domain/motion-spec';
@@ -7,6 +7,7 @@ import { useEditor } from '../store/editor';
 
 const engineStorageKey = 'scene-decision-engine';
 const formatDuration = (milliseconds: number) => milliseconds < 1_000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1_000).toFixed(2)} s`;
+type AiAnchor = { x: number; y: number; side: 'left' | 'right' };
 
 export default function JevFloatingComposer() {
   const project = useEditor((state) => state.project);
@@ -23,6 +24,7 @@ export default function JevFloatingComposer() {
   const [collapsed, setCollapsed] = useState(false);
   const [editingAction, setEditingAction] = useState<{ planId: string; actionId: string; frame: number }>();
   const [message, setMessage] = useState('');
+  const [anchor, setAnchor] = useState<AiAnchor | undefined>({ x: 24, y: 52, side: 'right' });
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const activeScene = scenes.find((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1)) ?? scenes[0];
@@ -46,6 +48,11 @@ export default function JevFloatingComposer() {
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
   useEffect(() => { clearStroke(); setMessage(''); setEditingAction(undefined); }, [selectedId, activeScene?.id]);
+  useEffect(() => {
+    const updateAnchor = (event: Event) => setAnchor((event as CustomEvent<AiAnchor | undefined>).detail);
+    window.addEventListener('scene:ai-anchor', updateAnchor);
+    return () => window.removeEventListener('scene:ai-anchor', updateAnchor);
+  }, []);
   useEffect(() => { window.localStorage.setItem(engineStorageKey, engine); }, [engine]);
   useEffect(() => window.abaco?.onLayaProgress?.(({ file, received, total }) => {
     const percent = total ? ` · ${Math.min(100, Math.round(received / total * 100))}%` : '';
@@ -93,13 +100,13 @@ export default function JevFloatingComposer() {
     if (event.key !== 'Enter' || event.shiftKey) return;
     event.preventDefault(); void generate();
   };
-  const placeholder = selected
-    ? `${selected.name}: descrivi cosa deve fare…`
-    : 'Seleziona una camera o un elemento…';
+  const placeholder = `${selected?.name ?? ''}: cosa deve fare?`;
+  const composerClass = `jev-floating-composer anchored ${anchor?.side === 'left' ? 'anchor-left' : 'anchor-right'} ${message ? 'has-message' : ''}`;
+  const composerStyle = anchor ? { left: anchor.x, top: anchor.y } as CSSProperties : undefined;
 
-  if (!activeScene) return null;
-  if (collapsed) return <div className="jev-floating-composer collapsed"><button className="jev-composer-expand" aria-label="Espandi input AI" title="Espandi input AI" onClick={() => setCollapsed(false)}><ChevronUp size={15} /><span>AI</span></button></div>;
-  return <div className={`jev-floating-composer ${message ? 'has-message' : ''}`}>
+  if (!activeScene || !selected || !anchor) return null;
+  if (collapsed) return <div className={`${composerClass} collapsed`} style={composerStyle}><button className="jev-composer-expand" aria-label="Espandi input AI" title="Espandi input AI" onClick={() => setCollapsed(false)}><ChevronUp size={15} /><span>AI</span></button></div>;
+  return <div className={composerClass} style={composerStyle}>
     {savedDirection && !message && !editingAction && <details className="jev-direction-editor">
       <summary>Regia · {savedDirection.actions.length} movimenti</summary>
       <div>{savedDirection.actions.map((action, index) => <button key={action.id} type="button" disabled={busy} onClick={() => {
@@ -109,14 +116,14 @@ export default function JevFloatingComposer() {
     </details>}
     {editingAction && !message && <div className="jev-composer-message">Correggi il movimento selezionato <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Annulla</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}
-    <div className="jev-composer-input" aria-label="Input azione" title={selected ? `Soggetto: ${selected.name}` : 'Seleziona il soggetto nella scena'}>
+    <div className="jev-composer-input" aria-label="Input azione" title={`Soggetto: ${selected.name}`}>
       <select className="decision-engine-switch" aria-label="Modello azione" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as DecisionEngine)}>
         <option value="jev">Jev</option>
         <option value="laya">Laya</option>
       </select>
-      <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={!selected || busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
+      <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
       <button className="jev-composer-collapse" aria-label="Riduci input AI" title="Riduci input AI" onClick={() => { setStrokeActive(false); setCollapsed(true); inputRef.current?.blur(); }}><ChevronDown size={15} /></button>
-      <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={!selected || busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
+      <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
       <button className="jev-composer-send" aria-label="Crea movimento" title="Crea movimento · Invio" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
     </div>
   </div>;
