@@ -109,6 +109,10 @@ describe('Punti e maniglie del movimento', () => {
     expect(segments[0]).toHaveStyle({ left: '0px', width: '405px' });
     expect(segments[1]).toHaveStyle({ left: '405px', width: '405px' });
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
+    expect(container.querySelector('.collapsed-scene-content')).toHaveStyle({ '--timeline-second-width': '135px' });
+    expect(screen.queryByRole('button', { name: 'Elimina blocco selezionato' })).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Inquadratura a schermo intero')).not.toBeInTheDocument();
+    expect(container.querySelector('.timeline-camera-zoom')).not.toBeInTheDocument();
     expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Registra movimenti' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla timeline ridotta' }));
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);

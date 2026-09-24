@@ -1,10 +1,9 @@
 import DirectionInput from './DirectionInput';
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, Maximize2, MessageCircle, Minimize2, MoveRight, Music2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
-import * as THREE from 'three';
-import { evaluateProperty, evaluateTransform } from '../domain/animation';
+import { Box, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Circle, Cylinder, Eye, EyeOff, GripVertical, Image, Lightbulb, LockKeyhole, MessageCircle, MoveRight, Music2, PanelBottomClose, PanelBottomOpen, Pause, Play, Plus, Scissors, Square, Trash2, Triangle, Type, Video, X } from 'lucide-react';
+import { evaluateProperty } from '../domain/animation';
 import { objectPresenceRange } from '../domain/presence';
-import type { SceneComment, SceneObject, TimelineCommentScope, Transform } from '../domain/schema';
+import type { SceneComment, SceneObject, TimelineCommentScope } from '../domain/schema';
 import { useEditor } from '../store/editor';
 
 type TrackSelection = { scope: TimelineCommentScope; sceneId: string; objectId?: string; label: string };
@@ -34,7 +33,7 @@ function AudioWaveform({ values }: { values: number[] }) {
   const samples = values.length ? values : Array.from({ length: 64 }, (_, index) => .18 + Math.abs(Math.sin(index * 1.73)) * .35);
   return <svg className="audio-waveform" viewBox={`0 0 ${samples.length} 1`} preserveAspectRatio="none" aria-hidden="true">{samples.map((value, index) => <rect key={index} x={index + .16} y={(1 - value) / 2} width=".68" height={value} rx=".12" />)}</svg>;
 }
-export default function Timeline({ collapsed, viewportFullscreen, onToggleCollapse, onToggleViewportFullscreen }: { collapsed?: boolean; viewportFullscreen?: boolean; onToggleCollapse?(): void; onToggleViewportFullscreen?(): void }) {
+export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?(): void }) {
   const project = useEditor((state) => state.project);
   const frame = useEditor((state) => state.currentFrame);
   const playing = useEditor((state) => state.isPlaying);
@@ -63,7 +62,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   const resizeObjectPresence = useEditor((state) => state.resizeObjectPresence);
   const deleteObjectFromScene = useEditor((state) => state.deleteObjectFromScene);
   const deleteMotionFromScene = useEditor((state) => state.deleteMotionFromScene);
-  const setCameraFraming = useEditor((state) => state.setCameraFraming);
   const addShot = useEditor((state) => state.addShot);
   const [transitionDraft, setTransitionDraft] = useState<{ fromId: string; toId: string; label: string; text: string }>();
   const [selectedTrack, setSelectedTrack] = useState<TrackSelection>();
@@ -79,8 +77,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   selectedTimelineObjectIdsRef.current = selectedTimelineObjectIds;
   const start = project.settings.frameStart, end = project.settings.frameEnd;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-  const selectedSubject = project.objects.find((object) => object.id === selectedId && object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
-  const framingSubject = selectedSubject ?? project.objects.find((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame));
   const timelineObjects = project.objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light'));
   const time = (frame - start) / project.settings.fps;
   const durationSeconds = Math.max(1, (end - start + 1) / project.settings.fps);
@@ -107,7 +103,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   };
   const activeSceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? end + 1));
   const activeScene = scenes[activeSceneIndex] ?? scenes[0];
-  const framingCamera = project.objects.find((object) => object.id === activeScene?.cameraId && object.kind === 'camera');
   const activeSceneEnd = scenes[activeSceneIndex + 1]?.frame ?? end + 1;
   const toggleRecording = () => {
     if (recordingSession) {
@@ -129,24 +124,6 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
     select(objectId);
     selectMotion(undefined);
     if (project.objects.find((object) => object.id === objectId)?.kind === 'audio') window.dispatchEvent(new Event('abaco:edit-audio'));
-  };
-  const cameraTransform = framingCamera ? evaluateTransform(framingCamera, frame) : undefined;
-  const subjectTransform = framingSubject ? evaluateTransform(framingSubject, frame) : undefined;
-  const zoomDistance = cameraTransform && subjectTransform ? Math.max(.5, new THREE.Vector3(...cameraTransform.position).distanceTo(new THREE.Vector3(...subjectTransform.position))) : 8;
-  const setCameraDistance = (distance: number) => {
-    if (!framingCamera || !cameraTransform || !subjectTransform || !activeScene) return;
-    const target = new THREE.Vector3(...subjectTransform.position);
-    const cameraPosition = new THREE.Vector3(...cameraTransform.position);
-    const offset = cameraPosition.sub(target);
-    if (offset.lengthSq() < .0001) offset.set(0, -1, .25);
-    const positionVector = target.clone().add(offset.normalize().multiplyScalar(distance));
-    const camera = new THREE.PerspectiveCamera();
-    camera.up.set(0, 0, 1);
-    camera.position.copy(positionVector);
-    camera.lookAt(target);
-    const position = positionVector.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'];
-    const rotation = [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'];
-    setCameraFraming(activeScene.id, position, rotation, subjectTransform.position);
   };
   useEffect(() => {
     const loaded: Record<string, string> = {};
@@ -423,7 +400,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
       {collapsed && <div className="timeline-mini-row">
         <div className="collapsed-scene-row">
           <div className="collapsed-scene-overview" role="group" aria-label="Timeline ridotta delle scene">
-            <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px` }}>
+            <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
               {scenes.map((scene, index) => {
               const nextFrame = scenes[index + 1]?.frame ?? end + 1;
               const stripLeft = ((scene.frame - start) / project.settings.fps) * timelineZoom;
@@ -449,10 +426,9 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
           <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
           <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
           <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
-          <button className="icon timeline-delete-block" disabled={!deleteTarget} title="Elimina blocco selezionato" aria-label="Elimina blocco selezionato" onClick={deleteSelectedBlock}><Trash2 size={15} /></button>
         </div>
       </div>
-      <div className="timeline-actions"><div className={`timeline-camera-zoom ${!framingSubject ? 'disabled' : ''}`} title={framingSubject ? `Avvicina o allontana la camera da ${framingSubject.name}` : 'Aggiungi un elemento per regolare l’inquadratura'}><input aria-label={framingSubject ? `Distanza camera da ${framingSubject.name}` : 'Distanza camera dal soggetto'} type="range" min="0.5" max="30" step="0.1" disabled={!framingSubject} value={Math.min(30, zoomDistance)} onChange={(event) => setCameraDistance(Number(event.target.value))} /></div><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={viewportFullscreen ? 'Ripristina pannelli' : 'Inquadratura a schermo intero'} onClick={onToggleViewportFullscreen}>{viewportFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
+      <div className="timeline-actions"><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
       </div>
     </header>
     {commentDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommentDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Commento ${commentDraft.label}`}>

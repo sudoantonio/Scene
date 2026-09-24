@@ -32,7 +32,6 @@ export default function App() {
   const markSaved = useEditor((state) => state.markSaved);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
-  const setCameraView = useEditor((state) => state.setCameraView);
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const undo = useEditor((state) => state.undo);
   const redo = useEditor((state) => state.redo);
@@ -48,7 +47,6 @@ export default function App() {
   const inspectorPopoverRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
   const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
-  const [viewportFullscreen, setViewportFullscreen] = useState(false);
   const theme: 'dark' = 'dark';
   const shellRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
@@ -206,13 +204,6 @@ export default function App() {
   }, [currentFrame]);
 
   useEffect(() => {
-    if (!viewportFullscreen) return;
-    const exit = (event: KeyboardEvent) => { if (event.key === 'Escape') setViewportFullscreen(false); };
-    window.addEventListener('keydown', exit);
-    return () => window.removeEventListener('keydown', exit);
-  }, [viewportFullscreen]);
-
-  useEffect(() => {
     if (!addOpen) return;
     const close = (event: PointerEvent) => { if (!addMenuRef.current?.contains(event.target as Node)) setAddOpen(false); };
     window.addEventListener('pointerdown', close);
@@ -266,13 +257,7 @@ export default function App() {
   }, [setGizmoMode, setPlaying]);
 
   const timelineHeight = collapsed.timeline ? 84 : layout.timeline;
-  const toggleViewportFullscreen = () => {
-    setViewportFullscreen((value) => {
-      if (!value) setCameraView(true);
-      return !value;
-    });
-  };
-  return <div ref={shellRef} className={`app-shell theme-${theme} ${viewportFullscreen ? 'viewport-fullscreen' : ''}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px` }}>
+  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px` }}>
     <AudioPlayback />
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
@@ -286,7 +271,7 @@ export default function App() {
       {inspectorOpen && <div ref={inspectorPopoverRef} className="main-inspector-popover"><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} floating onClose={() => setInspectorOpen(false)} /></div>}
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
-    <Timeline collapsed={collapsed.timeline} viewportFullscreen={viewportFullscreen} onToggleViewportFullscreen={toggleViewportFullscreen} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
+    <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
     {message && <div className={`toast ${message.type}`}>{message.type === 'error' ? 'Errore' : message.type === 'ok' ? 'Completato' : 'In corso'}<span>{message.text}</span></div>}
     {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     {plan && <PlanReview plan={plan} busy={busy} onClose={() => setPlan(undefined)} onApprove={approve} />}

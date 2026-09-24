@@ -2070,3 +2070,14 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .theme-dark :is(.app-shell, .workspace, .slim-headbar, .timeline, .timeline-toolbar) { background: #232323 !important; }
 .theme-light :is(.app-shell, .workspace, .slim-headbar, .timeline, .timeline-toolbar) { background: #eeeeeb !important; }
 .decision-engine-switch, .jev-composer-tool, .jev-composer-send { transform: translateY(-3px); }
+
+/* Timeline ridotta: scala leggibile, contenuto a filo e comando scena in evidenza. */
+.timeline.collapsed { border-bottom: 0 !important; box-shadow: none !important; }
+.timeline.collapsed .timeline-mini-row { padding-left: 0; padding-right: 0; }
+.timeline.collapsed .timeline-control-row { border-bottom: 0; }
+.collapsed-scene-content::before,
+.collapsed-scene-content::after { content: ''; position: absolute; z-index: 3; inset: 0; pointer-events: none; }
+.collapsed-scene-content::before { height: 9px; background: repeating-linear-gradient(to right, rgba(235,235,230,.58) 0 1px, transparent 1px var(--timeline-second-width)); }
+.collapsed-scene-content::after { height: 5px; background: repeating-linear-gradient(to right, rgba(220,220,215,.3) 0 1px, transparent 1px calc(var(--timeline-second-width) / 4)); }
+.app-shell .collapsed-add-scene { color: #1e1807 !important; background: #d9a928 !important; }
+.app-shell .collapsed-add-scene:hover { color: #0d0b05 !important; background: #edbd3b !important; }
