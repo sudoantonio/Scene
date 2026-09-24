@@ -420,7 +420,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
   }, [deleteTarget]);
   return <section className={`timeline ${collapsed ? 'collapsed' : ''}`}>
     <header className="timeline-toolbar">
-      <div className="timeline-mini-row">
+      {collapsed && <div className="timeline-mini-row">
         <div className="collapsed-scene-row">
           <div className="collapsed-scene-overview" role="group" aria-label="Timeline ridotta delle scene">
             {scenes.map((scene, index) => {
@@ -433,7 +433,7 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
           </div>
           <button type="button" className="collapsed-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla timeline ridotta" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={13} /></button>
         </div>
-      </div>
+      </div>}
       <div className="timeline-control-row">
       <div className="timeline-context">
         <strong className="timecode">{timecode}</strong>

@@ -111,6 +111,11 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
   });
 
+  it('a timeline aperta non mostra la barra ridotta delle scene', () => {
+    render(<Timeline />);
+    expect(screen.queryByRole('group', { name: 'Timeline ridotta delle scene' })).not.toBeInTheDocument();
+  });
+
   it('trascinare un punto sposta solo quel punto e non riscala gli altri tempi', () => {
     render(<Timeline />);
     const point = screen.getByRole('button', { name: 'Punto movimento al frame 1' });
