@@ -104,7 +104,10 @@ describe('Punti e maniglie del movimento', () => {
     const { container } = render(<Timeline collapsed />);
     const overview = screen.getByRole('group', { name: 'Timeline ridotta delle scene' });
     expect(overview).toBeVisible();
-    expect(container.querySelectorAll('.collapsed-scene-segment')).toHaveLength(2);
+    const segments = container.querySelectorAll('.collapsed-scene-segment');
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toHaveStyle({ left: '0px', width: '405px' });
+    expect(segments[1]).toHaveStyle({ left: '405px', width: '405px' });
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
     expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Registra movimenti' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla timeline ridotta' }));

@@ -2060,3 +2060,13 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .viewport-stack, .viewport, .timeline { border-radius: 14px !important; }
 .theme-dark .app-shell, .theme-dark .workspace { background: #191919; }
 .theme-light .app-shell, .theme-light .workspace { background: #eeeeeb; }
+
+/* Correzioni finali: superfici uniformi, timeline ritagliata e segmenti squadrati. */
+.timeline { overflow: hidden !important; border-radius: 14px !important; }
+.timeline-toolbar { overflow: hidden; border-radius: 14px 14px 0 0 !important; }
+.timeline.collapsed .timeline-toolbar { border-radius: 14px !important; }
+.collapsed-scene-content { min-width: 0; flex: none; }
+.app-shell .collapsed-scene-segment { border-radius: 0 !important; }
+.theme-dark :is(.app-shell, .workspace, .slim-headbar, .timeline, .timeline-toolbar) { background: #232323 !important; }
+.theme-light :is(.app-shell, .workspace, .slim-headbar, .timeline, .timeline-toolbar) { background: #eeeeeb !important; }
+.decision-engine-switch, .jev-composer-tool, .jev-composer-send { transform: translateY(-3px); }

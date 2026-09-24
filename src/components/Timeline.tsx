@@ -426,11 +426,11 @@ export default function Timeline({ collapsed, viewportFullscreen, onToggleCollap
             <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px` }}>
               {scenes.map((scene, index) => {
               const nextFrame = scenes[index + 1]?.frame ?? end + 1;
-              const stripLeft = ((scene.frame - start) / Math.max(1, end - start + 1)) * 100;
-              const stripWidth = ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100;
-              return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scena ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={`Anteprima ${scene.name ?? `Scena ${index + 1}`}`} style={{ left: `${stripLeft}%`, width: `${stripWidth}%`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
+              const stripLeft = ((scene.frame - start) / project.settings.fps) * timelineZoom;
+              const stripWidth = ((nextFrame - scene.frame) / project.settings.fps) * timelineZoom;
+              return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scena ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={`Anteprima ${scene.name ?? `Scena ${index + 1}`}`} style={{ left: `${stripLeft}px`, width: `${stripWidth}px`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
               })}
-              <i className="collapsed-scene-playhead" style={{ left: left(frame) }} />
+              <i className="collapsed-scene-playhead" style={{ left: `${((frame - start) / project.settings.fps) * timelineZoom}px` }} />
             </div>
           </div>
           <button type="button" className="collapsed-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla timeline ridotta" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={13} /></button>
