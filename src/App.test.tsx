@@ -5,7 +5,7 @@ import { useEditor } from './store/editor';
 import App from './App';
 
 vi.mock('./components/Viewport', () => ({ default: () => <div />, captureContactSheet: vi.fn() }));
-vi.mock('./components/Inspector', () => ({ default: ({ panel, floating }: { panel: string; floating?: boolean }) => <div data-testid="inspector">{floating ? `Pannello ${panel}` : panel}</div> }));
+vi.mock('./components/Inspector', () => ({ default: ({ panel, floating, onToggleCollapse }: { panel: string; floating?: boolean; onToggleCollapse?(): void }) => <div data-testid="inspector">{floating ? `Pannello ${panel}` : panel}<button aria-label="Riduci pannello destro" onClick={onToggleCollapse}>Riduci</button></div> }));
 vi.mock('./components/Timeline', () => ({ default: () => <div /> }));
 vi.mock('./components/ElementsPanel', () => ({ default: () => <div /> }));
 
@@ -34,6 +34,23 @@ describe('Salvataggi e apertura progetto', () => {
     render(<App />);
     expect(screen.getByTestId('inspector')).toHaveTextContent('edit');
     expect(screen.queryByRole('button', { name: 'Modifica' })).not.toBeInTheDocument();
+  });
+
+  it('rimuove completamente la sidebar quando viene chiusa e la riapre dall’header', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Riduci pannello destro' }));
+    expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
+    expect(document.querySelector('.panel-resizer.vertical')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Apri pannello laterale' }));
+    expect(screen.getByTestId('inspector')).toBeInTheDocument();
+  });
+
+  it('riduce e riapre l’input AI', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Riduci input AI' }));
+    expect(screen.queryByLabelText('Input azione')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Espandi input AI' }));
+    expect(screen.getByLabelText('Input azione')).toBeInTheDocument();
   });
 
   it('non cancella modifiche effettuate mentre il salvataggio automatico è in corso', async () => {

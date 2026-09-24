@@ -41,6 +41,7 @@ vi.mock('@react-three/drei', async () => {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  window.localStorage.removeItem('scene-show-motion-paths');
   useEditor.setState({ project: createProject(), currentFrame: 1, cameraView: true, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, past: [], future: [], dirty: false, isPlaying: false });
 });
 
@@ -94,6 +95,19 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ferma registrazione movimento' }));
     const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
     expect(camera.keyframes.some((key) => key.property === 'rotation' && key.purpose === 'motion' && key.frame === scene.frame + 12)).toBe(true);
+  });
+
+  it('muove la posa base della camera con WASDQE senza richiedere REC', () => {
+    render(<Viewport />);
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const before = evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!, scene.frame).position;
+    fireEvent.keyDown(window, { code: 'KeyW', key: 'w' });
+    act(() => vi.advanceTimersByTime(96));
+    fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
+    const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
+    expect(evaluateTransform(camera, scene.frame).position).not.toEqual(before);
+    expect(camera.keyframes.filter((key) => key.purpose === 'motion')).toHaveLength(0);
+    expect(useEditor.getState().recordingSession).toBeUndefined();
   });
 
   it.each([
@@ -172,6 +186,16 @@ describe('controlli della vista libera', () => {
     expect(document.activeElement).toBe(input);
     fireEvent.pointerDown(container.querySelector('.viewport')!);
     expect(document.activeElement).toBe(container.querySelector('.viewport'));
+  });
+
+  it('permette di nascondere e mostrare le traiettorie', () => {
+    render(<Viewport />);
+    const hide = screen.getByRole('button', { name: 'Nascondi traiettorie movimento' });
+    expect(hide).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(hide);
+    const show = screen.getByRole('button', { name: 'Mostra traiettorie movimento' });
+    expect(show).toHaveAttribute('aria-pressed', 'false');
+    expect(window.localStorage.getItem('scene-show-motion-paths')).toBe('false');
   });
 
   it('muove un elemento con Q ed E anche durante REC fermo', () => {

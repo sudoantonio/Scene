@@ -1000,9 +1000,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const selectedKey = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id && state.selectedMotion.keyframeId
         ? camera.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.purpose === 'motion')
         : undefined;
-      // Camera navigation outside REC is only a workspace view. It must never
-      // create animation, unless the user explicitly clicked that keyframe.
-      if (!session && state.currentFrame !== sceneFrame && !selectedKey) return;
+      // Senza REC la camera modifica la posa base della scena, senza creare
+      // punti intermedi. Un keyframe cliccato resta invece modificabile.
       const referenceRotation = evaluateTransform(camera, Math.max(sceneFrame, recordFrame - 1)).rotation;
       const continuousRotation = unwrapRotation(rotation, referenceRotation);
       let nextSession = session;

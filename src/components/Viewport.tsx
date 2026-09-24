@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { Box, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
+import { Box, Eye, EyeOff, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
@@ -939,6 +939,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cameraView = useEditor((state) => state.cameraView);
   const setCameraView = useEditor((state) => state.setCameraView);
   const [cameraHintVisible, setCameraHintVisible] = useState(true);
+  const [showMotionPaths, setShowMotionPaths] = useState(() => window.localStorage.getItem('scene-show-motion-paths') !== 'false');
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
   const [draggingObject, setDraggingObject] = useState(false);
@@ -953,6 +954,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const pendingCameraCommit = useRef<{ projectId: string; sceneId: string; frame: number; position: Vec3; rotation: Vec3; target: Vec3 } | undefined>(undefined);
   const shiftPressed = useRef(false);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
+  useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
   const activeCamera = objects.find((object) => object.id === activeCut?.cameraId && object.kind === 'camera');
@@ -1246,7 +1248,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const flushFreeFlight = () => {
       if (!freeFlight) return;
       const editor = useEditor.getState();
-      if (editor.recordingSession) editor.setCameraFraming(freeFlight.sceneId, freeFlight.position, freeFlight.rotation, freeFlight.target);
+      editor.setCameraFraming(freeFlight.sceneId, freeFlight.position, freeFlight.rotation, freeFlight.target);
       freeFlight = undefined;
     };
     const keyDown = (event: KeyboardEvent) => {
@@ -1427,7 +1429,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {visibleMotionPaths.map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {showMotionPaths && visibleMotionPaths.map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
@@ -1456,6 +1458,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       </div>
     </div>}
     <div className="viewport-top-right">
+      <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Nascondi traiettorie movimento' : 'Mostra traiettorie movimento'} title={showMotionPaths ? 'Nascondi traiettorie' : 'Mostra traiettorie'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
       {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Strumento trasformazione">{([
         ['translate', 'Sposta', Move3d],
         ['rotate', 'Ruota', Rotate3d],

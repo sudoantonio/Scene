@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { PanelRightOpen, Plus } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -248,11 +248,11 @@ export default function App() {
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+      {collapsed.right && <button className="headbar-inspector-open" aria-label="Apri pannello laterale" title="Apri pannelli" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>
-    <main ref={workspaceRef} className="workspace" style={{ gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
+    <main ref={workspaceRef} className={`workspace ${collapsed.right ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
       <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
-      <div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => { if (!collapsed.right) beginResize('right', event); }} />
-      <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} collapsed={collapsed.right} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: !value.right }))} />
+      {!collapsed.right && <><div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
     </main>
     <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />

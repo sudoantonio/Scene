@@ -586,3 +586,77 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .timeline.collapsed :is(.timeline-context, .timeline-center-stack, .timeline-actions) { align-self: start; }
 .app-shell .timeline.collapsed .timeline-toolbar { overflow: visible; }
 .app-shell .timeline.collapsed .timeline-control-row { display: grid; visibility: visible; opacity: 1; }
+
+/* Sidebar: quando è chiusa scompare; quando è aperta usa la superficie del programma. */
+.app-shell .workspace.inspector-hidden { grid-template-columns: minmax(0, 1fr) !important; }
+.app-shell .headbar-inspector-open {
+  position: absolute;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--ui-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  -webkit-app-region: no-drag;
+}
+.app-shell .headbar-inspector-open:hover { color: var(--ui-text); background: var(--ui-hover); }
+.app-shell .inspector.simple-inspector {
+  color: var(--ui-text);
+  background: #232323 !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+.app-shell .simple-inspector :is(.right-tabs, .inspector-scroll) { background: #232323 !important; }
+.app-shell .simple-inspector .right-tabs { border-bottom-color: rgba(255,255,255,.08) !important; }
+
+/* Comandi vista e visibilità delle traiettorie. */
+.app-shell .motion-path-visibility {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--ui-muted);
+  background: rgba(35,35,35,.96);
+  border: 0;
+  border-radius: 9px;
+}
+.app-shell .motion-path-visibility:hover,
+.app-shell .motion-path-visibility.active { color: var(--ui-text); background: var(--ui-raised); }
+
+/* L'input AI può ridursi a un solo pulsante senza coprire la scena. */
+.app-shell .jev-composer-input {
+  grid-template-columns: minmax(0, 1fr) 26px 26px 26px;
+}
+.app-shell .jev-composer-input textarea { grid-column: 1 / 5; }
+.app-shell .jev-composer-collapse,
+.app-shell .jev-composer-expand {
+  display: grid;
+  place-items: center;
+  color: var(--ui-muted);
+  background: transparent;
+  border: 0;
+}
+.app-shell .jev-composer-collapse { grid-column: 2; grid-row: 2; width: 26px; height: 26px; padding: 0; }
+.app-shell .jev-composer-tool { grid-column: 3; }
+.app-shell .jev-composer-send { grid-column: 4; }
+.app-shell .jev-composer-collapse:hover { color: var(--ui-text); background: var(--ui-hover); border-radius: 50%; }
+.app-shell .jev-floating-composer.collapsed { width: auto; }
+.app-shell .jev-composer-expand {
+  min-width: 54px;
+  height: 32px;
+  padding: 0 12px;
+  grid-auto-flow: column;
+  gap: 5px;
+  color: var(--ui-text);
+  background: rgba(35,35,35,.96);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+.app-shell .jev-composer-expand:hover { background: var(--ui-raised); }
