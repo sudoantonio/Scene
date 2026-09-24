@@ -138,9 +138,17 @@ function ImageBackground({ source }: { source: string }) {
 function ModelBackground({ source }: { source: string }) {
   const gltf = useLoader(GLTFLoader, source);
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
-  // L'export OBJ di Blender converte Z-up in Y-up. Il viewport di Scene usa
-  // invece Z-up: +90° su X ripristina l'orientamento originale del palco.
-  return <group rotation={[Math.PI / 2, 0, 0]}><primitive object={model} /></group>;
+  return <primitive object={model} />;
+}
+
+export function orientObjBackground(object: THREE.Object3D) {
+  object.rotation.x = Math.PI / 2;
+  object.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(object);
+  const center = bounds.getCenter(new THREE.Vector3());
+  object.position.set(-center.x, -center.y, -bounds.min.z);
+  object.updateMatrixWorld(true);
+  return object;
 }
 
 function ObjBackground({ source, materials }: { source: string; materials?: string }) {
@@ -152,6 +160,10 @@ function ObjBackground({ source, materials }: { source: string; materials?: stri
       loader.setMaterials(creator);
     }
     const object = loader.parse(source);
+    // Blender scrive gli OBJ con Y verso l'alto. Scene usa Z verso l'alto:
+    // incorporiamo la conversione nell'oggetto, quindi lo centriamo e lo
+    // appoggiamo al piano per evitare offset residui del file sorgente.
+    orientObjBackground(object);
     object.traverse((child) => {
       if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; }
     });
