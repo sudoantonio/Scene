@@ -15,6 +15,7 @@ declare global {
       chooseBlender(): Promise<string | null>;
       chooseBackground(kind: 'image' | 'model'): Promise<{ path: string; name: string } | null>;
       loadAsset(path: string): Promise<string>;
+      loadModel(path: string): Promise<{ format: 'glb'; source: string } | { format: 'obj'; source: string; materials?: string }>;
       chooseAudio(): Promise<{ sourcePath: string; name: string } | null>;
       chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number } | null>;
       ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number }>;

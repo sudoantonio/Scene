@@ -3,7 +3,7 @@ import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, Transfor
 import { Box, Eye, EyeOff, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
+import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
 import { hitsTransformHandle } from '../domain/gizmo';
 import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
@@ -141,6 +141,23 @@ function ModelBackground({ source }: { source: string }) {
   return <primitive object={model} />;
 }
 
+function ObjBackground({ source, materials }: { source: string; materials?: string }) {
+  const model = useMemo(() => {
+    const loader = new OBJLoader();
+    if (materials) {
+      const creator = new MTLLoader().parse(materials, '');
+      creator.preload();
+      loader.setMaterials(creator);
+    }
+    const object = loader.parse(source);
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; }
+    });
+    return object;
+  }, [materials, source]);
+  return <primitive object={model} />;
+}
+
 class BackgroundAssetBoundary extends Component<{ resetKey: string; children: ReactNode; fallback?: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
@@ -203,17 +220,24 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
 
 export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model'; path: string }) {
   const [source, setSource] = useState<string>();
+  const [obj, setObj] = useState<{ source: string; materials?: string }>();
   useEffect(() => {
     let active = true;
     setSource(undefined);
+    setObj(undefined);
     if (kind !== 'none' && path) {
-      if (window.abaco) window.abaco.loadAsset(path).then((value) => { if (active && value) setSource(value); }).catch(() => undefined);
+      if (window.abaco && kind === 'model') window.abaco.loadModel(path).then((value) => {
+        if (!active) return;
+        if (value.format === 'obj') setObj(value);
+        else setSource(value.source);
+      }).catch(() => undefined);
+      else if (window.abaco) window.abaco.loadAsset(path).then((value) => { if (active && value) setSource(value); }).catch(() => undefined);
       else setSource(path);
     }
     return () => { active = false; };
   }, [kind, path]);
-  if (!source) return null;
-  return <BackgroundAssetBoundary resetKey={`${kind}:${path}`}><Suspense fallback={null}>{kind === 'image' ? <ImageBackground source={source} /> : <ModelBackground source={source} />}</Suspense></BackgroundAssetBoundary>;
+  if (!source && !obj) return null;
+  return <BackgroundAssetBoundary resetKey={`${kind}:${path}`}><Suspense fallback={null}>{kind === 'image' && source ? <ImageBackground source={source} /> : obj ? <ObjBackground source={obj.source} materials={obj.materials} /> : source ? <ModelBackground source={source} /> : null}</Suspense></BackgroundAssetBoundary>;
 }
 
 function CameraVisual({ object }: { object: SceneObject }) {

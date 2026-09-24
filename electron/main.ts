@@ -184,6 +184,28 @@ async function makePortableProject(project: AbacoProject, root: string) {
     copied.set(usable, relative);
     return relative;
   };
+  const copyObjBackground = async (source: string, identity: string) => {
+    const directory = path.join(root, 'assets', 'sfondi', identity.slice(0, 8));
+    await fs.mkdir(directory, { recursive: true });
+    const objText = await fs.readFile(source, 'utf8');
+    const destination = path.join(directory, safeAssetName(path.basename(source)));
+    await fs.writeFile(destination, objText);
+    const materialNames = [...objText.matchAll(/^\s*mtllib\s+(.+)\s*$/gmi)].map((match) => match[1].trim());
+    for (const materialName of materialNames) {
+      const materialSource = path.resolve(path.dirname(source), materialName);
+      const materialText = await fs.readFile(materialSource, 'utf8').catch(() => undefined);
+      if (!materialText) continue;
+      await fs.writeFile(path.join(directory, path.basename(materialName)), materialText);
+      const textureNames = [...materialText.matchAll(/^\s*(?:map_Ka|map_Kd|map_Ks|map_Ke|map_d|bump|map_bump|disp|decal)\s+(.+)\s*$/gmi)]
+        .map((match) => match[1].trim().split(/\s+/).at(-1)!)
+        .filter(Boolean);
+      for (const textureName of textureNames) {
+        const textureSource = path.resolve(path.dirname(materialSource), textureName);
+        await fs.copyFile(textureSource, path.join(directory, path.basename(textureName))).catch(() => undefined);
+      }
+    }
+    return portablePath(path.relative(root, destination));
+  };
   for (const object of portable.objects) {
     if (object.kind === 'audio' && object.asset.sourcePath) {
       object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'audio', object.id);
@@ -197,7 +219,9 @@ async function makePortableProject(project: AbacoProject, root: string) {
     }
   }
   for (const scene of portable.cameraCuts) {
-    if (scene.background.path) scene.background.path = await copyAsset(scene.background.path, 'sfondi', scene.id);
+    if (scene.background.path) scene.background.path = scene.background.kind === 'model' && path.extname(scene.background.path).toLowerCase() === '.obj'
+      ? await copyObjBackground(scene.background.path, scene.id)
+      : await copyAsset(scene.background.path, 'sfondi', scene.id);
   }
   return ProjectSchema.parse(portable);
 }
@@ -388,10 +412,18 @@ ipcMain.handle('settings:chooseBlender', async () => {
 ipcMain.handle('background:choose', async (_event, kind: 'image' | 'model') => {
   const filters = kind === 'image'
     ? [{ name: 'Immagini', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
-    : [{ name: 'Modelli 3D', extensions: ['glb'] }];
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: kind === 'image' ? 'Scegli uno sfondo' : 'Scegli un modello GLB', filters });
+    : [{ name: 'Modelli 3D', extensions: ['glb', 'obj'] }];
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: kind === 'model' ? ['openFile', 'openDirectory'] : ['openFile'], title: kind === 'image' ? 'Scegli uno sfondo' : 'Scegli un modello GLB, OBJ o una cartella', filters });
   if (result.canceled || !result.filePaths[0]) return null;
-  return { path: result.filePaths[0], name: path.basename(result.filePaths[0]) };
+  let selected = result.filePaths[0];
+  if (kind === 'model' && (await fs.stat(selected)).isDirectory()) {
+    const entries = await fs.readdir(selected);
+    const model = entries.sort((a, b) => a.localeCompare(b)).find((entry) => path.extname(entry).toLowerCase() === '.glb')
+      ?? entries.sort((a, b) => a.localeCompare(b)).find((entry) => path.extname(entry).toLowerCase() === '.obj');
+    if (!model) throw new Error('La cartella non contiene un modello GLB o OBJ.');
+    selected = path.join(selected, model);
+  }
+  return { path: selected, name: path.basename(selected) };
 });
 
 ipcMain.handle('asset:load', async (_event, filePath: string) => {
@@ -400,6 +432,23 @@ ipcMain.handle('asset:load', async (_event, filePath: string) => {
   if (extension !== '.glb') return imageFileDataUrl(filePath);
   const buffer = await fs.readFile(filePath);
   return `data:model/gltf-binary;base64,${buffer.toString('base64')}`;
+});
+
+ipcMain.handle('model:load', async (_event, filePath: string) => {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === '.glb') {
+    const buffer = await fs.readFile(filePath);
+    return { format: 'glb' as const, source: `data:model/gltf-binary;base64,${buffer.toString('base64')}` };
+  }
+  if (extension !== '.obj') throw new Error(`Formato scenografia non supportato: ${extension || 'sconosciuto'}`);
+  const source = await fs.readFile(filePath, 'utf8');
+  const materialName = source.match(/^\s*mtllib\s+(.+)\s*$/mi)?.[1]?.trim();
+  let materials: string | undefined;
+  if (materialName) {
+    const materialPath = path.resolve(path.dirname(filePath), materialName);
+    materials = await fs.readFile(materialPath, 'utf8').catch(() => undefined);
+  }
+  return { format: 'obj' as const, source, materials };
 });
 
 ipcMain.handle('audio:choose', async () => {

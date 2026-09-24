@@ -277,7 +277,7 @@ def visibility_window(obj, start, end):
     set_interpolation(obj, start, "constant")
 
 # Ogni sfondo appartiene alla propria scena. Le immagini diventano pannelli
-# agganciati alla camera; i GLB vengono importati come scenografie locali.
+# agganciati alla camera; GLB e OBJ vengono importati come scenografie locali.
 cuts = sorted(project.get("cameraCuts", []), key=lambda item: item["frame"])
 for cut_index, cut in enumerate(cuts):
     background = cut.get("background", {"kind": "none", "path": ""})
@@ -289,6 +289,15 @@ for cut_index, cut in enumerate(cuts):
     if background["kind"] == "model" and background_path.suffix.lower() == ".glb":
         before = set(bpy.data.objects)
         bpy.ops.import_scene.gltf(filepath=str(background_path))
+        for imported in set(bpy.data.objects) - before:
+            imported["abaco_background_scene"] = cut["id"]
+            visibility_window(imported, start, end)
+    elif background["kind"] == "model" and background_path.suffix.lower() == ".obj":
+        before = set(bpy.data.objects)
+        if hasattr(bpy.ops.wm, "obj_import"):
+            bpy.ops.wm.obj_import(filepath=str(background_path))
+        else:
+            bpy.ops.import_scene.obj(filepath=str(background_path))
         for imported in set(bpy.data.objects) - before:
             imported["abaco_background_scene"] = cut["id"]
             visibility_window(imported, start, end)
