@@ -256,7 +256,7 @@ export default function App() {
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [setGizmoMode, setPlaying]);
 
-  const timelineHeight = collapsed.timeline ? 84 : layout.timeline;
+  const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
   return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px` }}>
     <AudioPlayback />
     <div className="slim-headbar">

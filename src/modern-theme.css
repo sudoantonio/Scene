@@ -559,8 +559,30 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .inspector-group > summary,
 .app-shell .inspector-group-fixed > .inspector-group-summary { border-radius: 10px 10px 0 0 !important; }
 
-/* La riga comandi della timeline ridotta resta interamente visibile sotto le scene. */
+/* Timeline aperta: i comandi respirano sopra l'area delle clip. */
+.app-shell .timeline:not(.collapsed) { grid-template-rows: 48px minmax(0, 1fr); }
+.app-shell .timeline:not(.collapsed) .timeline-toolbar { height: 48px; min-height: 48px; }
+.app-shell .timeline:not(.collapsed) .timeline-control-row {
+  height: 48px;
+  align-items: start;
+  padding: 5px 13px 12px;
+  border-top: 0;
+}
+.app-shell .timeline:not(.collapsed) :is(.timeline-context, .timeline-center-stack, .timeline-actions) { align-self: start; }
+.app-shell .timeline:not(.collapsed) .timeline-scroll {
+  border-radius: 12px 12px 0 0;
+  background-clip: padding-box;
+}
+
+/* La modalità ridotta conserva anteprima e comandi in una fascia più bassa. */
 .app-shell .timeline.collapsed,
-.app-shell .timeline.collapsed .timeline-toolbar { height: 84px; min-height: 84px; }
+.app-shell .timeline.collapsed .timeline-toolbar { height: 72px; min-height: 72px; }
+.app-shell .timeline.collapsed { grid-template-rows: 72px; }
+.app-shell .timeline.collapsed .timeline-toolbar { grid-template-rows: 28px 44px; }
+.app-shell .timeline.collapsed .timeline-toolbar { border-bottom: 0 !important; box-shadow: none; }
+.app-shell .timeline.collapsed .timeline-mini-row { height: 28px; padding-block: 4px 2px; }
+.app-shell .timeline.collapsed :is(.collapsed-scene-overview, .collapsed-add-scene, .collapsed-scene-content) { height: 22px; }
+.app-shell .timeline.collapsed .timeline-control-row { height: 44px; padding: 3px 13px 7px; align-items: start; }
+.app-shell .timeline.collapsed :is(.timeline-context, .timeline-center-stack, .timeline-actions) { align-self: start; }
 .app-shell .timeline.collapsed .timeline-toolbar { overflow: visible; }
 .app-shell .timeline.collapsed .timeline-control-row { display: grid; visibility: visible; opacity: 1; }
