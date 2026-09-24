@@ -2,6 +2,7 @@ import { ArrowUp, ChevronDown, ChevronUp, LoaderCircle, Pencil } from 'lucide-re
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
+import { describeMotionSpec } from '../domain/motion-spec';
 import { useEditor } from '../store/editor';
 
 const engineStorageKey = 'scene-decision-engine';
@@ -104,7 +105,7 @@ export default function JevFloatingComposer() {
       <div>{savedDirection.actions.map((action, index) => <button key={action.id} type="button" disabled={busy} onClick={() => {
         setEditingAction({ planId: savedDirection.id, actionId: action.id, frame: savedDirection.startFrame });
         setInstruction(action.instruction); inputRef.current?.focus();
-      }}>{index + 1}. {semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· soggetto inquadrato' : ''}</button>)}</div>
+      }}>{index + 1}. {action.motionSpec ? describeMotionSpec(action.motionSpec) : semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· soggetto inquadrato' : ''}</button>)}</div>
     </details>}
     {editingAction && !message && <div className="jev-composer-message">Correggi il movimento selezionato <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Annulla</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}

@@ -181,7 +181,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
       // Stretch/compress the generated interval as a whole, preserving its internal timing.
       const last = Math.max(frame + 1, ...compiled.blenderPlan.operations.map((operation) => operation.frame));
       for (const operation of compiled.blenderPlan.operations) operation.frame = frame + Math.round((operation.frame - frame) * (actionUntil - frame) / (last - frame));
-      direction.actions.push({ id: draft.stored?.id ?? crypto.randomUUID(), decision: draft.raw, instruction: draft.clause.instruction, motion: compiled.decision.motion, relation: draft.clause.relation, startFrame: frame, endFrame: actionUntil, referenceId: ref?.id ?? compiled.decision.reference?.objectId, keepInFrame: interpreted.constraints.length > 0, distanceMeters: compiled.decision.distanceMeters, durationSeconds: (actionUntil - frame) / project.settings.fps, durationExplicit: draft.durationExplicit });
+      direction.actions.push({ id: draft.stored?.id ?? crypto.randomUUID(), decision: draft.raw, instruction: draft.clause.instruction, motion: compiled.decision.motion, motionSpec: compiled.decision.motionSpec, relation: draft.clause.relation, startFrame: frame, endFrame: actionUntil, referenceId: ref?.id ?? compiled.decision.reference?.objectId, keepInFrame: interpreted.constraints.length > 0, distanceMeters: compiled.decision.distanceMeters, durationSeconds: (actionUntil - frame) / project.settings.fps, durationExplicit: draft.durationExplicit });
       groupPlans.push(compiled);
     }
     const combined = groupPlans.length > 1 ? composeParallelJevPlans(working, groupPlans, group.map((draft) => draft.clause.instruction).join(' mentre ')) : groupPlans[0]!;

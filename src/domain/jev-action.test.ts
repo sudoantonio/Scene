@@ -109,8 +109,13 @@ describe('Jev action compiler', () => {
     expect(request.state.natural_language_hints.motion).toBe('move_right');
     expect(request.questions).not.toHaveProperty('action');
     expect(request.questions).not.toHaveProperty('direction');
-    expect(request.questions).not.toHaveProperty('translate_x');
-    expect(request.questions).not.toHaveProperty('rotate_z');
+    expect(request.questions.translate_x).toMatchObject({ type: 'choice' });
+    expect(request.questions.translate_y).toMatchObject({ type: 'choice' });
+    expect(request.questions.translate_z).toMatchObject({ type: 'choice' });
+    expect(request.questions.rotate_x).toMatchObject({ type: 'choice' });
+    expect(request.questions.rotate_y).toMatchObject({ type: 'choice' });
+    expect(request.questions.rotate_z).toMatchObject({ type: 'choice' });
+    expect(request.questions.coordinate_space).toMatchObject({ type: 'choice' });
   });
 
   it('compiles one model-selected semantic primitive into deterministic geometry', () => {
@@ -328,6 +333,39 @@ describe('Jev action compiler', () => {
     expect(endPosition[1]).toBeCloseTo(3 / Math.sqrt(2));
     expect(endPosition[2]).toBe(1);
     expect(endRotation).toEqual([0, 0, 90]);
+    expect(result.decision.motionSpec).toMatchObject({
+      version: 1,
+      translation: [1, 1, 0],
+      rotation: [0, 0, 1],
+      distanceMeters: 3,
+      rotationDegrees: 90,
+      durationSeconds: 2,
+    });
+  });
+
+  it('composes camera translation and rotation in the same interval', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const camera = project.objects[0]!;
+    camera.transform.position = [0, -8, 2];
+    camera.transform.rotation = [90, 0, 0];
+    const result = compileJevAction(project, undefined, {
+      objectId: camera.id, target: 'camera', sceneId: project.cameraCuts[0]!.id, frame: 1, startPosition: null,
+      instruction: 'sale di 2 metri mentre ruota a destra di 45 gradi',
+    }, response({
+      motion: { type: 'choice', choice: 'pedestal_up', confidence: .96, probabilities: { pedestal_up: .96 } },
+      translate_x: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      translate_y: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      translate_z: { type: 'choice', choice: 'increase', confidence: .96, probabilities: { increase: .96 } },
+      rotate_x: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      rotate_y: { type: 'choice', choice: 'hold', confidence: .96, probabilities: { hold: .96 } },
+      rotate_z: { type: 'choice', choice: 'increase', confidence: .96, probabilities: { increase: .96 } },
+    }));
+    const position = [...result.blenderPlan.operations].reverse().find((operation) => operation.property === 'position')?.value.vector;
+    const rotation = [...result.blenderPlan.operations].reverse().find((operation) => operation.property === 'rotation')?.value.vector;
+    expect(position).toEqual([0, -8, 4]);
+    expect(rotation).toEqual([90, 0, 45]);
+    expect(result.decision.motionSpec).toMatchObject({ translation: [0, 0, 1], rotation: [0, 0, 1] });
   });
 
   it('keeps jump intent and reconstructs the drawn arc on a world-vertical plane', () => {

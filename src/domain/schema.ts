@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MotionSpecSchema } from './motion-spec';
 
 export const Vec3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 export type Vec3 = z.infer<typeof Vec3Schema>;
@@ -171,6 +172,7 @@ export const DirectionPlanSchema = z.object({
     relation: z.enum(['then', 'with']), startFrame: z.number().int(), endFrame: z.number().int(),
     referenceId: z.string().uuid().optional(), keepInFrame: z.boolean(),
     distanceMeters: z.number(), durationSeconds: z.number(), durationExplicit: z.boolean().optional(),
+    motionSpec: MotionSpecSchema.optional(),
     decision: z.record(z.unknown()).optional(),
   })),
 });
