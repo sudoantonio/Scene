@@ -918,7 +918,7 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
     <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} raycast={() => null} />
     <Line points={points} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
     {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
-    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); if (!isCameraMotion) select(objectId); selectMotion({ objectId, sceneId, keyframeId: keyframe.id }); setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
+    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(isCameraMotion ? undefined : objectId); selectMotion({ objectId, sceneId, keyframeId: keyframe.id }); setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
   </group>;
 }
 
@@ -1237,6 +1237,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     let freeFlight: { sceneId: string; position: Vec3; rotation: Vec3; target: Vec3; lastCommitTime: number } | undefined;
     let animationFrame = 0;
     let previousTime = performance.now();
+    let recordingFrameRemainder = 0;
 
     const editableTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
@@ -1260,19 +1261,37 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
     const keyUp = (event: KeyboardEvent) => {
       held.delete(event.code);
-      if (![...held].some((code) => movementCodes.has(code))) flushFreeFlight();
+      if (![...held].some((code) => movementCodes.has(code))) {
+        flushFreeFlight();
+        recordingFrameRemainder = 0;
+      }
     };
-    const clearKeys = () => { flushFreeFlight(); held.clear(); };
+    const clearKeys = () => { flushFreeFlight(); held.clear(); recordingFrameRemainder = 0; };
     const tick = (time: number) => {
       const deltaSeconds = Math.min(.05, Math.max(0, (time - previousTime) / 1000));
       previousTime = time;
       if ([...held].some((code) => movementCodes.has(code))) {
-        const editor = useEditor.getState();
+        let editor = useEditor.getState();
+        // REC has its own clock while movement keys are held. The Play state
+        // remains off, but the recording cursor advances so every WASDQE
+        // sample is visible and lands on a controllable frame.
+        if (editor.recordingSession) {
+          recordingFrameRemainder += deltaSeconds * editor.project.settings.fps;
+          const frameStep = Math.floor(recordingFrameRemainder);
+          if (frameStep > 0) {
+            recordingFrameRemainder -= frameStep;
+            const scenes = editor.project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+            const sceneIndex = scenes.findIndex((scene) => scene.id === editor.recordingSession?.sceneId);
+            const sceneEnd = scenes[sceneIndex + 1]?.frame ?? editor.project.settings.frameEnd + 1;
+            editor.setFrame(Math.min(sceneEnd - 1, editor.currentFrame + frameStep));
+            editor = useEditor.getState();
+          }
+        } else recordingFrameRemainder = 0;
         const selected = editor.project.objects.find((object) => object.id === editor.selectedId
           && object.kind !== 'audio'
           && !object.kind.includes('light')
           && evaluateProperty(object, 'visibility', editor.currentFrame));
-        if (selected) {
+        if (selected && (selected.kind !== 'camera' || Boolean(editor.recordingSession))) {
           const transform = evaluateTransform(selected, editor.currentFrame);
           const controls = cameraView ? shotOrbitRef.current : orbitRef.current;
           const viewCamera = controls?.object;
@@ -1390,7 +1409,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
   }, [cameraView]);
 
-  return <div ref={viewportRef} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
+  return <div ref={viewportRef} tabIndex={-1} onPointerDownCapture={(event) => {
+    const target = event.target as HTMLElement;
+    if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
+  }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>

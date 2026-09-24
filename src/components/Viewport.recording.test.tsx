@@ -165,6 +165,36 @@ describe('controlli della vista libera', () => {
     expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove Cubo 1');
   });
 
+  it('ridà il controllo WASDQE alla viewport dopo aver scritto in un campo', () => {
+    const { container } = render(<><textarea aria-label="Input AI" /><Viewport /></>);
+    const input = screen.getByRole('textbox', { name: 'Input AI' });
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    fireEvent.pointerDown(container.querySelector('.viewport')!);
+    expect(document.activeElement).toBe(container.querySelector('.viewport'));
+  });
+
+  it('muove un elemento con Q ed E anche durante REC fermo', () => {
+    render(<Viewport />);
+    act(() => {
+      useEditor.getState().addObject('cube');
+      useEditor.getState().startRecording(useEditor.getState().project.cameraCuts[0].id);
+    });
+    const cubeId = useEditor.getState().selectedId!;
+    const before = evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cubeId)!, 1).position[2];
+    fireEvent.keyDown(window, { code: 'KeyE', key: 'e' });
+    act(() => vi.advanceTimersByTime(64));
+    fireEvent.keyUp(window, { code: 'KeyE', key: 'e' });
+    const afterUp = evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cubeId)!, useEditor.getState().currentFrame).position[2];
+    expect(afterUp).toBeGreaterThan(before);
+    expect(useEditor.getState().isPlaying).toBe(false);
+    fireEvent.keyDown(window, { code: 'KeyQ', key: 'q' });
+    act(() => vi.advanceTimersByTime(64));
+    fireEvent.keyUp(window, { code: 'KeyQ', key: 'q' });
+    const afterDown = evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cubeId)!, useEditor.getState().currentFrame).position[2];
+    expect(afterDown).toBeLessThan(afterUp);
+  });
+
   it('mostra solo la miniatura camera e permette di ridurla', () => {
     render(<Viewport />);
     expect(screen.queryByRole('button', { name: 'Frame della ripresa' })).not.toBeInTheDocument();

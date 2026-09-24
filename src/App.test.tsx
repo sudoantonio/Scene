@@ -30,15 +30,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Salvataggi e apertura progetto', () => {
-  it('apre i controlli dall’header come pannello flottante nel main', () => {
+  it('mostra i controlli nel pannello laterale', () => {
     render(<App />);
-    expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Modifica' }));
-    expect(screen.getByTestId('inspector')).toHaveTextContent('Pannello edit');
-    fireEvent.click(screen.getByRole('button', { name: 'Scenografia' }));
-    expect(screen.getByTestId('inspector')).toHaveTextContent('Pannello scene');
-    fireEvent.click(screen.getByRole('button', { name: 'Scenografia' }));
-    expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
+    expect(screen.getByTestId('inspector')).toHaveTextContent('edit');
+    expect(screen.queryByRole('button', { name: 'Modifica' })).not.toBeInTheDocument();
   });
 
   it('non cancella modifiche effettuate mentre il salvataggio automatico è in corso', async () => {

@@ -108,13 +108,14 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().currentFrame).toBe(36);
   });
 
-  it('in vista libera il clic seleziona il keyframe e porta la testina al suo fotogramma', () => {
+  it('in vista libera il clic sul keyframe camera libera il soggetto e porta la testina al fotogramma', () => {
     useEditor.getState().addObject('cube');
     const selectedBefore = useEditor.getState().selectedId;
     render(<Timeline />);
     fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
     expect(useEditor.getState().currentFrame).toBe(36);
-    expect(useEditor.getState().selectedId).toBe(selectedBefore);
+    expect(selectedBefore).toBeTruthy();
+    expect(useEditor.getState().selectedId).toBeUndefined();
     expect(useEditor.getState().selectedMotion).toMatchObject({ keyframeId: 'point-36' });
   });
 
