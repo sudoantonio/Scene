@@ -7,7 +7,8 @@ import { useEditor } from '../store/editor';
 const choice = (value: string) => ({ type: 'choice', choice: value, confidence: .95, probabilities: { [value]: .95 } });
 const score = (value: number) => ({ type: 'score', score: value, confidence: .95, probabilities: { [value]: .95 } });
 const runner: DecisionRunner = async (request) => {
-  const state = request.state as { instruction: string; right_clause?: string };
+  const state = request.state as { instruction: string; right_clause?: string; new_instruction?: string };
+  if ('followup_action' in request.questions) return { answers: { followup_action: choice(state.new_instruction?.includes('poi') ? 'continue' : state.new_instruction?.includes('ignora') ? 'new' : state.new_instruction?.includes('secondo') ? 'correct_2' : 'refine') } };
   if ('clause_relation' in request.questions) return { answers: { clause_relation: choice(state.right_clause?.includes('inquadr') ? 'keep_in_frame' : state.right_clause?.includes('destra') ? 'join' : 'then') } };
   if ('motion_family' in request.questions) return { answers: { motion_family: choice('camera_translation') } };
   return { model: 'test-decisions', answers: { actionable: { type: 'noul', noul: .99 }, motion: choice(state.instruction.includes('allontana') ? 'dolly_out' : 'dolly_in'), distance: score(3), duration: score(4), energy: score(2), path: choice('direct') } };
@@ -86,7 +87,7 @@ describe('Persistent direction planning', () => {
     const direction = first.blenderPlan.directionPlan!;
     const updated = applyPlan(project, first.blenderPlan);
     updated.directionPlans = [direction];
-    const continued = await planDirection(updated, { ...input, instruction: 'poi si avvicina al personaggio', directionPlanId: direction.id, directionMode: 'continue' }, runner);
+    const continued = await planDirection(updated, { ...input, instruction: 'poi si avvicina al personaggio', directionPlanId: direction.id }, runner);
     const result = continued.blenderPlan.directionPlan!;
     expect(result.id).toBe(direction.id);
     expect(result.actions.map((action) => action.motion)).toEqual(['dolly_in', 'dolly_out', 'dolly_in']);
@@ -101,12 +102,26 @@ describe('Persistent direction planning', () => {
     const direction = first.blenderPlan.directionPlan!;
     const updated = applyPlan(project, first.blenderPlan);
     updated.directionPlans = [direction];
-    const refined = await planDirection(updated, { ...input, instruction: 'mantieni sempre il personaggio inquadrato', directionPlanId: direction.id, directionMode: 'refine' }, runner);
+    const refined = await planDirection(updated, { ...input, instruction: 'mantieni sempre il personaggio inquadrato', directionPlanId: direction.id }, runner);
     const result = refined.blenderPlan.directionPlan!;
     expect(result.actions).toHaveLength(2);
     expect(result.actions.every((action) => action.keepInFrame)).toBe(true);
     expect(result.constraints).toContain('mantieni sempre il personaggio inquadrato');
     expect(result.prompts?.at(-1)).toEqual({ instruction: 'mantieni sempre il personaggio inquadrato', mode: 'refine' });
+  });
+
+  it('recognizes a natural-language correction of a specific action', async () => {
+    const { project, input } = fixture();
+    const first = await planDirection(project, input, runner);
+    const direction = first.blenderPlan.directionPlan!;
+    const updated = applyPlan(project, first.blenderPlan);
+    updated.directionPlans = [direction];
+    const corrected = await planDirection(updated, { ...input, instruction: 'correggi il secondo: si avvicina al personaggio', directionPlanId: direction.id }, runner);
+    const result = corrected.blenderPlan.directionPlan!;
+    expect(result.actions[0]!.id).toBe(direction.actions[0]!.id);
+    expect(result.actions[1]!.id).toBe(direction.actions[1]!.id);
+    expect(result.actions[1]!.motion).toBe('dolly_in');
+    expect(result.prompts?.at(-1)?.mode).toBe('correct');
   });
 
   it('does not apply a partial plan when requested durations exceed the scene', async () => {

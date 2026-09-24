@@ -38,10 +38,10 @@ describe('Pannelli contestuali', () => {
     expect(input).toHaveValue('si allontana');
     fireEvent.change(input, { target: { value: 'si allontana di 1 metro' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, editActionId: actionId, directionMode: 'refine', frame: 1 })));
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, editActionId: actionId, frame: 1 })));
   });
 
-  it('continua una regia salvata dal suo stato finale', async () => {
+  it('invia automaticamente la regia salvata come contesto del prompt successivo', async () => {
     const project = createProject();
     const objectId = project.objects[0]!.id;
     const sceneId = project.cameraCuts[0]!.id;
@@ -51,13 +51,11 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    const mode = await screen.findByRole('combobox', { name: 'Tipo richiesta' });
-    await waitFor(() => expect(mode).toHaveValue('refine'));
-    fireEvent.change(mode, { target: { value: 'continue' } });
+    expect(screen.queryByRole('combobox', { name: 'Tipo richiesta' })).not.toBeInTheDocument();
     const input = screen.getByRole('textbox', { name: 'Azione Jev' });
     fireEvent.change(input, { target: { value: 'poi si allontana' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, directionMode: 'continue', frame: 24, instruction: 'poi si allontana' })));
+    await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, frame: 12, instruction: 'poi si allontana' })));
   });
 
   it('usa automaticamente l’elemento selezionato e applica la regia con Invio', async () => {

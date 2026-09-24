@@ -9,6 +9,32 @@ export type DecisionRunner = (request: { model: string; state: unknown; question
 export type DirectionClause = { instruction: string; relation: 'then' | 'with' };
 const relationSchema = z.object({ answers: z.object({ clause_relation: JevChoiceAnswerSchema }) });
 const familySchema = z.object({ answers: z.object({ motion_family: JevChoiceAnswerSchema }) });
+const followupSchema = z.object({ answers: z.object({ followup_action: JevChoiceAnswerSchema }) });
+
+async function inferFollowup(previousPlan: DirectionPlan, instruction: string, run: DecisionRunner) {
+  const actionCriteria = Object.fromEntries(previousPlan.actions.map((action, index) => [`correct_${index + 1}`, `Corregge o sostituisce specificamente l’azione ${index + 1}: “${action.instruction}”.`]));
+  const response = followupSchema.parse(await run({
+    model: 'jev-latest',
+    state: {
+      new_instruction: instruction,
+      current_direction: previousPlan.instruction,
+      actions: previousPlan.actions.map((action, index) => ({ number: index + 1, instruction: action.instruction, motion: action.motion })),
+      constraints: previousPlan.constraints ?? [],
+    },
+    questions: { followup_action: { type: 'choice', instructions: 'Decidi come applicare la nuova istruzione al piano esistente. Usa correct_N solo quando il testo corregge o sostituisce chiaramente quella specifica azione. Non inventare correzioni.', criteria: {
+      continue: 'Aggiunge una o più azioni che avvengono dopo quelle esistenti, incluse frasi con poi, dopo, successivamente o infine.',
+      refine: 'Aggiunge un vincolo o dettaglio al piano esistente senza aggiungere una nuova fase: velocità, intensità, precisione, inquadratura, altezza, distanza o stile.',
+      new: 'Chiede esplicitamente di ignorare, eliminare, ricominciare o sostituire tutto il piano esistente con un nuovo movimento.',
+      ...actionCriteria,
+    } } },
+  }));
+  const choice = response.answers.followup_action.choice;
+  if (choice === 'continue' || choice === 'refine' || choice === 'new') return { mode: choice as 'continue' | 'refine' | 'new' };
+  const match = choice.match(/^correct_(\d+)$/);
+  const action = match ? previousPlan.actions[Number(match[1]) - 1] : undefined;
+  if (!action) throw new Error('Non è chiaro quale movimento correggere. Selezionalo dal menu Regia oppure nominalo nella frase.');
+  return { mode: 'correct' as const, actionId: action.id };
+}
 
 /** Candidate boundaries depend on conjunctions, never on a dictionary of action verbs. */
 export async function interpretDirection(instruction: string, run: DecisionRunner) {
@@ -75,9 +101,16 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
   const scene = scenes[index];
   if (!scene) throw new Error('Scena inesistente.');
   const end = (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
-  const previousPlan = input.directionPlanId ? project.directionPlans?.find((plan) => plan.id === input.directionPlanId && plan.objectId === input.objectId && plan.sceneId === input.sceneId) : undefined;
+  let previousPlan = input.directionPlanId ? project.directionPlans?.find((plan) => plan.id === input.directionPlanId && plan.objectId === input.objectId && plan.sceneId === input.sceneId) : undefined;
+  let inferredMode: 'new' | 'refine' | 'continue' | 'correct' | undefined;
+  if (previousPlan && !input.editActionId && !input.directionMode) {
+    const followup = await inferFollowup(previousPlan, input.instruction, run);
+    inferredMode = followup.mode;
+    if (followup.actionId) input = { ...input, editActionId: followup.actionId };
+    if (followup.mode === 'new') previousPlan = undefined;
+  }
   if (input.editActionId && !previousPlan?.actions.some((action) => action.id === input.editActionId)) throw new Error('Il movimento da modificare non esiste più.');
-  const directionMode = previousPlan ? (input.editActionId ? 'correct' : input.directionMode ?? 'refine') : 'new';
+  const directionMode = previousPlan ? (input.editActionId ? 'correct' : input.directionMode ?? inferredMode ?? 'refine') : 'new';
   let interpreted;
   if (previousPlan && input.editActionId) {
     interpreted = { actions: previousPlan.actions.map((action) => ({ instruction: action.id === input.editActionId ? input.instruction : action.instruction, relation: action.relation })), constraints: previousPlan.constraints ?? [] };
