@@ -11,6 +11,10 @@ export const MotionSpecSchema = z.object({
   durationSeconds: z.number().positive(),
   path: z.enum(['hold', 'linear', 'smooth', 'arc', 'orbit', 'follow', 'drawn']),
   referenceId: z.string().uuid().optional(),
+  framing: z.object({
+    action: z.enum(['none', 'enter', 'exit']),
+    edge: z.enum(['left', 'right', 'top', 'bottom']),
+  }).default({ action: 'none', edge: 'left' }),
   constraints: z.object({
     lookAtReference: z.boolean(),
     maintainAltitude: z.boolean(),
@@ -33,6 +37,8 @@ export function describeMotionSpec(spec: MotionSpec) {
   if (spec.path === 'orbit') parts.unshift('orbita');
   if (spec.path === 'follow') parts.unshift('inseguimento');
   if (spec.path === 'drawn') parts.unshift('tratto disegnato');
+  if (spec.framing.action === 'enter') parts.unshift(`entra nell’inquadratura da ${spec.framing.edge === 'left' ? 'sinistra' : spec.framing.edge === 'right' ? 'destra' : spec.framing.edge === 'top' ? 'sopra' : 'sotto'}`);
+  if (spec.framing.action === 'exit') parts.unshift(`esce dall’inquadratura verso ${spec.framing.edge === 'left' ? 'sinistra' : spec.framing.edge === 'right' ? 'destra' : spec.framing.edge === 'top' ? 'sopra' : 'sotto'}`);
   if (spec.constraints.lookAtReference) parts.push('soggetto inquadrato');
   return parts.join(' + ') || 'fermo';
 }

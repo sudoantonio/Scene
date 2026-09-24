@@ -2,7 +2,7 @@ import { z } from 'zod';
 import * as THREE from 'three';
 import { BlenderPlanSchema, type AbacoProject, type BlenderPlan, type Keyframe, type SceneObject, type Vec3 } from './schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from './animation';
-import { cameraBasis, cameraTarget } from './camera-space';
+import { cameraBasis, cameraTarget, fromCameraSpace, toCameraSpace } from './camera-space';
 import { MotionSpecSchema, type MotionSpec } from './motion-spec';
 
 export const JevChoiceAnswerSchema = z.object({
@@ -78,6 +78,8 @@ export const JevActionResponseSchema = z.object({
     look_at_reference: JevNoulAnswerSchema.optional(),
     maintain_altitude: JevNoulAnswerSchema.optional(),
     maintain_distance: JevNoulAnswerSchema.optional(),
+    framing_action: JevChoiceAnswerSchema.optional(),
+    framing_edge: JevChoiceAnswerSchema.optional(),
     rotation_amount: JevScoreAnswerSchema.optional(),
   }),
   usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional(),
@@ -340,6 +342,8 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       look_at_reference: { type: 'noul', instructions: 'Il soggetto o la camera deve guardare e mantenere inquadrato l’elemento di riferimento durante il movimento?' },
       maintain_altitude: { type: 'noul', instructions: 'La quota Z deve restare costante durante il movimento?' },
       maintain_distance: { type: 'noul', instructions: 'La distanza dall’elemento di riferimento deve restare costante?' },
+      framing_action: { type: 'choice', instructions: 'La frase descrive un rapporto con i bordi dell’inquadratura?', criteria: { none: 'Nessuna entrata o uscita dal quadro.', enter: 'Il soggetto entra, rientra o compare nell’inquadratura.', exit: 'Il soggetto esce o scompare dall’inquadratura.' } },
+      framing_edge: { type: 'choice', instructions: 'Da quale bordo entra o verso quale bordo esce il soggetto?', criteria: { left: 'Bordo sinistro.', right: 'Bordo destro.', top: 'Bordo superiore.', bottom: 'Bordo inferiore.' } },
     },
   } as const;
 }
@@ -992,6 +996,51 @@ function resolvedAxes(explicit: AxisIntent['translation'], answers: Array<JevAct
   return answers.map((answer, axis) => answerAxis(answer, explicit[axis])) as Vec3;
 }
 
+function framingIntent(instruction: string, answers: JevActionResponse['answers']): MotionSpec['framing'] {
+  const text = normalizedInstruction(instruction);
+  const mentionsFrame = /\b(?:inquadratur|quadro|campo|frame)\w*\b/.test(text);
+  const localAction = mentionsFrame && /\b(?:rientr|entr|compar|appar|arriv)\w*\b/.test(text) ? 'enter'
+    : mentionsFrame && /\b(?:esc|usc|scompar|abbandon)\w*\b/.test(text) ? 'exit' : undefined;
+  const localEdge = /\b(?:da|dalla|verso|a)\s+sinistra\b|\bsinistra\b/.test(text) ? 'left'
+    : /\b(?:da|dalla|verso|a)\s+destra\b|\bdestra\b/.test(text) ? 'right'
+      : /\b(?:dall|verso|in)\s*alto\b|\b(?:sopra|superiore)\b/.test(text) ? 'top'
+        : /\b(?:dal|verso|in)\s*basso\b|\b(?:sotto|inferiore)\b/.test(text) ? 'bottom' : undefined;
+  const modelAction = answers.framing_action?.confidence && answers.framing_action.confidence >= .62 ? answers.framing_action.choice : undefined;
+  const modelEdge = answers.framing_edge?.confidence && answers.framing_edge.confidence >= .62 ? answers.framing_edge.choice : undefined;
+  const action = localAction ?? (modelAction === 'enter' || modelAction === 'exit' ? modelAction : 'none');
+  const edge = localEdge ?? (['left', 'right', 'top', 'bottom'].includes(modelEdge ?? '') ? modelEdge as MotionSpec['framing']['edge'] : 'left');
+  return { action, edge };
+}
+
+function framingEndpoints(project: AbacoProject, sceneId: string, frame: number, position: Vec3, object: SceneObject, framing: MotionSpec['framing']) {
+  const scene = project.cameraCuts.find((candidate) => candidate.id === sceneId);
+  const camera = project.objects.find((candidate) => candidate.id === scene?.cameraId && candidate.kind === 'camera');
+  if (!camera || framing.action === 'none') return { start: position, end: position };
+  const cameraTransform = evaluateTransform(camera, frame);
+  const cameraPosition = toCameraSpace(position, cameraTransform);
+  const depth = Math.max(.25, cameraPosition[1]);
+  const aspect = project.settings.resolutionX / project.settings.resolutionY;
+  const sensorHeight = 36 / aspect;
+  const lens = evaluateProperty(camera, 'lens', frame) as number;
+  const verticalFov = 2 * Math.atan(sensorHeight / (2 * lens));
+  const halfHeight = Math.max(.1, Math.tan(verticalFov / 2) * depth);
+  const halfWidth = halfHeight * aspect;
+  const objectMargin = Math.max(.15, object.asset.previewScale * Math.max(...object.transform.scale) * .6);
+  const inside: Vec3 = [
+    THREE.MathUtils.clamp(cameraPosition[0], -halfWidth * .65, halfWidth * .65),
+    depth,
+    THREE.MathUtils.clamp(cameraPosition[2], -halfHeight * .65, halfHeight * .65),
+  ];
+  const outside: Vec3 = [...inside];
+  if (framing.edge === 'left') outside[0] = -halfWidth - objectMargin;
+  if (framing.edge === 'right') outside[0] = halfWidth + objectMargin;
+  if (framing.edge === 'top') outside[2] = halfHeight + objectMargin;
+  if (framing.edge === 'bottom') outside[2] = -halfHeight - objectMargin;
+  const insideWorld = fromCameraSpace(inside, cameraTransform);
+  const outsideWorld = fromCameraSpace(outside, cameraTransform);
+  return framing.action === 'enter' ? { start: outsideWorld, end: insideWorld } : { start: insideWorld, end: outsideWorld };
+}
+
 export function resolveMotionSpec(
   input: Omit<JevActionInput, 'project'>,
   answers: JevActionResponse['answers'],
@@ -1017,6 +1066,7 @@ export function resolveMotionSpec(
             : translation.some(Boolean) || rotation.some(Boolean) ? 'linear' : 'hold';
   return MotionSpecSchema.parse({
     version: 1, space, translation, rotation, distanceMeters, rotationDegrees, durationSeconds, path, referenceId,
+    framing: framingIntent(input.instruction, answers),
     constraints: { lookAtReference, maintainAltitude, maintainDistance },
   });
 }
@@ -1083,7 +1133,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const confidence = input.engine === 'laya' && motion && motion === localMotion ? Math.max(.9, modelConfidence) : modelConfidence;
   const cameraIntent = explicitCameraDirection(input.instruction);
   const directionChoice = semanticIntent?.direction ?? cameraIntent ?? naturalIntent.direction ?? answers.direction?.choice ?? 'forward';
-  const startPosition = input.startPosition ?? (object ? evaluateTransform(object, input.frame).position : [0, 0, 0]);
+  let startPosition = input.startPosition ?? (object ? evaluateTransform(object, input.frame).position : [0, 0, 0]);
   const directions: Record<string, Vec3> = { ...cameraRelativeDirections(project, input.sceneId, input.frame), ...radialCameraDirections(project, input.sceneId, input.frame, startPosition) };
   if (referenceObject) {
     const referencePosition = evaluateTransform(referenceObject, input.frame).position;
@@ -1123,6 +1173,12 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   if (object && action === 'jump') {
     const horizontal: Vec3 = directionChoice === 'up' || directionChoice === 'down' ? [0, 0, 0] : scale(direction, distance);
     endPosition = add(startPosition, horizontal);
+  }
+  if (object && motionSpec.framing.action !== 'none') {
+    const endpoints = framingEndpoints(project, input.sceneId, input.frame, startPosition, object, motionSpec.framing);
+    startPosition = endpoints.start;
+    endPosition = endpoints.end;
+    action = 'move';
   }
   const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? [0, 0, 1] : drawnForward;
   const subjectStrokeProjector = input.gesture

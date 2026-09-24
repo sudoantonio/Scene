@@ -4,6 +4,7 @@ import { createProject, createSceneObject } from './schema';
 import { applyPlan, evaluateTransform, validatePlan } from './animation';
 import { compileJevAction, composeParallelJevPlans, jevActionRequest, jevMotionFamilyRequest, jevTemporalRequest, mergeJevSequencePlans, resolveMotionFamily, resolveTemporalStructure, splitJevInstruction, splitMotionTimeline, type JevActionResponse } from './jev-action';
 import { useEditor } from '../store/editor';
+import { toCameraSpace } from './camera-space';
 
 const response = (overrides: Partial<JevActionResponse['answers']> = {}): JevActionResponse => ({
   model: 'jev-1.13.0',
@@ -366,6 +367,36 @@ describe('Jev action compiler', () => {
     expect(position).toEqual([0, -8, 4]);
     expect(rotation).toEqual([90, 0, 45]);
     expect(result.decision.motionSpec).toMatchObject({ translation: [0, 0, 1], rotation: [0, 0, 1] });
+  });
+
+  it('interprets entering the framing from the left as an off-screen to on-screen movement', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    project.settings.resolutionX = 1920;
+    project.settings.resolutionY = 1080;
+    const camera = project.objects[0]!;
+    camera.transform.position = [0, -8, 2];
+    camera.transform.rotation = [90, 0, 0];
+    camera.camera.lens = 50;
+    const subject = createSceneObject('cube', 1);
+    subject.transform.position = [0, 0, 1];
+    project.objects.push(subject);
+    const result = compileJevAction(project, subject, {
+      objectId: subject.id, target: 'subject', sceneId: project.cameraCuts[0]!.id, frame: 1,
+      startPosition: subject.transform.position, instruction: 'il soggetto rientra nell’inquadratura da sinistra',
+    }, response({
+      framing_action: { type: 'choice', choice: 'enter', confidence: .98, probabilities: { enter: .98 } },
+      framing_edge: { type: 'choice', choice: 'left', confidence: .98, probabilities: { left: .98 } },
+    }));
+    const positions = result.blenderPlan.operations.filter((operation) => operation.property === 'position').map((operation) => operation.value.vector!);
+    const start = toCameraSpace(positions[0]!, camera.transform);
+    const end = toCameraSpace(positions.at(-1)!, camera.transform);
+    const aspect = project.settings.resolutionX / project.settings.resolutionY;
+    const halfHeight = Math.tan(Math.atan((36 / aspect) / (2 * camera.camera.lens))) * start[1];
+    const halfWidth = halfHeight * aspect;
+    expect(start[0]).toBeLessThan(-halfWidth);
+    expect(Math.abs(end[0])).toBeLessThan(halfWidth);
+    expect(result.decision.motionSpec.framing).toEqual({ action: 'enter', edge: 'left' });
   });
 
   it('keeps jump intent and reconstructs the drawn arc on a world-vertical plane', () => {
