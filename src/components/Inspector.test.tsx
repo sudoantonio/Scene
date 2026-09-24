@@ -21,6 +21,15 @@ describe('Pannelli contestuali', () => {
     expect(screen.queryByRole('region', { name: 'Pannello principale Jev' })).not.toBeInTheDocument();
   });
 
+  it('aumenta l’altezza dell’input quando il testo occupa più righe', () => {
+    useEditor.getState().addObject('cube');
+    render(<JevFloatingComposer />);
+    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 84 });
+    fireEvent.change(input, { target: { value: 'Il soggetto entra da sinistra, si ferma al centro e poi guarda verso la camera.' } });
+    expect(input).toHaveStyle({ height: '84px' });
+  });
+
   it('reopens one saved direction action in the input and sends its identity', async () => {
     const project = createProject();
     const objectId = project.objects[0]!.id;

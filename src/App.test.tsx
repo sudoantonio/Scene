@@ -45,13 +45,22 @@ describe('Salvataggi e apertura progetto', () => {
     expect(screen.getByTestId('inspector')).toBeInTheDocument();
   });
 
-  it('riduce e riapre l’input AI', () => {
+  it('mostra l’input AI selezionando un soggetto senza comandi di riduzione', () => {
     useEditor.getState().addObject('cube');
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Riduci input AI' }));
-    expect(screen.queryByLabelText('Input azione')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Espandi input AI' }));
     expect(screen.getByLabelText('Input azione')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Riduci input AI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Espandi input AI' })).not.toBeInTheDocument();
+  });
+
+  it('espone Indietro e Avanti nell’headbar e supporta Ctrl+Z con Shift', () => {
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Indietro' })).toBeDisabled();
+    act(() => useEditor.getState().addObject('cube'));
+    fireEvent.click(screen.getByRole('button', { name: 'Indietro' }));
+    expect(useEditor.getState().project.objects.some((object) => object.kind === 'cube')).toBe(false);
+    fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', ctrlKey: true, shiftKey: true });
+    expect(useEditor.getState().project.objects.some((object) => object.kind === 'cube')).toBe(true);
   });
 
   it('non cancella modifiche effettuate mentre il salvataggio automatico è in corso', async () => {

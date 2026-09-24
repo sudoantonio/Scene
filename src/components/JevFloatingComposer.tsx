@@ -1,5 +1,5 @@
-import { ArrowUp, ChevronDown, ChevronUp, LoaderCircle, Pencil } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { ArrowUp, LoaderCircle, Pencil } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
 import { describeMotionSpec } from '../domain/motion-spec';
@@ -21,7 +21,6 @@ export default function JevFloatingComposer() {
   const [instruction, setInstruction] = useState('');
   const [engine, setEngine] = useState<DecisionEngine>(() => window.localStorage.getItem(engineStorageKey) === 'laya' ? 'laya' : 'jev');
   const [busy, setBusy] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const [editingAction, setEditingAction] = useState<{ planId: string; actionId: string; frame: number }>();
   const [message, setMessage] = useState('');
   const [anchor, setAnchor] = useState<AiAnchor | undefined>({ x: 24, y: 52, side: 'right' });
@@ -63,6 +62,14 @@ export default function JevFloatingComposer() {
     const timeout = window.setTimeout(() => setMessage(''), 3200);
     return () => window.clearTimeout(timeout);
   }, [message]);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = '0px';
+    const height = Math.min(120, Math.max(30, input.scrollHeight));
+    input.style.height = `${height}px`;
+    input.style.overflowY = input.scrollHeight > 120 ? 'auto' : 'hidden';
+  }, [instruction, selectedId]);
 
   const generate = async () => {
     const currentInstruction = instruction.trim();
@@ -105,7 +112,6 @@ export default function JevFloatingComposer() {
   const composerStyle = anchor ? { left: anchor.x, top: anchor.y } as CSSProperties : undefined;
 
   if (!activeScene || !selected || !anchor) return null;
-  if (collapsed) return <div className={`${composerClass} collapsed`} style={composerStyle}><button className="jev-composer-expand" aria-label="Espandi input AI" title="Espandi input AI" onClick={() => setCollapsed(false)}><ChevronUp size={15} /><span>AI</span></button></div>;
   return <div className={composerClass} style={composerStyle}>
     {savedDirection && !message && !editingAction && <details className="jev-direction-editor">
       <summary>Regia · {savedDirection.actions.length} movimenti</summary>
@@ -122,7 +128,6 @@ export default function JevFloatingComposer() {
         <option value="laya">Laya</option>
       </select>
       <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
-      <button className="jev-composer-collapse" aria-label="Riduci input AI" title="Riduci input AI" onClick={() => { setStrokeActive(false); setCollapsed(true); inputRef.current?.blur(); }}><ChevronDown size={15} /></button>
       <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
       <button className="jev-composer-send" aria-label="Crea movimento" title="Crea movimento · Invio" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanelRightOpen, Plus } from 'lucide-react';
+import { PanelRightOpen, Plus, Redo2, Undo2 } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -35,6 +35,8 @@ export default function App() {
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const undo = useEditor((state) => state.undo);
   const redo = useEditor((state) => state.redo);
+  const canUndo = useEditor((state) => state.past.length > 0);
+  const canRedo = useEditor((state) => state.future.length > 0);
   const acceptPlan = useEditor((state) => state.acceptPlan);
   const [plan, setPlan] = useState<BlenderPlan>();
   const planProjectRef = useRef<ReturnType<typeof useEditor.getState>['project'] | undefined>(undefined);
@@ -234,12 +236,18 @@ export default function App() {
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo(); else undo();
+        return;
+      }
+      if (event.ctrlKey && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
       if (event.key === ' ') { event.preventDefault(); setPlaying(!useEditor.getState().isPlaying); }
       if (event.key.toLowerCase() === 'g') setGizmoMode('translate');
       if (event.key.toLowerCase() === 'r') setGizmoMode('rotate');
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [setGizmoMode, setPlaying]);
+  }, [redo, setGizmoMode, setPlaying, undo]);
 
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
@@ -248,6 +256,10 @@ export default function App() {
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+      <div className={`headbar-history ${collapsed.right ? 'with-panel-toggle' : ''}`}>
+        <button type="button" aria-label="Indietro" title="Indietro · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={14} /></button>
+        <button type="button" aria-label="Avanti" title="Avanti · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={14} /></button>
+      </div>
       {collapsed.right && <button className="headbar-inspector-open" aria-label="Apri pannello laterale" title="Apri pannelli" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>
     <main ref={workspaceRef} className={`workspace ${collapsed.right ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
