@@ -640,26 +640,39 @@ function simplifyStroke(points: [number, number][], maxPoints: number) {
   return simplified;
 }
 
-// Recover the sketched vertical path in world space using the view that captured it.
-// A nearly top-down view cannot determine height: retain world Z in the stable fallback.
-function verticalStrokeProjector(gesture: NonNullable<JevActionInput['gesture']>, origin: Vec3, right: Vec3) {
+// Recover a canvas stroke in world space using the exact view that captured it.
+// The stroke still needs a plane because a 2D point alone has no depth.
+function strokePlaneProjector(gesture: NonNullable<JevActionInput['gesture']>, origin: Vec3, normal: Vec3) {
   if (!gesture.viewPosition || !gesture.viewRotation || !gesture.verticalFovDegrees || !gesture.aspect) return undefined;
   const camera = new THREE.PerspectiveCamera(gesture.verticalFovDegrees, gesture.aspect, .01, 10000);
   camera.position.set(...gesture.viewPosition);
   camera.rotation.set(...gesture.viewRotation.map(THREE.MathUtils.degToRad) as Vec3);
   camera.updateMatrixWorld(true);
-  const normal = new THREE.Vector3(...right).cross(new THREE.Vector3(0, 0, 1)).normalize();
-  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, new THREE.Vector3(...origin));
+  const planeNormal = new THREE.Vector3(...normal).normalize();
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, new THREE.Vector3(...origin));
   const raycaster = new THREE.Raycaster();
   const points = new Map<string, Vec3>();
   for (const point of gesture.points) {
     raycaster.setFromCamera(new THREE.Vector2(point[0] * 2 - 1, 1 - point[1] * 2), camera);
-    if (Math.abs(raycaster.ray.direction.dot(normal)) < .05) return undefined;
+    if (Math.abs(raycaster.ray.direction.dot(planeNormal)) < .05) return undefined;
     const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
     if (!hit || hit.distanceTo(camera.position) > 1000) return undefined;
     points.set(point.join(','), hit.toArray() as Vec3);
   }
   return (point: [number, number]) => points.get(point.join(','))!;
+}
+
+// A nearly top-down view cannot determine height: retain world Z in the stable fallback.
+function verticalStrokeProjector(gesture: NonNullable<JevActionInput['gesture']>, origin: Vec3, right: Vec3) {
+  const normal = new THREE.Vector3(...right).cross(new THREE.Vector3(0, 0, 1)).normalize().toArray() as Vec3;
+  return strokePlaneProjector(gesture, origin, normal);
+}
+
+function horizontalStrokeProjector(gesture: NonNullable<JevActionInput['gesture']>, origin: Vec3) {
+  // From the animated camera's own view, depth cannot be recovered from its
+  // screen stroke. The camera-relative fallback remains the honest mapping.
+  if (gesture.viewMode !== 'free') return undefined;
+  return strokePlaneProjector(gesture, origin, [0, 0, 1]);
 }
 
 function strokeTrajectory(points: [number, number][], origin: Vec3, horizontal: Vec3, vertical: Vec3, distance: number, maxPoints = 12, projection?: { horizontalSpan: number; verticalSpan: number }, projectPoint?: (point: [number, number]) => Vec3) {
@@ -1057,7 +1070,12 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     endPosition = add(startPosition, horizontal);
   }
   const strokeVertical: Vec3 = ['jump', 'rise', 'descend'].includes(action) ? [0, 0, 1] : drawnForward;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition), ['jump', 'rise', 'descend'].includes(action) ? verticalStrokeProjector(input.gesture, startPosition, drawnRight) : undefined) : undefined;
+  const subjectStrokeProjector = input.gesture
+    ? ['jump', 'rise', 'descend'].includes(action)
+      ? verticalStrokeProjector(input.gesture, startPosition, drawnRight)
+      : horizontalStrokeProjector(input.gesture, startPosition)
+    : undefined;
+  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition), subjectStrokeProjector) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -1119,7 +1137,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const cameraStroke = gestureTarget === 'camera' && input.gesture
       ? drawnFullOrbit && (cameraAction === 'orbit_left' || cameraAction === 'orbit_right')
         ? cameraOrbitTrajectory(cameraTransform.position, targetStart, cameraAction, true)
-        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? [0, 0, 1] : drawnForward, cameraDistance, Math.min(12, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart), ['rise', 'descend'].includes(cameraAction) ? verticalStrokeProjector(input.gesture, cameraTransform.position, drawnRight) : undefined)
+        : strokeTrajectory(input.gesture.points, cameraTransform.position, drawnRight, ['rise', 'descend'].includes(cameraAction) ? [0, 0, 1] : drawnForward, cameraDistance, Math.min(12, cameraEndFrame - input.frame + 1), strokeProjection(input.gesture, targetStart), ['rise', 'descend'].includes(cameraAction) ? verticalStrokeProjector(input.gesture, cameraTransform.position, drawnRight) : horizontalStrokeProjector(input.gesture, cameraTransform.position))
       : undefined;
     if (cameraStroke) {
       const targetDelta: Vec3 = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1], targetEnd[2] - targetStart[2]];

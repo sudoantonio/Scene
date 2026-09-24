@@ -383,6 +383,32 @@ describe('Jev action compiler', () => {
     expect(result.blenderPlan.operations).toHaveLength(2);
   });
 
+  it('projects a free-view stroke exactly onto the subject ground plane', () => {
+    const project = createProject();
+    project.settings.frameEnd = 100;
+    const subject = createSceneObject('cube', 1);
+    subject.transform.position = [1, 2, 1];
+    project.objects.push(subject);
+    const view = new THREE.PerspectiveCamera(45, 16 / 9, .01, 1000);
+    view.position.set(8, -10, 8);
+    view.up.set(0, 0, 1);
+    view.lookAt(1, 2, 1);
+    view.updateMatrixWorld(true);
+    const intended: [number, number, number][] = [[1, 2, 1], [3, 3, 1], [2, 6, 1]];
+    const points = intended.map((point) => {
+      const projected = new THREE.Vector3(...point).project(view);
+      return [(projected.x + 1) / 2, (1 - projected.y) / 2] as [number, number];
+    });
+    const rotation = [view.rotation.x, view.rotation.y, view.rotation.z].map(THREE.MathUtils.radToDeg) as [number, number, number];
+    const result = compileJevAction(project, subject, {
+      objectId: subject.id, sceneId: project.cameraCuts[0].id, frame: 1, startPosition: intended[0], instruction: 'segue il tratto',
+      gesture: { target: 'subject', viewMode: 'free', viewRotation: rotation, viewPosition: view.position.toArray() as [number, number, number], verticalFovDegrees: 45, aspect: 16 / 9, points },
+    }, response());
+    const actual = result.blenderPlan.operations.filter((operation) => operation.property === 'position');
+    expect(actual).toHaveLength(3);
+    actual.forEach((operation, index) => operation.value.vector!.forEach((value, axis) => expect(value).toBeCloseTo(intended[index]![axis], 5)));
+  });
+
   it('uses the visible stroke length to determine the movement scale', () => {
     const project = createProject();
     project.settings.frameEnd = 100;
