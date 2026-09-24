@@ -39,7 +39,6 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const playing = useEditor((state) => state.isPlaying);
   const selectedId = useEditor((state) => state.selectedId);
   const selectedMotion = useEditor((state) => state.selectedMotion);
-  const cameraView = useEditor((state) => state.cameraView);
   const recordingSession = useEditor((state) => state.recordingSession);
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
@@ -227,7 +226,6 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
     setPlaying(false);
     if (object.kind !== 'camera') select(object.id);
     selectMotion({ objectId: object.id, sceneId });
-    if (cameraView) setFrame(keyframeFrame);
     setDeleteTarget({ kind: 'keyframe', objectId: object.id, keyframeId });
     motionPointDragged.current = false;
     const startX = event.clientX;
@@ -256,9 +254,11 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       cleanup();
       if (motionPointDragged.current) {
         moveMotionPoint(object.id, keyframeId, nextFrame);
-        if (cameraView) setFrame(nextFrame);
         window.setTimeout(() => { motionPointDragged.current = false; }, 0);
-      } else if (cameraView) setFrame(keyframeFrame);
+      } else {
+        selectMotion({ objectId: object.id, sceneId, keyframeId });
+        setFrame(keyframeFrame);
+      }
     };
     const cancel = () => {
       cleanup();
@@ -326,7 +326,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       }}>
         <span className="motion-resize-handle start" role="separator" aria-label="Ridimensiona inizio movimento" title="Trascina per ridimensionare l’inizio" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} />
         <span className="motion-clip-caption"><MoveRight className="timeline-motion-icon" size={11} /><span>Movimento</span><small>{realPoints.length} punti</small></span>
-        <span className="motion-key-ticks">{realPoints.map((key, index) => <span key={key.id} role="button" tabIndex={0} title={`Seleziona il punto al frame ${key.frame}`} aria-label={`Punto movimento al frame ${key.frame}`} data-edge={index === 0 ? 'start' : index === realPoints.length - 1 ? 'end' : undefined} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); if (motionObject.kind !== 'camera') select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); if (cameraView) setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); if (motionObject.kind !== 'camera') select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); if (cameraView) setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span>
+        <span className="motion-key-ticks">{realPoints.map((key, index) => <span key={key.id} role="button" tabIndex={0} title={`Seleziona il punto al frame ${key.frame}`} aria-label={`Punto movimento al frame ${key.frame}`} data-edge={index === 0 ? 'start' : index === realPoints.length - 1 ? 'end' : undefined} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); if (motionObject.kind !== 'camera') select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); if (motionObject.kind !== 'camera') select(motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span>
         <span className="motion-resize-handle end" role="separator" aria-label="Ridimensiona fine movimento" title="Trascina per ridimensionare la fine" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} />
       </button>];
     });

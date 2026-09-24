@@ -305,6 +305,49 @@ describe('scene indipendenti', () => {
     expect(state.selectedMotion).toBeUndefined();
   });
 
+  it('REC si arma senza avviare la riproduzione', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().startRecording(scene.id);
+    expect(useEditor.getState().recordingSession?.sceneId).toBe(scene.id);
+    expect(useEditor.getState().isPlaying).toBe(false);
+    useEditor.getState().stopRecording();
+  });
+
+  it('salva una nuova inquadratura nel keyframe camera cliccato senza REC', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const cameraId = scene.cameraId;
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setFrame(24);
+    useEditor.getState().setCameraFraming(scene.id, [7, -6, 5], [65, 0, 28], [0, 0, 1]);
+    useEditor.getState().stopRecording();
+    const positionKey = useEditor.getState().project.objects.find((object) => object.id === cameraId)!.keyframes.find((key) => key.property === 'position' && key.purpose === 'motion' && key.frame === 24)!;
+    useEditor.getState().selectMotion({ objectId: cameraId, sceneId: scene.id, keyframeId: positionKey.id });
+    useEditor.getState().setFrame(24);
+    useEditor.getState().setCameraFraming(scene.id, [9, -4, 6], [70, 2, 35], [1, 1, 2]);
+    const camera = useEditor.getState().project.objects.find((object) => object.id === cameraId)!;
+    expect(camera.keyframes.find((key) => key.property === 'position' && key.frame === 24)?.value).toEqual([9, -4, 6]);
+    expect(camera.keyframes.find((key) => key.property === 'rotation' && key.frame === 24)?.value).toEqual([70, 2, 35]);
+  });
+
+  it('salva posizione rotazione e scala nel keyframe elemento cliccato', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
+    useEditor.getState().addObject('cube');
+    const cubeId = useEditor.getState().selectedId!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setFrame(30);
+    useEditor.getState().setTransform(cubeId, { position: [3, 0, 1], rotation: [0, 0, 20], scale: [1, 1, 1] });
+    useEditor.getState().stopRecording();
+    const positionKey = useEditor.getState().project.objects.find((object) => object.id === cubeId)!.keyframes.find((key) => key.property === 'position' && key.purpose === 'motion' && key.frame === 30)!;
+    useEditor.getState().selectMotion({ objectId: cubeId, sceneId: scene.id, keyframeId: positionKey.id });
+    useEditor.getState().setFrame(30);
+    useEditor.getState().setTransform(cubeId, { position: [5, 2, 1], rotation: [4, 8, 45], scale: [1.2, 1.3, 1.4] });
+    const cube = useEditor.getState().project.objects.find((object) => object.id === cubeId)!;
+    expect(evaluateTransform(cube, 30)).toMatchObject({ position: [5, 2, 1], rotation: [4, 8, 45], scale: [1.2, 1.3, 1.4] });
+  });
+
   it('REC mantiene continua una piccola rotazione camera oltre il bordo di 180 gradi', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false });
     const scene = useEditor.getState().project.cameraCuts[0];

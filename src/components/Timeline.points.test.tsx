@@ -108,14 +108,14 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().currentFrame).toBe(36);
   });
 
-  it('in vista libera seleziona il keyframe senza spostare la testina', () => {
+  it('in vista libera il clic seleziona il keyframe e porta la testina al suo fotogramma', () => {
     useEditor.getState().addObject('cube');
     const selectedBefore = useEditor.getState().selectedId;
     render(<Timeline />);
     fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
-    expect(useEditor.getState().currentFrame).toBe(20);
+    expect(useEditor.getState().currentFrame).toBe(36);
     expect(useEditor.getState().selectedId).toBe(selectedBefore);
-    expect(useEditor.getState().selectedMotion).toBeTruthy();
+    expect(useEditor.getState().selectedMotion).toMatchObject({ keyframeId: 'point-36' });
   });
 
   it('a timeline chiusa mostra tutte le scene nella barra cumulativa', () => {
@@ -151,6 +151,8 @@ describe('Punti e maniglie del movimento', () => {
     fireEvent.pointerMove(window, { clientX: 100 });
     fireEvent.pointerUp(window, { clientX: 100 });
     expect(motionFrames()).toEqual([11, 36, 72]);
+    expect(useEditor.getState().currentFrame).toBe(20);
+    expect(useEditor.getState().selectedMotion?.keyframeId).toBeUndefined();
   });
 
   it('la maniglia resta indipendente e ridimensiona l’intero movimento', () => {
