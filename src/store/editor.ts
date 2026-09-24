@@ -985,6 +985,12 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     setCameraFraming: (sceneId, position, rotation, target) => {
       const state = get();
+      const selectedCameraKey = state.selectedMotion?.sceneId === sceneId && state.selectedMotion.keyframeId
+        ? state.project.objects
+          .find((object) => object.id === state.selectedMotion!.objectId && object.kind === 'camera')
+          ?.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.purpose === 'motion')
+        : undefined;
+      const selectedCameraFrame = selectedCameraKey?.frame === state.currentFrame ? selectedCameraKey.frame : undefined;
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
       const scene = next.cameraCuts.find((cut) => cut.id === sceneId);
@@ -997,8 +1003,11 @@ export const useEditor = create<EditorState>((set, get) => {
       const sessionActive = Boolean(session);
       const range = sceneRange(next, scene.id);
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
-      const selectedKey = state.selectedMotion?.objectId === camera.id && state.selectedMotion.sceneId === scene.id && state.selectedMotion.keyframeId
-        ? camera.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.purpose === 'motion')
+      // Una scena può rendere esclusiva la propria camera al primo montaggio.
+      // In quel passaggio gli id dei keyframe cambiano: il frame selezionato è
+      // quindi il riferimento stabile per continuare a modificare lo stesso punto.
+      const selectedKey = selectedCameraFrame === state.currentFrame
+        ? camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position' && key.purpose === 'motion')
         : undefined;
       // Senza REC la camera modifica la posa base della scena, senza creare
       // punti intermedi. Un keyframe cliccato resta invece modificabile.
@@ -1025,7 +1034,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (previousCameraId && camera.id !== previousCameraId) set({
         ...(state.selectedId === previousCameraId ? { selectedId: camera.id } : {}),
         ...(state.selectedMotion?.objectId === previousCameraId && state.selectedMotion.sceneId === scene.id
-          ? { selectedMotion: { ...state.selectedMotion, objectId: camera.id } }
+          ? { selectedMotion: { ...state.selectedMotion, objectId: camera.id, ...(selectedCameraFrame !== undefined ? { keyframeId: camera.keyframes.find((key) => key.frame === selectedCameraFrame && key.property === 'position' && key.purpose === 'motion')?.id } : {}) } }
           : {}),
       });
     },

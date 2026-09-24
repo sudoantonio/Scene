@@ -331,6 +331,26 @@ describe('scene indipendenti', () => {
     expect(camera.keyframes.find((key) => key.property === 'rotation' && key.frame === 24)?.value).toEqual([70, 2, 35]);
   });
 
+  it('mantiene e aggiorna il keyframe camera selezionato quando la scena separa una camera condivisa', () => {
+    const project = createProject();
+    const firstScene = project.cameraCuts[0];
+    project.cameraCuts.push({ ...structuredClone(firstScene), id: crypto.randomUUID(), frame: 40, name: 'Scena 2' });
+    const camera = project.objects.find((object) => object.id === firstScene.cameraId)!;
+    camera.keyframes.push({ id: 'shared-point', frame: 20, property: 'position', value: [4, -6, 4], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] });
+    camera.keyframes.push({ id: 'shared-rotation', frame: 20, property: 'rotation', value: [65, 0, 25], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] });
+    useEditor.setState({ project, currentFrame: 20, selectedId: undefined, selectedMotion: { objectId: camera.id, sceneId: firstScene.id, keyframeId: 'shared-point' }, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
+
+    useEditor.getState().setCameraFraming(firstScene.id, [8, -3, 6], [72, 1, 42], [1, 0, 2]);
+
+    const state = useEditor.getState();
+    const sceneCamera = state.project.objects.find((object) => object.id === state.project.cameraCuts[0].cameraId)!;
+    expect(sceneCamera.id).not.toBe(camera.id);
+    expect(sceneCamera.keyframes.find((key) => key.property === 'position' && key.frame === 20)?.value).toEqual([8, -3, 6]);
+    expect(sceneCamera.keyframes.find((key) => key.property === 'rotation' && key.frame === 20)?.value).toEqual([72, 1, 42]);
+    expect(state.selectedMotion).toMatchObject({ objectId: sceneCamera.id, sceneId: firstScene.id });
+    expect(sceneCamera.keyframes.some((key) => key.id === state.selectedMotion?.keyframeId && key.frame === 20)).toBe(true);
+  });
+
   it('salva posizione rotazione e scala nel keyframe elemento cliccato', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, interpolation: 'linear', past: [], future: [], dirty: false, isPlaying: false });
     useEditor.getState().addObject('cube');

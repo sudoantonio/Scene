@@ -1084,8 +1084,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     // The keyboard RAF outlives scene changes. Resolve the destination when
     // sampling, not from the render captured when its listener was installed.
     const state = useEditor.getState();
-    // Camera navigation is persisted only while the global REC session is on.
-    if (!state.recordingSession) {
+    const selectedCameraPoint = state.selectedMotion?.keyframeId
+      ? state.project.objects
+        .find((object) => object.id === state.selectedMotion!.objectId && object.kind === 'camera')
+        ?.keyframes.some((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.purpose === 'motion')
+      : false;
+    // REC crea nuovi campioni. Fuori da REC salviamo soltanto quando l'utente
+    // ha cliccato esplicitamente un keyframe camera già esistente.
+    if (!state.recordingSession && !selectedCameraPoint) {
       pendingCameraCommit.current = undefined;
       if (cameraCommitTimer.current) window.clearTimeout(cameraCommitTimer.current);
       cameraCommitTimer.current = undefined;
@@ -1103,7 +1109,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       rotation: [camera.rotation.x, camera.rotation.y, camera.rotation.z].map((value) => Number(THREE.MathUtils.radToDeg(value).toFixed(3))) as Transform['rotation'],
       target: controls.target.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
     };
-    const recording = true;
+    const recording = Boolean(state.recordingSession);
     if (cameraCommitTimer.current) {
       if (recording) return;
       window.clearTimeout(cameraCommitTimer.current);
@@ -1153,8 +1159,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
-    // Trackpad gestures alter the shot animation only while REC is active.
-    const persistCameraEdit = Boolean(useEditor.getState().recordingSession);
+    const editor = useEditor.getState();
+    const persistCameraEdit = Boolean(editor.recordingSession || (editor.selectedMotion?.keyframeId
+      && editor.project.objects
+        .find((object) => object.id === editor.selectedMotion!.objectId && object.kind === 'camera')
+        ?.keyframes.some((key) => key.id === editor.selectedMotion!.keyframeId && key.frame === editor.currentFrame && key.purpose === 'motion')));
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
     // per evitare lo zoom dell'intera interfaccia.
     if (event.ctrlKey) {
