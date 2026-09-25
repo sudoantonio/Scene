@@ -4,7 +4,7 @@ import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
 import { describeMotionSpec } from '../domain/motion-spec';
 import { useEditor } from '../store/editor';
-import headerLogo from '../assets/abaco-scene-header.png';
+import aiAgentMark from '../assets/ai-agent-mark.png';
 
 const engineStorageKey = 'scene-decision-engine';
 const formatDuration = (milliseconds: number) => milliseconds < 1_000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1_000).toFixed(2)} s`;
@@ -175,7 +175,7 @@ export default function JevFloatingComposer() {
   if (!activeScene || !selected || !anchor) return null;
   if (!inputOpen && manipulatingViewport) return null;
   if (!inputOpen) return <div className={`${composerClass} compact`} style={composerStyle}>
-    <button className="jev-composer-expand" type="button" aria-expanded={false} onClick={revealInput}><img src={headerLogo} alt="" />AI agent</button>
+    <button className="jev-composer-expand" type="button" aria-expanded={false} onClick={revealInput}><img src={aiAgentMark} alt="" />AI agent</button>
   </div>;
   return <div className={composerClass} style={composerStyle}>
     {savedDirection && !message && !editingAction && <details className="jev-direction-editor">

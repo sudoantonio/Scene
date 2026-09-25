@@ -259,7 +259,7 @@ function CameraBackLogo() {
   const texture = useLoader(THREE.TextureLoader, headerLogo);
   return <mesh position={[0, 0, .596]}>
     <planeGeometry args={[.54, .154]} />
-    <meshBasicMaterial map={texture} alphaMap={texture} color="#242424" transparent opacity={.3} depthWrite={false} />
+    <meshBasicMaterial map={texture} alphaMap={texture} color="#909090" transparent opacity={.35} depthWrite={false} />
   </mesh>;
 }
 

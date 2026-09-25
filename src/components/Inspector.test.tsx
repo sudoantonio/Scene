@@ -27,7 +27,7 @@ describe('Pannelli contestuali', () => {
     render(<JevFloatingComposer />);
     const button = screen.getByRole('button', { name: 'AI agent' });
     expect(button).toBeInTheDocument();
-    expect(button.querySelector('img')).toHaveAttribute('src');
+    expect(button.querySelector('img')).toHaveAttribute('src', expect.stringContaining('ai-agent-mark'));
     expect(screen.queryByRole('textbox', { name: 'Jev action' })).not.toBeInTheDocument();
     openAiAgent();
     expect(screen.getByRole('textbox', { name: 'Jev action' })).toBeInTheDocument();
