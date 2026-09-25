@@ -431,7 +431,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
               <i className="collapsed-scene-playhead" style={{ left: `${((frame - start) / project.settings.fps) * timelineZoom}px` }} />
             </div>
           </div>
-          <button type="button" className="collapsed-add-scene" title="Add a new scene" aria-label="Add scene from collapsed timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={13} /></button>
+          <button type="button" className="collapsed-add-scene" title="Add a new scene" aria-label="Add scene from collapsed timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={12} /></button>
         </div>
       </div>}
       <div className="timeline-control-row">
