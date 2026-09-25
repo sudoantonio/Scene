@@ -784,11 +784,11 @@ body:has(.app-shell.theme-light) #root,
 
 /* Open timeline: a compact toolbar, continuous surfaces and roomier tracks. */
 .app-shell.theme-dark .timeline:not(.collapsed) {
-  --timeline-open-panel: #232323;
-  --timeline-open-label: #292929;
-  --timeline-open-track: #303030;
-  --timeline-open-raised: #383838;
-  --timeline-open-rule: rgba(255, 255, 255, .07);
+  --timeline-open-panel: #1d1d1d;
+  --timeline-open-label: #202020;
+  --timeline-open-track: #252525;
+  --timeline-open-raised: #303030;
+  --timeline-open-rule: rgba(255, 255, 255, .09);
   --timeline-row-height: 38px;
   --timeline-ruler-height: 24px;
   background: var(--timeline-open-panel) !important;
@@ -826,8 +826,8 @@ body:has(.app-shell.theme-light) #root,
   border-bottom: 1px solid var(--timeline-open-rule) !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-ruler {
-  background-color: #383838 !important;
-  background-image: linear-gradient(to right, rgba(220, 220, 220, .24) 1px, transparent 1px);
+  background-color: #151515 !important;
+  background-image: linear-gradient(to right, rgba(230, 230, 230, .34) 1px, transparent 1px);
   border-bottom: 1px solid var(--timeline-open-rule) !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-ruler span {
@@ -847,7 +847,7 @@ body:has(.app-shell.theme-light) #root,
   background: var(--timeline-open-raised) !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track-label {
-  background: #414141 !important;
+  background: #353535 !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) :is(.scene-clip, .presence-segment, .motion-segment) {
   top: 4px;
@@ -856,6 +856,45 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark .timeline:not(.collapsed) .recorded-motion-segment {
   top: 4px;
   height: 30px;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .scene-clip {
+  color: #f1f1f1;
+  background: #343434;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .scene-clip.active {
+  box-shadow: inset 0 0 0 2px #6aa8e8;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .scene-image {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .presence-segment {
+  color: #e2f4e8;
+  background: #315a40 !important;
+  box-shadow: inset 0 0 0 1px #4c8860;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .presence-segment.selected-block {
+  background: #3b704e !important;
+  box-shadow: inset 0 0 0 2px #78c58f !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .camera-motion-segment {
+  color: #e3f7ff;
+  background: #20546d !important;
+  box-shadow: inset 0 0 0 1px #3983a1;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row .motion-segment {
+  color: #ecf7ee;
+  background: #355b40 !important;
+  box-shadow: inset 0 0 0 1px #578363;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .recorded-motion-segment {
+  color: #ffe7e4;
+  background: #653636 !important;
+  box-shadow: inset 0 0 0 1px #a45550;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) :is(.scene-clip, .presence-segment, .motion-segment, .recorded-motion-segment):hover {
+  filter: brightness(1.12);
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-control-row :is(.icon, .subtle):hover {
   background: var(--timeline-open-raised) !important;
