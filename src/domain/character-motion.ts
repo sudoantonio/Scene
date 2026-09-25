@@ -109,61 +109,98 @@ function selectControl(controllers: Controller[], part: CharacterPart, side: Cha
 
 const add = (a: Vec3, b: Vec3): Vec3 => a.map((entry, axis) => entry + b[axis]!) as Vec3;
 const scale = (vector: Vec3, amount: number): Vec3 => vector.map((entry) => entry * amount) as Vec3;
+const normalized = (vector: Vec3, fallback: Vec3): Vec3 => {
+  const length = Math.hypot(...vector);
+  return length > 1e-6 ? scale(vector, 1 / length) : fallback;
+};
 
-function localDirection(controller: Controller, direction: Vec3, magnitude: number): Vec3 {
-  const local = controllerOffsetFromWorldDelta(controller, direction);
+function controllerDelta(controller: Controller, worldDelta: Vec3): Vec3 {
+  const local = controllerOffsetFromWorldDelta(controller, worldDelta);
   const length = Math.hypot(...local);
-  return length > 1e-6 ? scale(local, magnitude / length) : [0, 0, 0];
+  // A malformed or near-singular rig must never create unbounded pose keys.
+  return length > 8 ? scale(local, 8 / length) : local;
 }
 
-function directionVector(direction: CharacterDirection | undefined): Vec3 {
+function rigAxes(controllers: Controller[]): { right: Vec3; forward: Vec3 } {
+  const pair = (part: CharacterPart) => [selectControl(controllers, part, 'left'), selectControl(controllers, part, 'right')] as const;
+  const [left, right] = pair('hand')[0] && pair('hand')[1] ? pair('hand') : pair('foot');
+  const lateral: Vec3 = left?.worldPosition && right?.worldPosition
+    ? [right.worldPosition[0] - left.worldPosition[0], right.worldPosition[1] - left.worldPosition[1], 0] : [1, 0, 0];
+  const axis = normalized(lateral, [1, 0, 0]);
+  return { right: axis, forward: [axis[1], -axis[0], 0] };
+}
+
+function rigHeight(controllers: Controller[], previewScale: number): number {
+  const positions = controllers.flatMap((controller) => controller.worldPosition ? [controller.worldPosition[2]] : []);
+  const span = positions.length > 1 ? Math.max(...positions) - Math.min(...positions) : 0;
+  return Math.max(.5, Math.min(4, span > .3 ? span : 2 / previewScale));
+}
+
+function directionVector(direction: CharacterDirection | undefined, right: Vec3, forward: Vec3): Vec3 {
   switch (direction) {
     case 'down': return [0, 0, -1];
-    case 'left': return [-1, 0, 0];
-    case 'right': return [1, 0, 0];
-    case 'forward': return [0, -1, 0];
-    case 'back': return [0, 1, 0];
+    case 'left': return scale(right, -1);
+    case 'right': return right;
+    case 'forward': return forward;
+    case 'back': return scale(forward, -1);
     default: return [0, 0, 1];
   }
 }
 
-export function planCharacterMotion(object: SceneObject, instruction: string, answers: CharacterAnswers, startFrame: number, endFrame: number, energy = 2, startFrameProject = 1): PlanOperation[] {
+export function planCharacterMotion(object: SceneObject, instruction: string, answers: CharacterAnswers, startFrame: number, endFrame: number, energy = 2, startFrameProject = 1, options: { fps?: number; travelDirection?: Vec3 } = {}): PlanOperation[] {
   const intent = resolveCharacterMotion(instruction, answers, object);
   if (!intent || endFrame <= startFrame) return [];
   const controls = object.asset.controllers ?? [];
-  const amplitude = Math.max(.2, Math.min(.8, .32 + energy * .07));
+  const height = rigHeight(controls, object.asset.previewScale);
+  const intensity = Math.max(.75, Math.min(1.2, .8 + energy * .1));
+  const axes = rigAxes(controls);
+  const forward = normalized(options.travelDirection ? [options.travelDirection[0], options.travelDirection[1], 0] : axes.forward, axes.forward);
+  const up: Vec3 = [0, 0, 1];
   const samples = new Map<string, { controller: Controller; frame: number; offset: Vec3 }>();
-  const save = (controller: Controller | undefined, progress: number, delta: Vec3, reset = false) => {
+  const save = (controller: Controller | undefined, progress: number, worldDelta: Vec3, reset = false) => {
     if (!controller) return;
     const frame = Math.round(startFrame + (endFrame - startFrame) * progress);
     const baseline = controllerOffset(object.asset, controller.name, startFrame, startFrameProject);
-    samples.set(`${controller.name}:${frame}`, { controller, frame, offset: reset ? [0, 0, 0] : add(baseline, delta) });
+    samples.set(`${controller.name}:${frame}`, { controller, frame, offset: reset ? [0, 0, 0] : add(baseline, controllerDelta(controller, worldDelta)) });
   };
   const sides: CharacterSide[] = intent.side === 'both' ? ['left', 'right'] : [intent.side];
-  const pose = (controller: Controller | undefined, worldDirection: Vec3, amount: number, progress = 1) => {
+  const pose = (controller: Controller | undefined, worldDelta: Vec3, progress = 1) => {
     if (!controller) return;
     save(controller, 0, [0, 0, 0]);
-    save(controller, progress, localDirection(controller, worldDirection, amount));
+    save(controller, progress, worldDelta);
   };
   if (intent.action === 'walk' || intent.action === 'run') {
-    const strength = intent.action === 'run' ? amplitude * 1.2 : amplitude * .8;
+    const seconds = (endFrame - startFrame) / (options.fps ?? 24);
+    const cycles = Math.max(1, Math.min(6, Math.round(seconds * (intent.action === 'run' ? 2 : 1.2))));
+    const quarters = Math.min(endFrame - startFrame, cycles * 4);
+    const stride = height * (intent.action === 'run' ? .25 : .18) * intensity;
+    const lift = height * (intent.action === 'run' ? .17 : .12) * intensity;
     for (const side of ['left', 'right'] as const) {
       const sign = side === 'left' ? 1 : -1;
       const foot = selectControl(controls, 'foot', side) ?? selectControl(controls, 'knee', side);
+      const knee = selectControl(controls, 'knee', side);
       const hand = selectControl(controls, 'hand', side) ?? selectControl(controls, 'arm', side);
-      for (const progress of [0, .25, .5, .75, 1]) {
-        const phase = Math.sin(progress * Math.PI * 2) * sign;
-        save(foot, progress, foot ? add(localDirection(foot, [0, -1, 0], phase * strength), localDirection(foot, [0, 0, 1], Math.max(0, phase) * strength * .4)) : [0, 0, 0]);
-        save(hand, progress, hand ? localDirection(hand, [0, -1, 0], -phase * strength * .65) : [0, 0, 0]);
+      const elbow = selectControl(controls, 'elbow', side);
+      for (let index = 0; index <= quarters; index++) {
+        const progress = index / quarters;
+        const phase = Math.sin(progress * Math.PI * 2 * cycles) * sign;
+        const swing = Math.max(0, phase);
+        save(foot, progress, add(scale(forward, phase * stride), scale(up, swing * lift)));
+        if (knee && knee.name !== foot?.name) save(knee, progress, add(scale(forward, phase * stride * .55), scale(up, swing * lift * .65)));
+        save(hand, progress, add(scale(forward, -phase * stride * .55), scale(up, Math.abs(phase) * height * .045)));
+        if (elbow && elbow.name !== hand?.name) save(elbow, progress, add(scale(forward, -phase * stride * .25), scale(up, Math.abs(phase) * height * .025)));
       }
     }
   } else if (intent.action === 'jump') {
     for (const side of ['left', 'right'] as const) {
       const knee = selectControl(controls, 'knee', side) ?? selectControl(controls, 'foot', side);
-      save(knee, 0, [0, 0, 0]);
-      save(knee, .25, knee ? localDirection(knee, [0, 0, -1], amplitude * .35) : [0, 0, 0]);
-      save(knee, .5, knee ? localDirection(knee, [0, 0, 1], amplitude * .5) : [0, 0, 0]);
-      save(knee, 1, [0, 0, 0]);
+      const foot = selectControl(controls, 'foot', side);
+      for (const control of [knee, foot].filter((item, index, items) => item && items.findIndex((entry) => entry?.name === item.name) === index)) {
+        save(control, 0, [0, 0, 0]);
+        save(control, .2, scale(up, -height * .05));
+        save(control, .5, scale(up, height * .17));
+        save(control, 1, [0, 0, 0]);
+      }
     }
   } else {
     for (const side of sides) {
@@ -172,24 +209,44 @@ export function planCharacterMotion(object: SceneObject, instruction: string, an
       const controller = (intent.controllerName ? controls.find((control) => control.name === intent.controllerName) : undefined) ?? selectControl(controls, part, side)
         ?? (leg ? selectControl(controls, 'foot', side) : selectControl(controls, 'hand', side));
       if (!controller) continue;
+      const elbow = !leg && part !== 'elbow' && !intent.controllerName ? selectControl(controls, 'elbow', side) : undefined;
+      const knee = leg && part !== 'knee' && !intent.controllerName ? selectControl(controls, 'knee', side) : undefined;
+      const outward = scale(axes.right, side === 'left' ? -1 : 1);
       if (intent.action === 'lower') {
         save(controller, 0, [0, 0, 0]);
         save(controller, 1, [0, 0, 0], true);
+        if (elbow) { save(elbow, 0, [0, 0, 0]); save(elbow, 1, [0, 0, 0], true); }
+        if (knee) { save(knee, 0, [0, 0, 0]); save(knee, 1, [0, 0, 0], true); }
       } else if (intent.action === 'wave') {
-        const up = localDirection(controller, [0, 0, 1], amplitude);
-        const across = localDirection(controller, [1, 0, 0], amplitude * .3);
+        const raised = add(scale(up, height * .72 * intensity), scale(outward, height * .12));
+        const across = scale(axes.right, height * .08);
         save(controller, 0, [0, 0, 0]);
-        save(controller, .25, add(up, across));
-        save(controller, .5, add(up, scale(across, -1)));
-        save(controller, .75, add(up, across));
+        save(controller, .2, raised);
+        save(controller, .4, add(raised, across));
+        save(controller, .6, add(raised, scale(across, -1)));
+        save(controller, .8, add(raised, across));
         save(controller, 1, [0, 0, 0]);
+        if (elbow) { save(elbow, 0, [0, 0, 0]); save(elbow, .2, add(scale(up, height * .34), scale(outward, height * .07))); save(elbow, .8, add(scale(up, height * .34), scale(outward, height * .07))); save(elbow, 1, [0, 0, 0]); }
       } else if (intent.action === 'kick') {
         save(controller, 0, [0, 0, 0]);
-        save(controller, .5, add(localDirection(controller, [0, -1, 0], amplitude), localDirection(controller, [0, 0, 1], amplitude * .45)));
+        save(controller, .5, add(scale(forward, height * .25 * intensity), scale(up, height * .22 * intensity)));
         save(controller, 1, [0, 0, 0]);
-      } else if (intent.action === 'point') pose(controller, [0, -1, 0], amplitude);
-      else if (intent.action === 'bend') pose(controller, [0, 0, -1], amplitude * .7);
-      else pose(controller, intent.action === 'raise' ? [0, 0, 1] : directionVector(intent.direction), amplitude);
+        if (knee) { save(knee, 0, [0, 0, 0]); save(knee, .5, add(scale(forward, height * .12), scale(up, height * .13))); save(knee, 1, [0, 0, 0]); }
+      } else if (intent.action === 'raise') {
+        if (leg) {
+          pose(controller, scale(up, height * .24 * intensity));
+          if (knee) pose(knee, scale(up, height * .14 * intensity));
+        } else {
+          pose(controller, add(scale(up, height * .8 * intensity), scale(outward, height * .12)));
+          if (elbow) pose(elbow, add(scale(up, height * .35 * intensity), scale(outward, height * .07)));
+        }
+      } else if (intent.action === 'point') {
+        pose(controller, add(scale(forward, height * .28 * intensity), scale(outward, height * .08)));
+        if (elbow) pose(elbow, scale(forward, height * .13 * intensity));
+      } else if (intent.action === 'bend') {
+        pose(controller, add(scale(up, height * .13 * intensity), scale(outward, height * .07)));
+        if (knee) pose(knee, scale(up, height * .1 * intensity));
+      } else pose(controller, scale(directionVector(intent.direction, axes.right, axes.forward), height * .2 * intensity));
     }
   }
   return [...samples.values()].sort((a, b) => a.frame - b.frame).map(({ controller, frame, offset }) => ({

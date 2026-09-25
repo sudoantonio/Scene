@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createProject, createSceneObject, ProjectSchema } from './schema';
 import { applyPlan, validatePlan } from './animation';
-import { controllerOffset } from './controller-pose';
+import { controllerOffset, controllerWorldDelta } from './controller-pose';
 import { characterMotionHint, planCharacterMotion, resolveCharacterMotion } from './character-motion';
 import { compileJevAction, composeParallelJevPlans, jevActionRequest, type JevActionResponse } from './jev-action';
 import { planDirection, type DecisionRunner } from './direction-planner';
@@ -43,12 +43,13 @@ describe('Jev and Laya articulated character motions', () => {
     const { project, character, input } = fixture();
     const plan = compileJevAction(project, character, { ...input, instruction: 'alza il braccio destro', engine: 'jev' }, response('raise'));
     expect(plan.decision.characterAction).toBe('raise');
-    expect(plan.blenderPlan.operations.filter((op) => op.type === 'set_controller_pose').map((op) => op.controllerName)).toEqual(['CTRL_MANO_DX', 'CTRL_MANO_DX']);
+    expect(new Set(plan.blenderPlan.operations.filter((op) => op.type === 'set_controller_pose').map((op) => op.controllerName))).toEqual(new Set(['CTRL_MANO_DX', 'CTRL_GOMITO_DX']));
     expect(plan.blenderPlan.operations.some((op) => op.property === 'position' || op.property === 'rotation')).toBe(false);
     expect(validatePlan(project, plan.blenderPlan)).toEqual([]);
     const result = applyPlan(project, plan.blenderPlan).objects.find((object) => object.id === character.id)!;
     const end = Math.max(...plan.blenderPlan.operations.map((op) => op.frame));
     expect(controllerOffset(result.asset, 'CTRL_MANO_DX', end)[2]).toBeGreaterThan(.2);
+    expect(controllerOffset(result.asset, 'CTRL_GOMITO_DX', end)[2]).toBeGreaterThan(.1);
     expect(controllerOffset(result.asset, 'CTRL_MANO_DX', Math.floor(end / 2))[2]).toBeGreaterThan(0);
     expect(controllerOffset(result.asset, 'CTRL_MANO_SX', end)).toEqual([0, 0, 0]);
     expect(ProjectSchema.parse({ ...project, objects: project.objects.map((entry) => entry.id === character.id ? result : entry) })).toBeTruthy();
@@ -57,7 +58,27 @@ describe('Jev and Laya articulated character motions', () => {
   it('raises both arms when the instruction names them in the plural', () => {
     const { project, character, input } = fixture();
     const plan = compileJevAction(project, character, { ...input, instruction: 'alza le braccia' }, response('raise'));
-    expect(new Set(plan.blenderPlan.operations.filter((op) => op.type === 'set_controller_pose').map((op) => op.controllerName))).toEqual(new Set(['CTRL_MANO_DX', 'CTRL_MANO_SX']));
+    expect(new Set(plan.blenderPlan.operations.filter((op) => op.type === 'set_controller_pose').map((op) => op.controllerName))).toEqual(new Set(['CTRL_MANO_DX', 'CTRL_MANO_SX', 'CTRL_GOMITO_DX', 'CTRL_GOMITO_SX']));
+  });
+
+  it('scales a raised arm to the real rig and moves the elbow with the hand', () => {
+    const { character } = fixture();
+    const positions: Record<string, [number, number, number]> = {
+      CTRL_MANO_DX: [.42, 0, .51], CTRL_MANO_SX: [-.42, 0, .51],
+      CTRL_GOMITO_DX: [.28, 0, .87], CTRL_GOMITO_SX: [-.28, 0, .87],
+      CTRL_PIEDE_DX: [.15, 0, .01], CTRL_PIEDE_SX: [-.15, 0, .01],
+      CTRL_GINOCCHIO_DX: [.15, 0, .55], CTRL_GINOCCHIO_SX: [-.15, 0, .55],
+    };
+    character.asset.controllers!.push({ name: 'CTRL_SOPRACCIGLIO', position: [0, 0, 0], worldPosition: [0, 0, 1.58], worldBasis: [[.2788, 0, 0], [0, 0, .2788], [0, -.2788, 0]], morphTargets: ['brow_x', 'brow_y', 'brow_z'], morphStep: .25 });
+    for (const control of character.asset.controllers!) {
+      control.worldPosition = positions[control.name] ?? control.worldPosition;
+      control.worldBasis = [[.2788, 0, 0], [0, 0, .2788], [0, -.2788, 0]];
+    }
+    const keys = planCharacterMotion(character, 'alza il braccio destro', { character_action: choice('raise') }, 1, 49);
+    const hand = keys.find((key) => key.controllerName === 'CTRL_MANO_DX' && key.frame === 49)!;
+    const elbow = keys.find((key) => key.controllerName === 'CTRL_GOMITO_DX' && key.frame === 49)!;
+    expect(controllerWorldDelta(character.asset.controllers![0]!, hand.value.vector!)[2]).toBeGreaterThan(1);
+    expect(controllerWorldDelta(character.asset.controllers![2]!, elbow.value.vector!)[2]).toBeGreaterThan(.4);
   });
 
   it('animates a wave and returns the hand to its original pose', () => {
@@ -66,10 +87,11 @@ describe('Jev and Laya articulated character motions', () => {
     const keys = plan.blenderPlan.operations.filter((op) => op.type === 'set_controller_pose');
     expect(plan.blenderPlan.summary).toContain('Laya');
     expect(keys.length).toBeGreaterThanOrEqual(4);
-    expect(keys.every((op) => op.controllerName === 'CTRL_MANO_SX')).toBe(true);
+    expect(new Set(keys.map((op) => op.controllerName))).toEqual(new Set(['CTRL_MANO_SX', 'CTRL_GOMITO_SX']));
     const result = applyPlan(project, plan.blenderPlan).objects.find((object) => object.id === character.id)!;
-    expect(controllerOffset(result.asset, 'CTRL_MANO_SX', keys.at(-1)!.frame)).toEqual([0, 0, 0]);
-    expect(controllerOffset(result.asset, 'CTRL_MANO_SX', keys[1]!.frame)).not.toEqual([0, 0, 0]);
+    const handKeys = keys.filter((op) => op.controllerName === 'CTRL_MANO_SX');
+    expect(controllerOffset(result.asset, 'CTRL_MANO_SX', handKeys.at(-1)!.frame)).toEqual([0, 0, 0]);
+    expect(controllerOffset(result.asset, 'CTRL_MANO_SX', handKeys[1]!.frame)).not.toEqual([0, 0, 0]);
   });
 
   it('adds alternating limbs to a walking movement and supports undo when accepted', () => {
@@ -85,6 +107,16 @@ describe('Jev and Laya articulated character motions', () => {
     expect(saved.asset.controllerKeys?.some((key) => key.source === 'ai')).toBe(true);
     useEditor.getState().undo();
     expect(useEditor.getState().project.objects.find((object) => object.id === character.id)!.asset.controllerKeys).toBeUndefined();
+  });
+
+  it('lifts the foot visibly and aligns its step with the character travel direction', () => {
+    const { character } = fixture();
+    const keys = planCharacterMotion(character, 'cammina avanti', { character_action: choice('walk') }, 1, 49, 2, 1, { fps: 24, travelDirection: [1, 0, 0] });
+    const foot = character.asset.controllers!.find((control) => control.name === 'CTRL_PIEDE_SX')!;
+    const raised = keys.filter((key) => key.controllerName === foot.name).map((key) => controllerWorldDelta(foot, key.value.vector!));
+    expect(raised.some((delta) => delta[2] > .15)).toBe(true);
+    expect(raised.some((delta) => delta[0] > .2)).toBe(true);
+    expect(raised.some((delta) => delta[0] < -.2)).toBe(true);
   });
 
   it('keeps manually placed joint keys when a later AI instruction affects that controller', () => {

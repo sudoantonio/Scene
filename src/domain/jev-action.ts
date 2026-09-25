@@ -1244,7 +1244,14 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(objectTransform!.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: `Rotazione scelta da ${engineLabel}.`, commentIds: [] });
   }
-  if (object?.kind === 'blend_asset' && characterIntent) operations.push(...planCharacterMotion(object, input.instruction, answers, input.frame, endFrame, answers.energy.score, project.settings.frameStart));
+  if (object?.kind === 'blend_asset' && characterIntent) {
+    const displacement = new THREE.Vector3(...endPosition).sub(new THREE.Vector3(...startPosition));
+    displacement.applyAxisAngle(new THREE.Vector3(0, 0, 1), -THREE.MathUtils.degToRad(objectTransform?.rotation[2] ?? 0));
+    operations.push(...planCharacterMotion(object, input.instruction, answers, input.frame, endFrame, answers.energy.score, project.settings.frameStart, {
+      fps: project.settings.fps,
+      travelDirection: displacement.toArray() as Vec3,
+    }));
+  }
 
   const scene = scenes[sceneIndex];
   const cameraObject = cameraOnly
