@@ -11,7 +11,6 @@ import Viewport, { captureContactSheet } from './components/Viewport';
 import AudioPlayback from './components/AudioPlayback';
 import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
-import headerLogo from './assets/abaco-scene-header.png';
 
 const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Direct export without AI changes.', assumptions: [], warnings: [], operations: [] });
 const initialLayout = () => {
@@ -254,7 +253,6 @@ export default function App() {
   return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px` }}>
     <AudioPlayback />
     <div className="slim-headbar">
-      <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
       <div className={`headbar-history ${collapsed.right ? 'with-panel-toggle' : ''}`}>
         <button type="button" aria-label="Undo" title="Undo · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={14} /></button>

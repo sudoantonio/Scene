@@ -439,8 +439,6 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .lighting-color > span { margin: 0; display: flex; align-items: center; gap: 6px; }
 .lighting-color .color-picker i { display: block; width: 24px; height: 24px; border-radius: 50%; }
 .slim-headbar { position: relative; z-index: 12; display: flex; align-items: center; justify-content: center; padding: 0 80px; background: rgba(255,255,255,.97); border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
-.headbar-logo { position: absolute; left: 78px; top: 50%; width: 82px; height: 25px; object-fit: contain; transform: translateY(-50%); pointer-events: none; user-select: none; mix-blend-mode: multiply; filter: invert(1); }
-.theme-dark .headbar-logo { mix-blend-mode: screen; filter: none; }
 .quick-add-menu { position: relative; }
 .quick-add-menu, .quick-add-menu * { -webkit-app-region: no-drag; }
 .slim-add { min-height: 30px; padding: 0 16px; display: flex; align-items: center; gap: 7px; color: #45433e; background: transparent; font-size: 12px; font-weight: 600; }
@@ -2149,10 +2147,9 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 
 /* Header compatto per lasciare più spazio alla scena. */
 .slim-headbar { min-height: 34px; }
-.headbar-logo { left: 72px; width: 74px; height: 22px; }
 .slim-add { min-height: 25px; padding-inline: 13px; font-size: 11px; }
-.headbar-history { position: absolute; z-index: 2; top: 50%; right: 12px; display: flex; gap: 2px; transform: translateY(-50%); -webkit-app-region: no-drag; }
-.headbar-history.with-panel-toggle { right: 43px; }
+.headbar-history { position: absolute; z-index: 2; top: 50%; left: 72px; display: flex; gap: 2px; transform: translateY(-50%); -webkit-app-region: no-drag; }
+.headbar-history.with-panel-toggle { left: 72px; }
 .headbar-history button { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; color: #aaa9a4; background: transparent; border: 0; border-radius: 6px; }
 .headbar-history button:hover:not(:disabled) { color: #eee; background: #343434; }
 .headbar-history button:disabled { opacity: .3; }

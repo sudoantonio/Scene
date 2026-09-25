@@ -11,6 +11,7 @@ import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
+import headerLogo from '../assets/abaco-scene-header.png';
 
 let viewportCanvas: HTMLCanvasElement | null = null;
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -254,6 +255,14 @@ export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'mode
   return <BackgroundAssetBoundary resetKey={`${kind}:${path}`}><Suspense fallback={null}>{kind === 'image' && source ? <ImageBackground source={source} /> : obj ? <ObjBackground source={obj.source} materials={obj.materials} /> : source ? <ModelBackground source={source} /> : null}</Suspense></BackgroundAssetBoundary>;
 }
 
+function CameraBackLogo() {
+  const texture = useLoader(THREE.TextureLoader, headerLogo);
+  return <mesh position={[0, 0, .596]}>
+    <planeGeometry args={[.54, .154]} />
+    <meshBasicMaterial map={texture} alphaMap={texture} color="#7b8287" transparent opacity={.18} depthWrite={false} />
+  </mesh>;
+}
+
 function CameraVisual({ object }: { object: SceneObject }) {
   const settings = useEditor((state) => state.project.settings);
   const frame = useEditor((state) => state.currentFrame);
@@ -270,6 +279,7 @@ function CameraVisual({ object }: { object: SceneObject }) {
   ];
   return <group>
     <mesh position={[0, 0, .35]}><boxGeometry args={[.82, .55, .48]} /><meshStandardMaterial color="#858077" roughness={.42} /></mesh>
+    <Suspense fallback={null}><CameraBackLogo /></Suspense>
     <mesh position={[0, 0, .03]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[.2, .29, .38, 24]} /><meshStandardMaterial color="#3c3c39" roughness={.3} /></mesh>
     <mesh position={[0, .36, .46]}><boxGeometry args={[.34, .18, .22]} /><meshStandardMaterial color="#858077" /></mesh>
     {corners.map((corner, index) => <Line key={index} points={[origin, corner]} color="#d9ad32" lineWidth={1.25} depthTest={false} transparent opacity={.82} />)}
