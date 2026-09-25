@@ -1,4 +1,5 @@
 import { resolvePresets } from '../domain/direction-presets';
+import { mentionedSceneTargetIds, sceneDirectionComments, sceneDirectionTargets } from '../domain/scene-direction';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
@@ -88,6 +89,7 @@ type EditorState = {
   keyProperty(id: string, property: 'visibility' | 'text'): void;
   deleteKeyframe(objectId: string, keyframeId: string): void;
   setTimelineComment(scope: TimelineCommentScope, sceneId: string, text: string, objectId?: string): void;
+  setSceneDirection(sceneId: string, text: string): void;
   addTransitionComment(fromSceneId: string, toSceneId: string, text: string): void;
   addCameraCut(): void;
   acceptPlan(plan: BlenderPlan): void;
@@ -851,7 +853,7 @@ export const useEditor = create<EditorState>((set, get) => {
       next.comments = next.comments.flatMap((comment) => {
         if (!comment.targetIds.includes(id)) return [comment];
         const targetIds = comment.targetIds.filter((targetId) => targetId !== id);
-        return targetIds.length ? [{ ...comment, targetIds }] : [];
+        return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
       });
       commit(next);
       if (state.selectedId === id) set({ selectedId: undefined });
@@ -928,7 +930,11 @@ export const useEditor = create<EditorState>((set, get) => {
         object.sceneIds = object.sceneIds.filter((id) => id !== sceneId);
         if (!object.sceneIds.length) {
           next.objects = next.objects.filter((item) => item.id !== objectId);
-          next.comments = next.comments.filter((comment) => !comment.targetIds.includes(objectId));
+          next.comments = next.comments.flatMap((comment) => {
+            if (!comment.targetIds.includes(objectId)) return [comment];
+            const targetIds = comment.targetIds.filter((id) => id !== objectId);
+            return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
+          });
           commit(next);
           return;
         }
@@ -936,7 +942,11 @@ export const useEditor = create<EditorState>((set, get) => {
       object.keyframes = object.keyframes.filter((key) => key.frame < scene.frame || key.frame >= sceneEnd);
       object.sceneNotes = object.sceneNotes.filter((note) => note.frame < scene.frame || note.frame >= sceneEnd);
       putKey(object, scene.frame, 'visibility', false, 'constant');
-      next.comments = next.comments.filter((comment) => !(comment.sceneId === sceneId && comment.targetIds.includes(objectId)));
+      next.comments = next.comments.flatMap((comment) => {
+        if (comment.sceneId !== sceneId || !comment.targetIds.includes(objectId)) return [comment];
+        const targetIds = comment.targetIds.filter((id) => id !== objectId);
+        return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
+      });
       commit(next);
     },
     deleteMotionFromScene: (objectId, sceneId) => {
@@ -1307,6 +1317,33 @@ export const useEditor = create<EditorState>((set, get) => {
         };
         if (existing) Object.assign(existing, fields);
         else next.comments.push({ id: crypto.randomUUID(), ...fields });
+      }
+      commit(next);
+    },
+    setSceneDirection: (sceneId, text) => {
+      const state = get();
+      const next = snapshot(state.project);
+      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+      const sceneIndex = scenes.findIndex((candidate) => candidate.id === sceneId);
+      const scene = scenes[sceneIndex];
+      if (!scene) return;
+      const prior = sceneDirectionComments(next, sceneId);
+      const existing = prior.find((comment) => comment.scope === 'scene') ?? prior[0];
+      next.comments = next.comments.filter((comment) => !prior.some((previous) => previous.id === comment.id));
+      const clean = text.trim();
+      if (clean) {
+        const targets = sceneDirectionTargets(next, sceneId);
+        const mentioned = mentionedSceneTargetIds(clean, targets);
+        const fallback = !mentioned.length && /(?:^|\s)\/[a-z][a-z0-9-]*(?=$|\s|[.,;:!?])/i.test(clean)
+          ? targets.find((target) => target.id === state.selectedId)?.id : undefined;
+        next.comments.push({
+          id: existing?.id ?? crypto.randomUUID(), text: clean,
+          presets: resolvePresets(clean, 'scene', prior.flatMap((comment) => comment.presets ?? [])),
+          targetIds: mentioned.length ? mentioned : fallback ? [fallback] : [],
+          startFrame: scene.frame,
+          endFrame: Math.max(scene.frame, (scenes[sceneIndex + 1]?.frame ?? next.settings.frameEnd + 1) - 1),
+          status: 'pending', kind: 'direction', scope: 'scene', sceneId,
+        });
       }
       commit(next);
     },

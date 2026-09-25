@@ -10,7 +10,7 @@ describe('Regia con preset e standard portatili', () => {
     const found = resolvePresets('/scocciato /si-avvicina verso la camera. /scocciato /inesistente /tmp/a.blend', 'object');
     expect(found.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']);
     expect(resolvePresets('/camera-statica /scocciato', 'framing').map(p => p.id)).toEqual(['camera-statica']);
-    expect(resolvePresets('/scocciato', 'scene')).toEqual([]);
+    expect(resolvePresets('/scocciato', 'scene').map(p => p.id)).toEqual(['scocciato']);
   });
   it('mantiene la versione del prompt salvato anche dopo un cambio del catalogo', () => {
     const original = { ...DIRECTION_PRESETS[0], version: 8, prompt: 'Versione approvata nel progetto' };
@@ -42,6 +42,28 @@ describe('Regia con preset e standard portatili', () => {
     useEditor.getState().setTimelineComment('object', p.cameraCuts[0].id, '/scocciato', target.id);
     expect(useEditor.getState().project.comments[0].presets).toHaveLength(1);
     expect(expandedDirection(useEditor.getState().project.comments[0])).not.toContain('[Preset Approaches');
+  });
+  it('unifica le vecchie note della scena e conserva i bersagli di @camera e @elemento', () => {
+    const project = createProject();
+    useEditor.getState().loadProject(project, '/test.abaco.json');
+    useEditor.getState().addObject('cube');
+    const current = useEditor.getState().project;
+    const scene = current.cameraCuts[0];
+    const camera = current.objects.find(o => o.id === scene.cameraId)!;
+    const cube = current.objects.find(o => o.name === 'Cube 1')!;
+    useEditor.getState().setTimelineComment('framing', scene.id, 'Mantieni la vista', camera.id);
+    useEditor.getState().setTimelineComment('object', scene.id, 'Entra in scena', cube.id);
+    expect(useEditor.getState().project.comments).toHaveLength(2);
+    useEditor.getState().setSceneDirection(scene.id, `@${camera.name} /camera-statica. @${cube.name} /si-avvicina.`);
+    const [saved] = useEditor.getState().project.comments;
+    expect(useEditor.getState().project.comments).toHaveLength(1);
+    expect(saved).toMatchObject({ scope: 'scene', sceneId: scene.id, targetIds: [camera.id, cube.id] });
+    expect(saved.presets?.map(p => p.id)).toEqual(['camera-statica', 'si-avvicina']);
+    const expanded = expandedDirection(saved);
+    expect(expanded).toContain('Non aggiungere movimenti secondari automatici');
+    expect(expanded).toContain('Coordina sguardo, corpo e arti');
+    useEditor.getState().undo();
+    expect(useEditor.getState().project.comments).toHaveLength(2);
   });
   it('include lo standard e i prompt nel JSON senza dipendere dal file originale', async () => {
     const p = createProject();

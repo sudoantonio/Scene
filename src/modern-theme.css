@@ -805,8 +805,19 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark :is(.slim-headbar, .timeline, .timeline-toolbar, .timeline-scroll, .simple-inspector, .simple-inspector .right-tabs, .simple-inspector .inspector-scroll) {
   background-color: var(--ui-secondary) !important;
 }
-.app-shell.theme-dark :is(.inspector-group, .quick-add-popover, .jev-floating-composer, .timeline-comment-popover) {
+.app-shell.theme-dark :is(.inspector-group, .quick-add-popover, .timeline-comment-popover) {
   background-color: var(--ui-primary) !important;
+}
+.app-shell .jev-floating-composer.anchored {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell .jev-floating-composer.anchored .jev-composer-input {
+  box-shadow: 0 7px 18px rgba(0, 0, 0, .24);
+}
+.app-shell .jev-floating-composer.anchored.compact .jev-composer-expand {
+  box-shadow: 0 5px 13px rgba(0, 0, 0, .24);
 }
 .app-shell.theme-dark :is(.secondary, .subtle, .slim-add, .decision-engine-switch, .jev-composer-tool, .icon):hover {
   background-color: var(--ui-tertiary) !important;
@@ -1002,6 +1013,109 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.timeline-sidebar-docked > .inspector { grid-column: 3; grid-row: 2 / 5; min-width: 0; min-height: 0; }
 .app-shell.timeline-sidebar-docked > .timeline-sidebar-resizer { grid-column: 1; grid-row: 3; }
 .app-shell.timeline-sidebar-docked > .timeline { grid-column: 1; grid-row: 4; min-width: 0; }
+
+/* Edit uses one prominent control area; secondary controls read as a compact list. */
+.app-shell .edit-stack, .app-shell .camera-edit-panel { gap: 7px !important; }
+.app-shell .edit-stack .inspector-identity {
+  padding: 13px !important;
+  margin-bottom: 6px;
+  border: 1px solid #484848;
+  border-radius: 12px;
+  background: #303030;
+}
+.app-shell .inspector-group-primary {
+  border-color: #58636a !important;
+  background: #34383b !important;
+  box-shadow: inset 3px 0 #d8ab35;
+}
+.app-shell .inspector-group-primary > summary { min-height: 42px; font-size: 12px; }
+.app-shell .edit-stack .inspector-group-secondary,
+.app-shell .camera-edit-panel .inspector-group-secondary,
+.app-shell .scenography-content .inspector-group-setup {
+  border: 0 !important;
+  border-bottom: 1px solid #454545 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.app-shell .inspector-group-secondary > summary,
+.app-shell .inspector-group-setup > summary { padding-left: 5px; padding-right: 5px; color: #d0d0d0; }
+.app-shell .inspector-group-secondary .inspector-group-body,
+.app-shell .inspector-group-setup .inspector-group-body { padding-left: 8px; padding-right: 8px; }
+
+/* Scenography has a single direction document for the active scene. */
+.app-shell .scenography-content { gap: 15px !important; }
+.app-shell .scene-elements-section { gap: 14px; }
+.app-shell .scene-direction-card {
+  padding: 14px;
+  color: var(--ui-text);
+  background: #303030;
+  border: 1px solid #515151;
+  border-radius: 13px;
+}
+.app-shell .scene-direction-heading { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.app-shell .scene-direction-heading > svg { color: #d6ad3c; flex: none; margin-top: 2px; }
+.app-shell .scene-direction-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.app-shell .scene-direction-heading strong { font-size: 13px; font-weight: 650; }
+.app-shell .scene-direction-heading span { color: var(--ui-muted); font-size: 10px; line-height: 1.4; }
+.app-shell .scene-direction-input { position: relative; }
+.app-shell .scene-direction-input textarea {
+  display: block;
+  width: 100%;
+  min-height: 148px;
+  resize: vertical;
+  padding: 11px 12px;
+  color: var(--ui-text);
+  background: #252525;
+  border: 1px solid #4b4b4b;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.app-shell .scene-direction-input textarea:focus { outline: 0; border-color: #b99845; box-shadow: 0 0 0 2px rgba(216,171,53,.16); }
+.app-shell .scene-direction-help { display: block; padding: 8px 1px 0; color: var(--ui-muted); font-size: 10px; line-height: 1.4; }
+.app-shell .scene-direction-menu {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% - 22px);
+  left: 0;
+  right: 0;
+  max-height: 214px;
+  overflow-y: auto;
+  padding: 5px;
+  background: #1f1f1f;
+  border: 1px solid #5e5e5e;
+  border-radius: 9px;
+  box-shadow: 0 12px 26px rgba(0,0,0,.36);
+}
+.app-shell .scene-direction-menu button { width: 100%; min-height: 32px; padding: 5px 8px; display: flex; align-items: center; justify-content: space-between; color: #ececec; background: transparent; border: 0; border-radius: 5px; text-align: left; font-size: 11px; }
+.app-shell .scene-direction-menu button:is(:hover,.active) { background: #454545; }
+.app-shell .scene-direction-menu small { color: #aaa; font-size: 9px; }
+.app-shell .scene-direction-menu p { margin: 0; padding: 9px; color: #b9b9b9; font-size: 11px; }
+.app-shell .scene-direction-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
+.app-shell .scene-direction-actions > span { color: var(--ui-muted); font-size: 10px; }
+.app-shell .scene-direction-save { min-height: 31px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; color: #1d1a10; background: #d8ab35; border: 0; border-radius: 7px; font-size: 10px; font-weight: 650; }
+.app-shell .scene-direction-save:disabled { color: #aaa; background: #454545; }
+.app-shell .scene-elements-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
+.app-shell .scene-elements-heading h3 { margin: 0; color: var(--ui-text); font-size: 12px; font-weight: 600; }
+.app-shell .scene-elements-heading span { color: var(--ui-muted); font-size: 10px; }
+.app-shell .scenography-outliner { gap: 5px; }
+.app-shell .scenography-content .scenography-object {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d8d8d8;
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  border-radius: 8px !important;
+  text-align: left;
+  font-size: 11px;
+}
+.app-shell .scenography-content .scenography-object.selected { color: #fff; background: #3b3b3b; border-color: #8d7946; }
+.app-shell .scenography-content .scenography-object svg { flex: none; color: #aaa; }
+.app-shell .scenography-content .scenography-object span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-shell.theme-dark .timeline:not(.collapsed) .ruler-label {
   border-radius: 8px 0 0 8px !important;
 }

@@ -36,13 +36,13 @@ export const DIRECTION_PRESETS: DirectionPreset[] = [
 ];
 
 export function presetsForScope(scope: TimelineCommentScope) {
-  return scope === 'scene' ? [] : DIRECTION_PRESETS.filter(p => scope === 'framing' ? p.category === 'camera' : p.category !== 'camera');
+  return scope === 'scene' ? DIRECTION_PRESETS : DIRECTION_PRESETS.filter(p => scope === 'framing' ? p.category === 'camera' : p.category !== 'camera');
 }
 const tokens = (text: string) => [...text.matchAll(/(?:^|\s)\/([a-z][a-z0-9-]*)(?=$|\s|[.,;:!?])/g)].map(m => m[1]);
 export function resolvePresets(text: string, scope: TimelineCommentScope, previous: DirectionPreset[] = []): DirectionPreset[] {
   const allowed = presetsForScope(scope);
   return [...new Set(tokens(text))].flatMap(id => {
-    const found = previous.find(p => p.id === id && (scope === 'framing' ? p.category === 'camera' : scope === 'object' && p.category !== 'camera')) ?? allowed.find(p => p.id === id);
+    const found = previous.find(p => p.id === id && (scope === 'scene' || (scope === 'framing' ? p.category === 'camera' : p.category !== 'camera'))) ?? allowed.find(p => p.id === id);
     return found ? [structuredClone(found)] : [];
   });
 }
@@ -51,6 +51,9 @@ export function expandedDirection(comment: SceneComment): string {
   const presets = resolvePresets(comment.text, scope, comment.presets);
   if (!presets.length) return comment.text;
   const corePrompt = (preset: DirectionPreset) => preset.prompt.split(/\n\s*\n/, 1)[0].trim();
+  if (scope === 'scene') {
+    return [comment.text, ...presets.map((preset) => `[Preset ${preset.label} · v${preset.version}]\n${preset.prompt}`)].join('\n\n');
+  }
   const emotions = presets.filter(preset => preset.category === 'emotion');
   const movements = presets.filter(preset => preset.category === 'movement');
   const cameras = presets.filter(preset => preset.category === 'camera');

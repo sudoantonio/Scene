@@ -190,7 +190,7 @@ describe('Pannelli contestuali', () => {
     expect(screen.getByText('Position and size').closest('details')).toHaveAttribute('open');
     expect(screen.getByText('Rotation', { exact: true }).closest('details')).not.toHaveAttribute('open');
     expect(screen.getByText('Appearance').closest('details')).not.toHaveAttribute('open');
-    expect(body).toContainElement(screen.getByText('Numeric values'));
+    expect(body).toContainElement(screen.getByText('Advanced values'));
   });
 
   it('appoggia un elemento selezionato sul piano', () => {
@@ -203,35 +203,29 @@ describe('Pannelli contestuali', () => {
     expect(evaluateTransform(object, 1).position).toEqual([2, 3, 1.5]);
   });
 
-  it.each(['scene', 'framing', 'object'] as const)('scrive e salva indicazioni %s senza ricreare la textarea', (scope) => {
+  it('scrive e salva una sola descrizione della scena senza ricreare la textarea', () => {
     useEditor.getState().addObject('cube');
     const initial = useEditor.getState();
-    const objectId = initial.selectedId!;
     const scene = initial.project.cameraCuts[0];
-    const label = scope === 'object' ? 'Cube 1' : scope === 'framing' ? initial.project.objects.find(o => o.id === scene.cameraId)!.name : scene.name!;
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle(`Add ${label} comment`));
-    const input = screen.getByRole('textbox', { name: `Direction for ${label}` });
-    expect(input).toHaveFocus();
+    const input = screen.getByRole('textbox', { name: 'Scene direction' });
     fireEvent.change(input, { target: { value: 'Entra' } });
-    expect(screen.getByRole('textbox', { name: `Direction for ${label}` })).toBe(input);
-    expect(input).toHaveFocus();
+    expect(screen.getByRole('textbox', { name: 'Scene direction' })).toBe(input);
     fireEvent.change(input, { target: { value: 'Entra lentamente in scena.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ scope, sceneId: scene.id, text: 'Entra lentamente in scena.', targetIds: scope === 'object' ? [objectId] : expect.any(Array) })]));
+    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
+    expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ scope: 'scene', sceneId: scene.id, text: 'Entra lentamente in scena.' })]));
   });
 
   it('mantiene bozza e contenitore quando si seleziona un elemento in Scenografia', () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
     const body = screen.getByRole('region', { name: 'Scenography content' });
-    const input = screen.getByLabelText('Direction for Scene 1');
+    const input = screen.getByLabelText('Scene direction');
     fireEvent.change(input, { target: { value: 'Bozza da conservare' } });
     act(() => useEditor.getState().select(undefined));
     fireEvent.click(screen.getByRole('button', { name: 'Select Cube 1' }));
     expect(screen.getByRole('region', { name: 'Scenography content' })).toBe(body);
-    expect(screen.getByLabelText('Direction for Scene 1')).toBe(input);
+    expect(screen.getByLabelText('Scene direction')).toBe(input);
     expect(input).toHaveValue('Bozza da conservare');
   });
 
@@ -244,62 +238,55 @@ describe('Pannelli contestuali', () => {
     useEditor.getState().setFrame(1);
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
     expect(screen.queryByRole('button', { name: `Select ${sphereName}` })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
-    fireEvent.change(screen.getByLabelText('Direction for Scene 1'), { target: { value: 'Prima scena' } });
+    fireEvent.change(screen.getByLabelText('Scene direction'), { target: { value: 'Prima scena' } });
     act(() => useEditor.getState().setFrame(secondScene.frame));
     expect(screen.getByRole('button', { name: `Select ${sphereName}` })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Scene direction')).toHaveValue('');
     act(() => useEditor.getState().setFrame(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
     expect(useEditor.getState().project.comments[0]).toMatchObject({ text: 'Prima scena', sceneId: useEditor.getState().project.cameraCuts[0].id });
   });
 });
 
-describe('Preset nei campi Scenografia', () => {
-  it('mostra / nel campo del personaggio, combina due preset e ne conserva i prompt al salvataggio', () => {
+describe('Scene direction mentions and motion presets', () => {
+  it('offers element motions after @mention and saves their prompts', () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle('Add Cube 1 comment'));
-    const input = screen.getByLabelText('Direction for Cube 1');
-    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    const input = screen.getByLabelText('Scene direction');
+    fireEvent.change(input, { target: { value: '@Cu', selectionStart: 3 } });
+    expect(screen.getByRole('option', { name: 'Cube 1 Element' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Cube 1 Element' }));
+    fireEvent.change(input, { target: { value: '@Cube 1 /', selectionStart: 9 } });
     expect(screen.getByRole('option', { name: 'Annoyed Emotion' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Static camera Camera' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Annoyed Emotion' }));
-    expect(input).toHaveValue('');
-    expect(screen.getByText('Annoyed')).toBeInTheDocument();
-    const query = '/si-av';
+    expect(input).toHaveValue('@Cube 1 /scocciato ');
+    const query = '@Cube 1 /scocciato /si-av';
     fireEvent.change(input, { target: { value: query, selectionStart: query.length } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(input).toHaveValue('');
-    expect(screen.getByText('Approaches')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(input).toHaveValue('@Cube 1 /scocciato /si-avvicina ');
+    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
     const comment = useEditor.getState().project.comments[0];
+    expect(comment.scope).toBe('scene');
     expect(comment.presets?.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']);
     expect(comment.presets?.every(p => p.prompt.length > 100)).toBe(true);
-    expect(screen.getByLabelText('Saved presets')).toBeInTheDocument();
-    expect(screen.queryByText('/scocciato /si-avvicina')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('Edit Cube 1 comment'));
-    expect(screen.getByLabelText('Direction for Cube 1')).toHaveValue('');
-    expect(screen.getByText('Annoyed')).toBeInTheDocument();
-    expect(screen.getByText('Approaches')).toBeInTheDocument();
+    expect(comment.targetIds).toContain(useEditor.getState().project.objects.find(o => o.name === 'Cube 1')!.id);
   });
 
-  it('propone solo movimenti camera e lascia libera la descrizione narrativa', () => {
+  it('offers camera motions after @camera and switches with the last mention', () => {
     const name = useEditor.getState().project.objects[0].name;
+    useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle(`Add ${name} comment`));
-    const input = screen.getByLabelText(`Direction for ${name}`);
-    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    const input = screen.getByLabelText('Scene direction');
+    fireEvent.change(input, { target: { value: `@${name} /`, selectionStart: name.length + 3 } });
     expect(screen.getByRole('option', { name: 'Static camera Camera' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Annoyed Emotion' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Static camera Camera' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
     expect(useEditor.getState().project.comments[0].presets?.[0].id).toBe('camera-statica');
-    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
-    const scene = screen.getByLabelText('Direction for Scene 1');
-    expect(scene).toHaveValue('');
-    fireEvent.change(scene, { target: { value: '/', selectionStart: 1 } });
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    const next = `@${name} /camera-statica @Cube 1 /`;
+    fireEvent.change(input, { target: { value: next, selectionStart: next.length } });
+    expect(screen.getByRole('option', { name: 'Annoyed Emotion' })).toBeInTheDocument();
   });
 });
 
