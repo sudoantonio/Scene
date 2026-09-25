@@ -781,3 +781,82 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark :is(.secondary, .subtle, .slim-add, .decision-engine-switch, .jev-composer-tool, .icon):hover {
   background-color: var(--ui-tertiary) !important;
 }
+
+/* Open timeline: a compact toolbar, continuous surfaces and roomier tracks. */
+.app-shell.theme-dark .timeline:not(.collapsed) {
+  --timeline-open-panel: #232323;
+  --timeline-open-label: #292929;
+  --timeline-open-track: #303030;
+  --timeline-open-raised: #383838;
+  --timeline-open-rule: rgba(255, 255, 255, .07);
+  --timeline-row-height: 38px;
+  --timeline-ruler-height: 24px;
+  background: var(--timeline-open-panel) !important;
+  grid-template-rows: 38px minmax(0, 1fr);
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-toolbar {
+  height: 38px;
+  min-height: 38px;
+  grid-template-rows: 38px;
+  background: var(--timeline-open-panel) !important;
+  border: 0 !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-control-row {
+  height: 38px;
+  padding: 2px 14px 7px;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll {
+  min-width: 0;
+  overflow: auto;
+  grid-template-columns: 180px max(800px, var(--timeline-content-width)) !important;
+  grid-template-rows: 24px 38px;
+  grid-auto-rows: 38px;
+  padding-top: 4px;
+  overscroll-behavior-x: contain;
+  background: linear-gradient(90deg, var(--timeline-open-label) 0 180px, var(--timeline-open-track) 180px 100%) !important;
+  border-top: 1px solid var(--timeline-open-rule);
+  border-radius: 10px 10px 0 0;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll > :is(.ruler, .track) {
+  width: 100%;
+  min-width: 0;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .ruler-label {
+  background: var(--timeline-open-label) !important;
+  border-bottom: 1px solid var(--timeline-open-rule) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-ruler {
+  background-color: #383838 !important;
+  background-image: linear-gradient(to right, rgba(220, 220, 220, .24) 1px, transparent 1px);
+  border-bottom: 1px solid var(--timeline-open-rule) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-ruler span {
+  top: 4px;
+  color: #b5b5b5;
+  font-size: 9px;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track-label {
+  background: var(--timeline-open-label) !important;
+  border-bottom: 1px solid var(--timeline-open-rule) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track {
+  background: var(--timeline-open-track) !important;
+  border-bottom: 1px solid var(--timeline-open-rule) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track {
+  background: var(--timeline-open-raised) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track-label {
+  background: #414141 !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) :is(.scene-clip, .presence-segment, .motion-segment) {
+  top: 4px;
+  bottom: 4px;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .recorded-motion-segment {
+  top: 4px;
+  height: 30px;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-control-row :is(.icon, .subtle):hover {
+  background: var(--timeline-open-raised) !important;
+}
