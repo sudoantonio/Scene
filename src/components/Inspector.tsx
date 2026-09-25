@@ -2,6 +2,7 @@ import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRo
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
+import { controllerOffset } from '../domain/controller-pose';
 import type { Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import ElementsPanel from './ElementsPanel';
@@ -31,6 +32,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const updateObject = useEditor((state) => state.updateObject);
   const replaceObject = useEditor((state) => state.replaceObject);
   const setTransform = useEditor((state) => state.setTransform);
+  const setControllerOffset = useEditor((state) => state.setControllerOffset);
   const alignObjectToGround = useEditor((state) => state.alignObjectToGround);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const startMotion = useEditor((state) => state.startMotion);
@@ -155,6 +157,13 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
             ['Tilt X', 0], ['Tilt Y', 1], ['Turn', 2],
           ] as const).map(([label, axis]) => <label key={`rotation-${axis}`}><span>{label}</span><strong>{transform.rotation[axis].toFixed(0)}°</strong><input aria-label={`${label} element`} type="range" min="-180" max="180" step="1" value={transform.rotation[axis]} onChange={(event) => changeTransformAxis('rotation', axis, Number(event.target.value))} /></label>)}
         </div></InspectorGroup>
+        {object.kind === 'blend_asset' && !!object.asset.controllers?.length && <InspectorGroup title="Character pose" icon={<Move3d size={13} />} variant="secondary">
+          <p className="inspector-help">Move a controller at this frame to pose the character. The pose is saved on the timeline.</p>
+          {object.asset.controllers.map((controller) => <div key={controller.name} className="character-controller">
+            <strong>{controller.name.startsWith('BONE|') ? controller.name.split('|').slice(1).join(' · ') : controller.name.replace(/^CTRL_/, '').replaceAll('_', ' ')}</strong>
+            <VectorFields label="Offset" value={controllerOffset(object.asset, controller.name, frame)} onChange={(value) => setControllerOffset(object.id, controller.name, value)} />
+          </div>)}
+        </InspectorGroup>}
         <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary"><div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div><div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Crop" icon={<Crop size={13} />} variant="secondary"><div className="camera-sliders">{(['Top', 'Right', 'Bottom', 'Left'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Crop ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
         {motionControls}

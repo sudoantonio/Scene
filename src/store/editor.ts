@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from '../domain/animation';
 import { groundedPositionZ } from '../domain/ground';
+import { moveGroupMembers } from '../domain/group-transform';
 
 type RecordingSession = {
   sceneId: string;
@@ -22,6 +23,8 @@ type EditorState = {
   project: AbacoProject;
   projectPath?: string;
   selectedId?: string;
+  selectedIds: string[];
+  multiSelectMode: boolean;
   currentFrame: number;
   isPlaying: boolean;
   cameraView: boolean;
@@ -43,6 +46,11 @@ type EditorState = {
   loadProject(project: AbacoProject, path: string): void;
   markSaved(project: AbacoProject, path: string): void;
   select(id?: string): void;
+  selectMember(id: string): void;
+  toggleSelection(id: string): void;
+  setMultiSelectMode(value: boolean): void;
+  groupSelection(): void;
+  ungroupSelection(): void;
   setFrame(frame: number): void;
   setPlaying(value: boolean): void;
   selectMotion(selection?: { objectId: string; sceneId: string; keyframeId?: string }): void;
@@ -51,7 +59,8 @@ type EditorState = {
   addObject(kind: ObjectKind): void;
   addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
   addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
-  addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number }): void;
+  addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number; controllers?: SceneObject['asset']['controllers'] }): void;
+  setControllerOffset(id: string, name: string, offset: Vec3): void;
   replaceObject(id: string, replacement: { kind: ObjectKind; name?: string; text?: string; screenSpace?: boolean; asset?: SceneObject['asset'] }): void;
   addShot(): void;
   splitScene(): void;
@@ -354,23 +363,54 @@ const syncScopedCommentRanges = (project: AbacoProject) => {
 };
 
 export const useEditor = create<EditorState>((set, get) => {
-  const commit = (project: AbacoProject) => set((state) => ({
-    project: { ...project, updatedAt: new Date().toISOString() },
-    past: [...state.past.slice(-49), snapshot(state.project)], future: [], dirty: true,
-  }));
+  const commit = (project: AbacoProject) => set((state) => {
+    const validIds = new Set(project.objects.map((object) => object.id));
+    project.groups = project.groups.map((group) => ({ ...group, memberIds: group.memberIds.filter((id) => validIds.has(id)) })).filter((group) => group.memberIds.length >= 2);
+    return {
+      project: { ...project, updatedAt: new Date().toISOString() },
+      selectedIds: state.selectedIds.filter((id) => validIds.has(id)),
+      past: [...state.past.slice(-49), snapshot(state.project)], future: [], dirty: true,
+    };
+  });
   const commitRecording = (project: AbacoProject, recordingSession: RecordingSession) => set({
     project: { ...project, updatedAt: new Date().toISOString() }, recordingSession, future: [], dirty: true,
   });
   return {
-    project: initialProject(), currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
-    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
-    loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
+    project: initialProject(), selectedIds: [], multiSelectMode: false, currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
+    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
+    loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
     select: (selectedId) => set((state) => ({
       selectedId,
+      selectedIds: selectedId ? state.project.groups.find((group) => group.memberIds.includes(selectedId))?.memberIds ?? [selectedId] : [],
       selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
       gizmoMode: selectedId && selectedId !== state.selectedId ? 'translate' : state.gizmoMode,
     })),
+    selectMember: (selectedId) => set({ selectedId, selectedIds: [selectedId], selectedMotion: undefined }),
+    toggleSelection: (id) => set((state) => {
+      if (!state.project.objects.some((object) => object.id === id)) return state;
+      const selectedIds = state.selectedIds.includes(id) ? state.selectedIds.filter((candidate) => candidate !== id) : [...state.selectedIds, id];
+      return { selectedIds, selectedId: selectedIds.includes(state.selectedId ?? '') ? state.selectedId : selectedIds.at(-1), selectedMotion: undefined };
+    }),
+    setMultiSelectMode: (multiSelectMode) => set({ multiSelectMode }),
+    groupSelection: () => {
+      const state = get();
+      const ids = [...new Set(state.selectedIds)];
+      if (ids.length < 2 || ids.some((id) => state.project.groups.some((group) => group.memberIds.includes(id)))) return;
+      if (ids.some((id) => { const object = state.project.objects.find((candidate) => candidate.id === id); return !object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace; })) return;
+      const next = snapshot(state.project);
+      next.groups.push({ id: crypto.randomUUID(), name: `Group ${next.groups.length + 1}`, memberIds: ids });
+      commit(next);
+      set({ multiSelectMode: false });
+    },
+    ungroupSelection: () => {
+      const state = get();
+      const group = state.project.groups.find((candidate) => candidate.memberIds.length === state.selectedIds.length && candidate.memberIds.every((id) => state.selectedIds.includes(id)));
+      if (!group) return;
+      const next = snapshot(state.project);
+      next.groups = next.groups.filter((candidate) => candidate.id !== group.id);
+      commit(next);
+    },
     setFrame: (frame) => {
       const before = get();
       const nextFrame = Math.max(before.project.settings.frameStart, Math.min(before.project.settings.frameEnd, Math.round(frame)));
@@ -406,7 +446,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       if (kind === 'camera') {
         const camera = state.project.objects.find((item) => item.kind === 'camera');
-        if (camera) set({ selectedId: camera.id });
+        if (camera) set({ selectedId: camera.id, selectedIds: [camera.id] });
         return;
       }
       const object = createSceneObject(kind, state.project.objects.filter((item) => item.kind === kind).length + 1);
@@ -420,7 +460,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (kind === 'text') putKey(object, sceneFrame, 'text', object.text, 'constant');
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id, gizmoMode: 'translate' });
+      set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
     addScreenImage: (asset) => {
       const state = get();
@@ -438,7 +478,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id, gizmoMode: 'translate' });
+      set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
     addAudio: (asset) => {
       const state = get();
@@ -459,7 +499,7 @@ export const useEditor = create<EditorState>((set, get) => {
       next.settings.frameEnd = Math.max(next.settings.frameEnd, clipEnd - 1);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id, selectedMotion: undefined, gizmoMode: 'translate' });
+      set({ selectedId: object.id, selectedIds: [object.id], selectedMotion: undefined, gizmoMode: 'translate' });
     },
     addBlendAsset: (asset) => {
       const state = get();
@@ -467,7 +507,7 @@ export const useEditor = create<EditorState>((set, get) => {
       object.name = asset.name;
       object.asset = {
         sourcePath: asset.sourcePath, proxyPath: asset.proxyPath, collectionName: asset.collectionName,
-        boundsCenter: structuredClone(asset.boundsCenter), previewScale: asset.previewScale, groundOffset: asset.groundOffset,
+        boundsCenter: structuredClone(asset.boundsCenter), previewScale: asset.previewScale, groundOffset: asset.groundOffset, controllers: asset.controllers,
       };
       object.transform.position[2] = asset.groundOffset;
       const next = snapshot(state.project);
@@ -489,7 +529,7 @@ export const useEditor = create<EditorState>((set, get) => {
       if (scene) makeObjectLocalToScene(next, object, scene.id);
       next.objects.push(object);
       commit(next);
-      set({ selectedId: object.id, gizmoMode: 'translate' });
+      set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
     replaceObject: (id, replacement) => {
       const state = get();
@@ -516,8 +556,9 @@ export const useEditor = create<EditorState>((set, get) => {
         }
       }
       next.objects[index] = fresh;
+      next.groups = next.groups.map((group) => ({ ...group, memberIds: group.memberIds.map((memberId) => memberId === id ? fresh.id : memberId) }));
       commit(next);
-      set({ selectedId: fresh.id, gizmoMode: 'translate' });
+      set({ selectedId: fresh.id, selectedIds: [fresh.id], gizmoMode: 'translate' });
     },
     addShot: () => {
       const state = get();
@@ -785,6 +826,16 @@ export const useEditor = create<EditorState>((set, get) => {
       Object.assign(object, rest);
       commit(next);
     },
+    setControllerOffset: (id, name, offset) => {
+      if (!offset.every(Number.isFinite)) return;
+      const state = get();
+      const next = snapshot(state.project);
+      const object = next.objects.find((item) => item.id === id && item.kind === 'blend_asset');
+      if (!object?.asset.controllers?.some((item) => item.name === name)) return;
+      object.asset.controllerKeys = (object.asset.controllerKeys ?? []).filter((key) => key.name !== name || key.frame !== state.currentFrame);
+      object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset });
+      commit(next);
+    },
     setSceneNote: (id, text) => {
       const state = get();
       const next = snapshot(state.project);
@@ -856,7 +907,7 @@ export const useEditor = create<EditorState>((set, get) => {
         return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
       });
       commit(next);
-      if (state.selectedId === id) set({ selectedId: undefined });
+      if (state.selectedId === id) set({ selectedId: undefined, selectedIds: [] });
       if (state.selectedMotion?.objectId === id) set({ selectedMotion: undefined });
       if (state.recordingMotion?.objectId === id) set({ recordingMotion: undefined });
     },
@@ -1068,6 +1119,16 @@ export const useEditor = create<EditorState>((set, get) => {
     setTransform: (id, transform) => {
       if (!recordingProperties.every((property) => isValidAnimationValue(property, transform[property]))) return;
       const state = get();
+      if (state.selectedId === id && state.selectedIds.length > 1 && !state.recordingSession && !state.recordingMotion && !state.selectedMotion) {
+        const next = snapshot(state.project);
+        const anchor = next.objects.find((item) => item.id === id);
+        if (!anchor) return;
+        const members = next.objects.filter((item) => state.selectedIds.includes(item.id) && item.kind !== 'camera' && item.kind !== 'audio' && !item.kind.includes('light') && !item.screenSpace);
+        if (members.length !== state.selectedIds.length) return;
+        moveGroupMembers(members, evaluateTransform(anchor, state.currentFrame), transform);
+        commit(next);
+        return;
+      }
       const next = snapshot(state.project);
       ensureSceneSnapshots(next);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
@@ -1397,12 +1458,12 @@ export const useEditor = create<EditorState>((set, get) => {
     undo: () => set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;
-      return { project: previous, currentFrame: Math.max(previous.settings.frameStart, Math.min(previous.settings.frameEnd, state.currentFrame)), selectedId: previous.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedMotion: undefined, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
+      return { project: previous, currentFrame: Math.max(previous.settings.frameStart, Math.min(previous.settings.frameEnd, state.currentFrame)), selectedId: previous.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedIds: state.selectedIds.filter((id) => previous.objects.some((object) => object.id === id)), selectedMotion: undefined, past: state.past.slice(0, -1), future: [snapshot(state.project), ...state.future], recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
     redo: () => set((state) => {
       const next = state.future[0];
       if (!next) return state;
-      return { project: next, currentFrame: Math.max(next.settings.frameStart, Math.min(next.settings.frameEnd, state.currentFrame)), selectedId: next.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedMotion: undefined, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
+      return { project: next, currentFrame: Math.max(next.settings.frameStart, Math.min(next.settings.frameEnd, state.currentFrame)), selectedId: next.objects.some((object) => object.id === state.selectedId) ? state.selectedId : undefined, selectedIds: state.selectedIds.filter((id) => next.objects.some((object) => object.id === id)), selectedMotion: undefined, past: [...state.past, snapshot(state.project)], future: state.future.slice(1), recordingMotion: undefined, recordingSession: undefined, isPlaying: false, dirty: true };
     }),
   };
 });

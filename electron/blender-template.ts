@@ -171,7 +171,7 @@ def create_blend_asset(data):
     with bpy.data.libraries.load(str(source_path), link=False) as (data_from, data_to):
         data_to.objects = data_from.objects
     supported = {"MESH", "CURVE", "SURFACE", "META", "FONT", "ARMATURE", "EMPTY"}
-    all_imported = [obj for obj in data_to.objects if obj is not None and obj.type in supported and not obj.hide_render]
+    all_imported = [obj for obj in data_to.objects if obj is not None and obj.type in supported and (not obj.hide_render or obj.type in {"ARMATURE", "EMPTY"})]
     def explicitly_excluded(obj):
         normalized = obj.name.casefold()
         collection_names = " ".join(collection.name for collection in obj.users_collection).casefold()
@@ -209,6 +209,42 @@ def create_blend_asset(data):
     for obj in imported:
         if obj.parent not in imported_set:
             obj.parent = normalization
+    controller_keys = asset.get("controllerKeys", [])
+    for obj in imported:
+        if obj.type == "ARMATURE":
+            for bone in obj.pose.bones:
+                name = "BONE|" + obj.name + "|" + bone.name
+                keys = sorted((key for key in controller_keys if key.get("name") == name), key=lambda key: key["frame"])
+                if not keys:
+                    continue
+                base = bone.location.copy()
+                if keys[0]["frame"] > settings["frameStart"]:
+                    bone.location = base
+                    bone.keyframe_insert("location", frame=settings["frameStart"], group=bone.name)
+                for key in keys:
+                    bone.location = base + Vector(key["offset"])
+                    bone.keyframe_insert("location", frame=key["frame"], group=bone.name)
+            for curve in action_fcurves(obj):
+                if curve.data_path.endswith(".location"):
+                    for point in curve.keyframe_points:
+                        point.interpolation = "LINEAR"
+        if obj.type != "EMPTY":
+            continue
+        keys = sorted((key for key in controller_keys if key.get("name") == obj.name), key=lambda key: key["frame"])
+        if not keys:
+            continue
+        base = obj.location.copy()
+        first = keys[0]
+        if first["frame"] > settings["frameStart"]:
+            obj.location = base
+            obj.keyframe_insert("location", frame=settings["frameStart"])
+        for key in keys:
+            obj.location = base + Vector(key["offset"])
+            obj.keyframe_insert("location", frame=key["frame"])
+        for curve in action_fcurves(obj):
+            if curve.data_path == "location":
+                for point in curve.keyframe_points:
+                    point.interpolation = "LINEAR"
     root["abaco_id"] = data["id"]
     root["abaco_kind"] = "blend_asset"
     root["abaco_source_blend"] = str(source_path)

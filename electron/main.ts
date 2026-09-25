@@ -276,23 +276,28 @@ async function blenderCommand(extraFlatpakPermissions: string[] = []) {
   return { command: 'blender', prefix: [] as string[] };
 }
 
-type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; meshCount?: number };
+type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; meshCount?: number; controllers?: Array<{ name: string; position: [number, number, number] }> };
 const blendProxyJobs = new Map<string, Promise<BlendProxyMetadata>>();
 
-async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false): Promise<BlendProxyMetadata> {
+async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false, pose: Record<string, [number, number, number]> = {}): Promise<BlendProxyMetadata> {
   const resolvedSource = path.resolve(sourcePath);
   const resolvedProxy = path.resolve(proxyPath);
-  const markerPath = `${resolvedProxy}.v3.json`;
+  const markerPath = `${resolvedProxy}.v4.json`;
+  const poseSignature = JSON.stringify(Object.entries(pose).sort(([a], [b]) => a.localeCompare(b)));
+  const existing = blendProxyJobs.get(resolvedProxy);
+  if (existing) {
+    await existing.catch(() => undefined);
+    if (blendProxyJobs.get(resolvedProxy) === existing) blendProxyJobs.delete(resolvedProxy);
+    return buildBlendAssetProxy(sourcePath, proxyPath, force, pose);
+  }
   const sourceStats = await fs.stat(resolvedSource);
   if (!force) {
     try {
-      const cached = JSON.parse(await fs.readFile(markerPath, 'utf8')) as BlendProxyMetadata & { sourcePath: string; sourceMtimeMs: number };
+      const cached = JSON.parse(await fs.readFile(markerPath, 'utf8')) as BlendProxyMetadata & { sourcePath: string; sourceMtimeMs: number; poseSignature: string };
       const proxyStats = await fs.stat(resolvedProxy);
-      if (cached.sourcePath === resolvedSource && cached.sourceMtimeMs === sourceStats.mtimeMs && proxyStats.size > 1024 && (cached.meshCount ?? 0) > 0) return cached;
+      if (cached.sourcePath === resolvedSource && cached.sourceMtimeMs === sourceStats.mtimeMs && cached.poseSignature === poseSignature && proxyStats.size > 1024 && (cached.meshCount ?? 0) > 0) return cached;
     } catch { /* proxy precedente o incompleto: viene rigenerato */ }
   }
-  const existing = blendProxyJobs.get(resolvedProxy);
-  if (existing) return existing;
   const job = (async () => {
     const cacheDir = path.dirname(resolvedProxy);
     const scriptPath = path.join(cacheDir, `${path.basename(resolvedProxy, '.glb')}.proxy-v2.py`);
@@ -300,12 +305,12 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
     await fs.writeFile(scriptPath, BLEND_ASSET_PROXY_SCRIPT, 'utf8');
     const invocation = await blenderCommand([`${path.dirname(resolvedSource)}:ro`, cacheDir]);
     try {
-      const output = await runProcess(invocation.command, [...invocation.prefix, resolvedSource, '--background', '--python', scriptPath, '--', resolvedProxy], cacheDir);
+      const output = await runProcess(invocation.command, [...invocation.prefix, resolvedSource, '--background', '--python', scriptPath, '--', resolvedProxy, JSON.stringify(pose)], cacheDir);
       const marker = output.split(/\r?\n/).find((line) => line.startsWith('ABACO_BLEND_ASSET='));
       if (!marker) throw new Error(`Blender did not create the asset preview.\n${output}`);
       const metadata = JSON.parse(marker.slice('ABACO_BLEND_ASSET='.length)) as BlendProxyMetadata;
       if (!metadata.meshCount) throw new Error('The Blender file did not produce visible geometry for the preview.');
-      await atomicWrite(markerPath, JSON.stringify({ ...metadata, sourcePath: resolvedSource, sourceMtimeMs: sourceStats.mtimeMs }));
+      await atomicWrite(markerPath, JSON.stringify({ ...metadata, sourcePath: resolvedSource, sourceMtimeMs: sourceStats.mtimeMs, poseSignature }));
       return metadata;
     } catch (error) {
       await fs.rm(resolvedProxy, { force: true }).catch(() => undefined);
@@ -318,7 +323,7 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
   })();
   blendProxyJobs.set(resolvedProxy, job);
   try { return await job; }
-  finally { blendProxyJobs.delete(resolvedProxy); }
+  finally { if (blendProxyJobs.get(resolvedProxy) === job) blendProxyJobs.delete(resolvedProxy); }
 }
 
 async function createWindow() {
@@ -475,13 +480,13 @@ ipcMain.handle('blendAsset:choose', async () => {
   return {
     sourcePath, proxyPath, collectionName: 'Blender Scene',
     name: path.basename(sourcePath, path.extname(sourcePath)),
-    boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale, groundOffset: metadata.groundOffset,
+    boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale, groundOffset: metadata.groundOffset, controllers: metadata.controllers,
   };
 });
 
-ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string }) => {
+ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }) => {
   if (!asset.sourcePath || !asset.proxyPath) throw new Error('Invalid Blender asset path.');
-  return buildBlendAssetProxy(asset.sourcePath, asset.proxyPath);
+  return buildBlendAssetProxy(asset.sourcePath, asset.proxyPath, false, asset.pose);
 });
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {

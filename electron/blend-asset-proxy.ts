@@ -6,6 +6,7 @@ from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 output_path = Path(argv[0])
+pose = json.loads(argv[1]) if len(argv) > 1 else {}
 supported = {"MESH", "CURVE", "SURFACE", "META", "FONT"}
 def explicitly_excluded(obj):
     labels = [obj.name, *[collection.name for collection in obj.users_collection]]
@@ -18,6 +19,25 @@ if not source_objects:
     source_objects = visible_objects
 if not source_objects:
     raise RuntimeError("The file contains no visible 3D objects")
+
+# Hook targets are the actual movable joints in procedural Blender characters.
+controllers_in_scene = {obj for obj in bpy.context.scene.objects if obj.type == "EMPTY" and obj.name.startswith("CTRL_")}
+controllers = [{"name": obj.name, "position": [round(float(v), 6) for v in obj.location]}
+               for obj in sorted(controllers_in_scene, key=lambda item: item.name)]
+for armature in (obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"):
+    for bone in armature.pose.bones:
+        controllers.append({"name": "BONE|" + armature.name + "|" + bone.name,
+                            "position": [round(float(v), 6) for v in bone.location]})
+for obj in controllers_in_scene:
+    offset = pose.get(obj.name)
+    if isinstance(offset, list) and len(offset) == 3:
+        obj.location = [float(obj.location[i]) + float(offset[i]) for i in range(3)]
+for armature in (obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"):
+    for bone in armature.pose.bones:
+        offset = pose.get("BONE|" + armature.name + "|" + bone.name)
+        if isinstance(offset, list) and len(offset) == 3:
+            bone.location = [float(bone.location[i]) + float(offset[i]) for i in range(3)]
+bpy.context.view_layer.update()
 
 # L'export glTF può ignorare curve, oggetti dentro collezioni nascoste e rig
 # complessi. Creiamo una fotografia statica valutata della geometria: preserva
@@ -70,6 +90,7 @@ metadata = {
     "previewScale": round(preview_scale, 8),
     "groundOffset": round(ground_offset, 8),
     "meshCount": len(preview_objects),
+    "controllers": controllers,
 }
 print("ABACO_BLEND_ASSET=" + json.dumps(metadata))
 `;

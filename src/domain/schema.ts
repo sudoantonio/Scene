@@ -69,6 +69,8 @@ export const SceneObjectSchema = z.object({
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
     groundOffset: z.number().finite().nonnegative().default(1),
+    controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema })).optional(),
+    controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema })).optional(),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 }),
   audio: z.object({
     duration: z.number().finite().nonnegative().default(0),
@@ -196,6 +198,7 @@ export const ProjectSchema = z.object({
   animationBrief: z.string().optional(),
   directionPlans: z.array(DirectionPlanSchema).optional(),
   objects: z.array(SceneObjectSchema),
+  groups: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1), memberIds: z.array(z.string().uuid()).min(2) })).default([]),
   comments: z.array(CommentSchema),
   cameraCuts: z.array(CameraCutSchema),
 }).superRefine((project, ctx) => {
@@ -203,6 +206,13 @@ export const ProjectSchema = z.object({
     ctx.addIssue({ code: 'custom', path: ['settings', 'frameEnd'], message: 'The end frame is before the start frame' });
   }
   const ids = new Set(project.objects.map((object) => object.id));
+  const grouped = new Set<string>();
+  for (const group of project.groups) {
+    for (const id of group.memberIds) {
+      if (!ids.has(id) || grouped.has(id)) ctx.addIssue({ code: 'custom', message: `Invalid group member: ${id}` });
+      grouped.add(id);
+    }
+  }
   const sceneIds = new Set(project.cameraCuts.map((scene) => scene.id));
   for (const comment of project.comments) {
     if (comment.endFrame < comment.startFrame) ctx.addIssue({ code: 'custom', message: 'Intervallo commento non valido' });
@@ -281,6 +291,6 @@ export function createProject(): AbacoProject {
   return {
     schemaVersion: 'AbacoSceneV1', id: crypto.randomUUID(), name: 'New animatic', createdAt: now, updatedAt: now,
     settings: { fps: 24, frameStart: 1, frameEnd: 72, resolutionX: 1920, resolutionY: 1080, units: 'meters' },
-    objects: [camera], comments: [], cameraCuts: [{ id: crypto.randomUUID(), cameraId: camera.id, frame: 1, source: 'user', commentIds: [], name: 'Scene 1', transition: 'cut', lighting: defaultLighting(), background: defaultBackground(), framing: defaultCameraFraming() }],
+    objects: [camera], groups: [], comments: [], cameraCuts: [{ id: crypto.randomUUID(), cameraId: camera.id, frame: 1, source: 'user', commentIds: [], name: 'Scene 1', transition: 'cut', lighting: defaultLighting(), background: defaultBackground(), framing: defaultCameraFraming() }],
   };
 }

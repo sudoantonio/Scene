@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { ArrowLeft, Box, Eye, EyeOff, Focus, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
+import { ArrowLeft, Box, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, MousePointer2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Ungroup, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
@@ -8,6 +8,7 @@ import { hitsTransformHandle } from '../domain/gizmo';
 import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
+import { controllerPose } from '../domain/controller-pose';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -210,23 +211,25 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
 function BlendAssetVisual({ object }: { object: SceneObject }) {
   const [source, setSource] = useState<string>();
   const updateObject = useEditor((state) => state.updateObject);
+  const frame = useEditor((state) => state.currentFrame);
+  const poseSignature = JSON.stringify(controllerPose(object.asset, frame));
   useEffect(() => {
     let active = true;
-    setSource(undefined);
     const load = async () => {
       if (!object.asset.proxyPath || !window.abaco) return;
       const metadata = object.asset.sourcePath
-        ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath })
+        ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath, pose: JSON.parse(poseSignature) as Record<string, Vec3> })
         : undefined;
-      if (metadata && (metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index]))) {
-        updateObject(object.id, { asset: { ...object.asset, ...metadata } });
+      if (metadata?.controllers?.length && !object.asset.controllers?.length) {
+        const current = useEditor.getState().project.objects.find((item) => item.id === object.id);
+        if (current) updateObject(object.id, { asset: { ...current.asset, controllers: metadata.controllers } });
       }
       const value = await window.abaco.loadAsset(object.asset.proxyPath);
       if (active) setSource(value);
     };
-    load().catch(() => undefined);
-    return () => { active = false; };
-  }, [object.asset.proxyPath, object.asset.sourcePath]);
+    const timer = window.setTimeout(() => { load().catch(() => undefined); }, source ? 250 : 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [object.asset.proxyPath, object.asset.sourcePath, poseSignature]);
   if (!source) return <AssetPlaceholder />;
   return <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<AssetPlaceholder />}>
     <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} /></Suspense>
@@ -310,6 +313,8 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const ref = useRef<THREE.Group>(null);
   const translationProxy = useRef<THREE.Group>(null);
   const viewCamera = useThree((state) => state.camera);
+  const scene = useThree((state) => state.scene);
+  const selectionOutline = useRef<THREE.BoxHelper | null>(null);
   const directDrag = useRef<{
     pointerId: number; moved: boolean; x: number; y: number;
     position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3;
@@ -321,10 +326,14 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const [dragging, setDragging] = useState(false);
   const currentFrame = useEditor((state) => state.currentFrame);
   const selectedId = useEditor((state) => state.selectedId);
+  const selectedIds = useEditor((state) => state.selectedIds);
+  const multiSelectMode = useEditor((state) => state.multiSelectMode);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const recordingSession = useEditor((state) => state.recordingSession);
   const mode = useEditor((state) => state.gizmoMode);
   const select = useEditor((state) => state.select);
+  const selectMember = useEditor((state) => state.selectMember);
+  const toggleSelection = useEditor((state) => state.toggleSelection);
   const setTransform = useEditor((state) => state.setTransform);
   const updateObject = useEditor((state) => state.updateObject);
   const setPlaying = useEditor((state) => state.setPlaying);
@@ -334,7 +343,17 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const text = evaluateProperty(object, 'text', currentFrame) as string;
   const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', currentFrame) as boolean;
   const helperOnly = object.kind === 'camera' || object.kind.includes('light');
-  const helperSelected = selectedId === object.id || selectedMotion?.objectId === object.id;
+  const helperSelected = selectedIds.includes(object.id) || selectedMotion?.objectId === object.id;
+  useEffect(() => {
+    if (!helperSelected || !visible || !ref.current || object.kind === 'camera' || object.kind.includes('light')) return;
+    const outline = new THREE.BoxHelper(ref.current, 0xd8ab35);
+    outline.material.depthTest = false;
+    outline.renderOrder = 30;
+    scene.add(outline);
+    selectionOutline.current = outline;
+    return () => { scene.remove(outline); outline.geometry.dispose(); outline.material.dispose(); if (selectionOutline.current === outline) selectionOutline.current = null; };
+  }, [helperSelected, object.kind, scene, visible]);
+  useFrame(() => selectionOutline.current?.update());
   const motionEditing = Boolean(selectedMotion);
   const shown = useMemo(() => ({ ...object, text }), [object, text]);
   const viewTranslation = cameraView && mode === 'translate';
@@ -413,6 +432,9 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   };
   const startDirectDrag = (event: ThreeEvent<PointerEvent>) => {
     if (!interactionEnabled) return;
+    if ((multiSelectMode || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey) && event.button === 0) {
+      event.stopPropagation(); toggleSelection(object.id); return;
+    }
     // Shift riserva sempre il gesto alla vista, anche sopra un oggetto.
     // I gesti touch vengono lasciati a OrbitControls, che riconosce le due dita.
     if (event.button !== 0 || event.nativeEvent.shiftKey || event.nativeEvent.pointerType === 'touch' || !ref.current || gizmoDragging.current) return;
@@ -524,7 +546,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const commitTextEdit = () => { updateObject(object.id, { text: textDraft }); setTextEditing(false); };
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
       onPointerOver={motionEditing ? undefined : (event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={motionEditing ? undefined : (event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
-      onDoubleClick={object.kind === 'text' ? (event) => { event.stopPropagation(); select(object.id); setTextDraft(text); setTextEditing(true); } : undefined}
+      onDoubleClick={(event) => { event.stopPropagation(); selectMember(object.id); if (object.kind === 'text') { setTextDraft(text); setTextEditing(true); } }}
       onClick={motionEditing ? undefined : (event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={motionEditing ? undefined : startDirectDrag} onPointerMove={motionEditing ? undefined : moveDirectDrag} onPointerUp={motionEditing ? undefined : finishDirectDrag} onPointerCancel={motionEditing ? undefined : finishDirectDrag}>
       <MeshVisual object={shown} hideText={textEditing} />
@@ -1030,6 +1052,12 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const select = useEditor((state) => state.select);
   const addObject = useEditor((state) => state.addObject);
   const selectedId = useEditor((state) => state.selectedId);
+  const selectedIds = useEditor((state) => state.selectedIds);
+  const multiSelectMode = useEditor((state) => state.multiSelectMode);
+  const setMultiSelectMode = useEditor((state) => state.setMultiSelectMode);
+  const groups = useEditor((state) => state.project.groups);
+  const groupSelection = useEditor((state) => state.groupSelection);
+  const ungroupSelection = useEditor((state) => state.ungroupSelection);
   const gizmoMode = useEditor((state) => state.gizmoMode);
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const cameraView = useEditor((state) => state.cameraView);
@@ -1082,6 +1110,11 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     });
   }, [activeCut?.id, cuts, objects, settings.frameEnd]);
   const selectedObject = objects.find((object) => object.id === selectedId);
+  const selectedGroup = groups.find((group) => group.memberIds.length === selectedIds.length && group.memberIds.every((id) => selectedIds.includes(id)));
+  const canGroup = selectedIds.length > 1 && !selectedGroup && selectedIds.every((id) => {
+    const object = objects.find((candidate) => candidate.id === id);
+    return object && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light') && !object.screenSpace && !groups.some((group) => group.memberIds.includes(id));
+  });
   const selectedTransformable = selectedObject && selectedObject.kind !== 'audio' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
     ? selectedObject : undefined;
   const selectedSubject = selectedObject && selectedObject.kind !== 'audio' && selectedObject.kind !== 'camera' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
@@ -1515,7 +1548,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
     <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
-      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => select(undefined)}>
+      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => { if (!multiSelectMode) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
@@ -1557,6 +1590,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       </div>
     </div>}
     <div className="viewport-top-right">
+      {!cameraView && <button className={`viewport-selection-tool ${multiSelectMode ? 'active' : ''}`} type="button" aria-label="Select multiple elements" aria-pressed={multiSelectMode} title="Select multiple elements · or ⌘/Ctrl-click" onClick={() => setMultiSelectMode(!multiSelectMode)}><MousePointer2 size={15} /></button>}
+      {(canGroup || selectedGroup) && <div className="viewport-group-tools"><span>{selectedIds.length} selected</span><button type="button" aria-label={selectedGroup ? 'Ungroup elements' : 'Group elements'} title={selectedGroup ? 'Ungroup elements' : 'Group elements'} onClick={selectedGroup ? ungroupSelection : groupSelection}>{selectedGroup ? <Ungroup size={15} /> : <Group size={15} />}{selectedGroup ? 'Ungroup' : 'Group'}</button></div>}
       {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Transform tool">{([
         ['translate', 'Move', Move3d],
         ['rotate', 'Rotate', Rotate3d],
