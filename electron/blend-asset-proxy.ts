@@ -1,5 +1,6 @@
 export const BLEND_ASSET_PROXY_SCRIPT = String.raw`import bpy
 import json
+import re
 import sys
 from pathlib import Path
 from mathutils import Vector
@@ -57,6 +58,7 @@ depsgraph = bpy.context.evaluated_depsgraph_get()
 preview_collection = bpy.data.collections.new("ABACO_PREVIEW")
 bpy.context.scene.collection.children.link(preview_collection)
 preview_objects = []
+preview_pairs = []
 for source in source_objects:
     try:
         evaluated = source.evaluated_get(depsgraph)
@@ -70,22 +72,77 @@ for source in source_objects:
         preview.hide_viewport = False
         preview_collection.objects.link(preview)
         preview_objects.append(preview)
+        preview_pairs.append((source, preview))
     except Exception:
         continue
 
 if not preview_objects:
     raise RuntimeError("The file contains no geometry that can be converted for preview")
 
-points = []
-for obj in preview_objects:
-    for corner in obj.bound_box:
-        points.append(obj.matrix_world @ Vector(corner))
+points = [obj.matrix_world @ vertex.co for obj in preview_objects for vertex in obj.data.vertices]
 minimum = Vector((min(point.x for point in points), min(point.y for point in points), min(point.z for point in points)))
 maximum = Vector((max(point.x for point in points), max(point.y for point in points), max(point.z for point in points)))
 center = (minimum + maximum) * 0.5
 largest = max(maximum.x - minimum.x, maximum.y - minimum.y, maximum.z - minimum.z, 0.001)
 preview_scale = 2.0 / largest
 ground_offset = max(0.0, (center.z - minimum.z) * preview_scale)
+
+# Store each joint's local deformation as glTF morph targets. Three.js can
+# combine these on every pointer movement without starting Blender again.
+step = 0.25
+editable = [controller for controller in controllers if controller["name"].startswith("BONE|")
+            or re.match(r"CTRL_(MANO|PIEDE|GOMITO|GINOCCHIO)", controller["name"])]
+for controller_index, controller in enumerate(editable):
+    name = controller["name"]
+    if name.startswith("BONE|"):
+        _, armature_name, bone_name = name.split("|", 2)
+        owner = bpy.data.objects.get(armature_name).pose.bones.get(bone_name)
+    else:
+        owner = bpy.data.objects.get(name)
+    if owner is None:
+        continue
+    original = owner.location.copy()
+    targets = []
+    basis = []
+    has_effect = False
+    for axis in range(3):
+        target_name = "SCENE_POSE_%d_%d" % (controller_index, axis)
+        owner.location[axis] = original[axis] + step
+        bpy.context.view_layer.update()
+        if name.startswith("BONE|"):
+            world = bpy.data.objects.get(armature_name).matrix_world @ owner.head
+        else:
+            world = owner.matrix_world.translation
+        basis.append([round(float(v), 6) for v in (world - Vector(controller["worldPosition"])) / step])
+        current_graph = bpy.context.evaluated_depsgraph_get()
+        for source, preview in preview_pairs:
+            changed = None
+            try:
+                changed = bpy.data.meshes.new_from_object(source.evaluated_get(current_graph), preserve_all_data_layers=True, depsgraph=current_graph)
+                if len(changed.vertices) != len(preview.data.vertices):
+                    continue
+                inverse = preview.matrix_world.inverted_safe()
+                coordinates = [inverse @ (source.matrix_world @ vertex.co) for vertex in changed.vertices]
+                if not any((coordinate - preview.data.vertices[index].co).length > 0.00001 for index, coordinate in enumerate(coordinates)):
+                    continue
+                has_effect = True
+                if preview.data.shape_keys is None:
+                    preview.shape_key_add(name="Basis")
+                key = preview.shape_key_add(name=target_name)
+                for index, coordinate in enumerate(coordinates):
+                    key.data[index].co = coordinate
+            except Exception:
+                continue
+            finally:
+                if changed is not None:
+                    bpy.data.meshes.remove(changed)
+        owner.location[axis] = original[axis]
+        bpy.context.view_layer.update()
+        targets.append(target_name)
+    if has_effect:
+        controller["morphTargets"] = targets
+        controller["morphStep"] = step
+        controller["worldBasis"] = basis
 
 bpy.ops.object.select_all(action="DESELECT")
 for obj in preview_objects:

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { createProject, createSceneObject } from './schema';
-import { controllerOffset, controllerPose } from './controller-pose';
+import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta, controllerPose, controllerWorldDelta } from './controller-pose';
 import { useEditor } from '../store/editor';
 
 describe('Blender character controllers', () => {
@@ -30,5 +31,24 @@ describe('Blender character controllers', () => {
     useEditor.getState().undo();
     const restored = useEditor.getState().project.objects.find((item) => item.id === character.id)!;
     expect(controllerOffset(restored.asset, 'CTRL_MANO_DX', 12)).toEqual([0, 0, 0]);
+  });
+
+  it('deforms the loaded preview immediately and resets weights when returning to rest', () => {
+    const model = new THREE.Group();
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+    arm.morphTargetDictionary = { SCENE_POSE_0_0: 0, SCENE_POSE_0_1: 1, SCENE_POSE_0_2: 2 };
+    arm.morphTargetInfluences = [0, 0, 0];
+    model.add(arm);
+    const controllers = [{ name: 'CTRL_MANO_DX', position: [0, 0, 0] as [number, number, number], morphTargets: ['SCENE_POSE_0_0', 'SCENE_POSE_0_1', 'SCENE_POSE_0_2'] as [string, string, string], morphStep: .25 }];
+    applyControllerMorphs(model, controllers, { CTRL_MANO_DX: [.5, 0, 0] });
+    expect(arm.morphTargetInfluences).toEqual([2, 0, 0]);
+    applyControllerMorphs(model, controllers, { CTRL_MANO_DX: [0, 0, 0] });
+    expect(arm.morphTargetInfluences).toEqual([0, 0, 0]);
+  });
+
+  it('maps cursor movement through a rotated Blender controller', () => {
+    const controller = { name: 'CTRL_MANO_DX', position: [0, 0, 0] as [number, number, number], worldBasis: [[0, 1, 0], [-1, 0, 0], [0, 0, 1]] as [[number, number, number], [number, number, number], [number, number, number]] };
+    expect(controllerWorldDelta(controller, [.5, 0, 0])).toEqual([0, .5, 0]);
+    expect(controllerOffsetFromWorldDelta(controller, [0, .5, 0])).toEqual([.5, 0, 0]);
   });
 });

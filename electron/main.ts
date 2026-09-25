@@ -276,13 +276,13 @@ async function blenderCommand(extraFlatpakPermissions: string[] = []) {
   return { command: 'blender', prefix: [] as string[] };
 }
 
-type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; meshCount?: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number] }> };
+type BlendProxyMetadata = { boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; meshCount?: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number]; worldBasis?: [[number, number, number], [number, number, number], [number, number, number]]; morphTargets?: [string, string, string]; morphStep?: number }> };
 const blendProxyJobs = new Map<string, Promise<BlendProxyMetadata>>();
 
 async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false, pose: Record<string, [number, number, number]> = {}): Promise<BlendProxyMetadata> {
   const resolvedSource = path.resolve(sourcePath);
   const resolvedProxy = path.resolve(proxyPath);
-  const markerPath = `${resolvedProxy}.v5.json`;
+  const markerPath = `${resolvedProxy}.v8.json`;
   const poseSignature = JSON.stringify(Object.entries(pose).sort(([a], [b]) => a.localeCompare(b)));
   const existing = blendProxyJobs.get(resolvedProxy);
   if (existing) {

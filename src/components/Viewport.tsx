@@ -8,7 +8,7 @@ import { hitsTransformHandle } from '../domain/gizmo';
 import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
-import { controllerOffset, controllerPose } from '../domain/controller-pose';
+import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta, controllerPose, controllerWorldDelta } from '../domain/controller-pose';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -187,15 +187,17 @@ function AssetPlaceholder() {
   return <mesh castShadow><boxGeometry args={[1.4, 1.4, 1.4]} /><meshStandardMaterial color="#7e8c94" wireframe /></mesh>;
 }
 
-function BlendAssetModel({ source, object }: { source: string; object: SceneObject }) {
+function BlendAssetModel({ source, object, controllers, pose }: { source: string; object: SceneObject; controllers: CharacterController[]; pose: Record<string, Vec3> }) {
   const gltf = useLoader(GLTFLoader, source);
   const model = useMemo(() => {
     const clone = gltf.scene.clone(true);
     clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; }
+      if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; if (child.morphTargetInfluences) child.frustumCulled = false; }
     });
     return clone;
   }, [gltf.scene]);
+  const poseSignature = JSON.stringify(pose);
+  useLayoutEffect(() => applyControllerMorphs(model, controllers, pose), [model, controllers, poseSignature]);
   // L'exporter glTF converte le coordinate Blender (x, y, z) in (x, z, -y).
   // Il resto dell'editor usa Z verso l'alto: +90° su X ripristina quindi
   // l'orientamento originale del file Blender senza coricarne la geometria.
@@ -210,90 +212,110 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
 
 type CharacterController = NonNullable<SceneObject['asset']['controllers']>[number];
 
-function CharacterHandle({ object, controller, onDragChange }: { object: SceneObject; controller: CharacterController; onDragChange(value: boolean): void }) {
+function CharacterHandle({ object, controller, previewOffset, onPreviewOffset, onDragChange }: { object: SceneObject; controller: CharacterController; previewOffset: Vec3; onPreviewOffset(name: string, offset?: Vec3): void; onDragChange(value: boolean): void }) {
   const frame = useEditor((state) => state.currentFrame);
   const startFrame = useEditor((state) => state.project.settings.frameStart);
   const select = useEditor((state) => state.select);
   const setControllerOffset = useEditor((state) => state.setControllerOffset);
   const [hovered, setHovered] = useState(false);
   const [draft, setDraft] = useState<Vec3>();
-  const drag = useRef<{ pointerId: number; x: number; y: number; base: THREE.Vector3; offset: Vec3; position: Vec3; moved: boolean } | undefined>(undefined);
+  const drag = useRef<{ pointerId: number; x: number; y: number; base: THREE.Vector3; offset: Vec3; position: Vec3; moved: boolean; cleanup(): void; releaseCapture(): void } | undefined>(undefined);
+  useEffect(() => () => { if (drag.current) { drag.current.cleanup(); drag.current.releaseCapture(); onDragChange(false); document.body.style.cursor = ''; } }, []);
   const world = controller.worldPosition;
-  const worldKey = world?.join(',');
-  useEffect(() => { if (!drag.current) setDraft(undefined); }, [worldKey]);
   const base: Vec3 = world ? world.map((value, axis) => (value - object.asset.boundsCenter[axis]) * object.asset.previewScale) as Vec3 : [0, 0, 0];
+  const worldOffset = controllerWorldDelta(controller, previewOffset);
+  const position: Vec3 = draft ?? base.map((value, axis) => value + worldOffset[axis] * object.asset.previewScale) as Vec3;
   const name = controller.name.startsWith('BONE|') ? controller.name.split('|').at(-1)! : controller.name.replace(/^CTRL_/, '').replaceAll('_', ' ');
   if (!world) return null;
-  const finish = (event: ThreeEvent<PointerEvent>) => {
+  const finish = (pointerId: number, commitPose: boolean) => {
     const state = drag.current;
-    if (!state || state.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    const pointerTarget = event.target as unknown as { hasPointerCapture?(id: number): boolean; releasePointerCapture?(id: number): void };
-    if (pointerTarget.hasPointerCapture?.(event.pointerId)) pointerTarget.releasePointerCapture?.(event.pointerId);
-    if (state.moved) {
-      const delta = new THREE.Vector3(...state.position).sub(state.base).multiplyScalar(1 / object.asset.previewScale);
-      setControllerOffset(object.id, controller.name, state.offset.map((value, axis) => value + delta.getComponent(axis)) as Vec3);
-    } else setDraft(undefined);
+    if (!state || state.pointerId !== pointerId) return;
+    state.cleanup(); state.releaseCapture();
+    if (state.moved && commitPose) {
+      const worldDelta = new THREE.Vector3(...state.position).sub(state.base).multiplyScalar(1 / object.asset.previewScale).toArray() as Vec3;
+      const delta = controllerOffsetFromWorldDelta(controller, worldDelta);
+      setControllerOffset(object.id, controller.name, state.offset.map((value, axis) => value + delta[axis]) as Vec3);
+    }
     drag.current = undefined;
+    setDraft(undefined);
+    onPreviewOffset(controller.name);
     onDragChange(false);
+    document.body.style.cursor = '';
   };
   return <group>
-    <mesh position={draft ?? base} renderOrder={100} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={(event) => { event.stopPropagation(); setHovered(false); if (!drag.current) document.body.style.cursor = ''; }}
+    <mesh position={position} renderOrder={100} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={(event) => { event.stopPropagation(); setHovered(false); if (!drag.current) document.body.style.cursor = ''; }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
-        event.stopPropagation(); select(object.id); onDragChange(true);
-        (event.target as unknown as { setPointerCapture?(id: number): void }).setPointerCapture?.(event.pointerId);
-        drag.current = { pointerId: event.pointerId, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY,
-          base: new THREE.Vector3(...base), offset: controllerOffset(object.asset, controller.name, frame, startFrame), position: base, moved: false };
-      }}
-      onPointerMove={(event) => {
-        const state = drag.current;
-        if (!state || state.pointerId !== event.pointerId) return;
         event.stopPropagation();
-        const dx = event.nativeEvent.clientX - state.x;
-        const dy = event.nativeEvent.clientY - state.y;
-        if (Math.hypot(dx, dy) < 2) return;
         const parent = event.eventObject.parent;
         if (!parent) return;
+        select(object.id); onDragChange(true);
         parent.updateWorldMatrix(true, false);
         event.camera.updateMatrixWorld();
-        const origin = parent.localToWorld(state.base.clone());
+        const base = new THREE.Vector3(...position);
+        const origin = parent.localToWorld(base.clone());
         const right = new THREE.Vector3().setFromMatrixColumn(event.camera.matrixWorld, 0).normalize();
         const up = new THREE.Vector3().setFromMatrixColumn(event.camera.matrixWorld, 1).normalize();
         const height = Math.max(1, (event.nativeEvent.target as HTMLElement).getBoundingClientRect().height);
         const depth = Math.max(.1, origin.distanceTo(event.camera.position));
         const perPixel = event.camera instanceof THREE.PerspectiveCamera ? 2 * depth * Math.tan(THREE.MathUtils.degToRad(event.camera.fov / 2)) / height : 2 / height;
-        const movedWorld = origin.clone().addScaledVector(right, dx * perPixel).addScaledVector(up, -dy * perPixel);
-        const position = parent.worldToLocal(movedWorld);
-        state.position = position.toArray() as Vec3;
-        state.moved = true;
-        setDraft(state.position);
-      }} onPointerUp={finish} onPointerCancel={finish}>
+        const target = event.target as unknown as { setPointerCapture?(id: number): void; hasPointerCapture?(id: number): boolean; releasePointerCapture?(id: number): void };
+        target.setPointerCapture?.(event.pointerId);
+        const move = (pointer: PointerEvent) => {
+          const state = drag.current;
+          if (!state || pointer.pointerId !== state.pointerId) return;
+          const dx = pointer.clientX - state.x;
+          const dy = pointer.clientY - state.y;
+          if (Math.hypot(dx, dy) < 2) return;
+          const movedWorld = origin.clone().addScaledVector(right, dx * perPixel).addScaledVector(up, -dy * perPixel);
+          const moved = parent.worldToLocal(movedWorld);
+          state.position = moved.toArray() as Vec3;
+          state.moved = true;
+          setDraft(state.position);
+          const worldDelta = moved.sub(state.base).multiplyScalar(1 / object.asset.previewScale).toArray() as Vec3;
+          const delta = controllerOffsetFromWorldDelta(controller, worldDelta);
+          onPreviewOffset(controller.name, state.offset.map((value, axis) => value + delta[axis]) as Vec3);
+        };
+        const upHandler = (pointer: PointerEvent) => finish(pointer.pointerId, true);
+        const cancelHandler = (pointer: PointerEvent) => finish(pointer.pointerId, false);
+        const blurHandler = () => finish(event.pointerId, false);
+        const cleanup = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', upHandler); window.removeEventListener('pointercancel', cancelHandler); window.removeEventListener('blur', blurHandler); };
+        drag.current = { pointerId: event.pointerId, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY,
+          base, offset: controllerOffset(object.asset, controller.name, frame, startFrame), position, moved: false,
+          cleanup, releaseCapture: () => { if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture?.(event.pointerId); } };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', upHandler);
+        window.addEventListener('pointercancel', cancelHandler);
+        window.addEventListener('blur', blurHandler);
+      }} onPointerUp={(event) => { event.stopPropagation(); finish(event.pointerId, true); }} onPointerCancel={(event) => { event.stopPropagation(); finish(event.pointerId, false); }}>
       <sphereGeometry args={[hovered || drag.current ? .12 : .095, 16, 12]} />
       <meshBasicMaterial color={hovered || drag.current ? '#ffe085' : '#f4bd3d'} depthTest={false} />
     </mesh>
-    {hovered && <Html center distanceFactor={8} position={[...(draft ?? base).slice(0, 2), (draft ?? base)[2] + .23] as Vec3} style={{ pointerEvents: 'none' }}><span className="character-handle-label">{name}</span></Html>}
+    {hovered && <Html center distanceFactor={8} position={[position[0], position[1], position[2] + .23]} style={{ pointerEvents: 'none' }}><span className="character-handle-label">{name}</span></Html>}
   </group>;
 }
 
 function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDragChange?: (value: boolean) => void }) {
   const [source, setSource] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
   const [poseControllers, setPoseControllers] = useState<CharacterController[]>(object.asset.controllers ?? []);
+  const [draftPose, setDraftPose] = useState<Record<string, Vec3>>({});
   const updateObject = useEditor((state) => state.updateObject);
   const frame = useEditor((state) => state.currentFrame);
   const startFrame = useEditor((state) => state.project.settings.frameStart);
   const selected = useEditor((state) => state.selectedIds.includes(object.id));
-  const poseSignature = JSON.stringify(controllerPose(object.asset, frame, startFrame));
+  const pose = { ...controllerPose(object.asset, frame, startFrame), ...draftPose };
   useEffect(() => {
     let active = true;
     const load = async () => {
       if (!object.asset.proxyPath || !window.abaco) return;
       const metadata = object.asset.sourcePath
-        ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath, pose: JSON.parse(poseSignature) as Record<string, Vec3> })
+        ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath })
         : undefined;
       if (active && metadata?.controllers) setPoseControllers(metadata.controllers);
-      if (metadata && !object.asset.controllers?.length && (
-        !!metadata.controllers?.length || metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index])
+      if (metadata && (
+        (!!metadata.controllers?.some((controller) => controller.worldBasis?.length) && !object.asset.controllers?.some((controller) => controller.worldBasis?.length))
+        || metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index])
       )) {
         const current = useEditor.getState().project.objects.find((item) => item.id === object.id);
         if (current) updateObject(object.id, { asset: {
@@ -304,15 +326,15 @@ function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDra
       const value = await window.abaco.loadAsset(object.asset.proxyPath);
       if (active) setSource(value);
     };
-    const timer = window.setTimeout(() => { load().catch(() => undefined); }, source ? 250 : 0);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [object.asset.proxyPath, object.asset.sourcePath, poseSignature]);
-  if (!source) return <AssetPlaceholder />;
+    load().catch((error) => { if (active) setLoadError(error instanceof Error ? error.message.split('\n')[0] : 'Character preview unavailable'); });
+    return () => { active = false; };
+  }, [object.asset.proxyPath, object.asset.sourcePath]);
+  if (!source) return <group><AssetPlaceholder />{loadError && <Html center><span className="character-handle-label">{loadError}</span></Html>}</group>;
   return <>
-    <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<AssetPlaceholder />}>
-      <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} /></Suspense>
+    <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<group><AssetPlaceholder /><Html center><span className="character-handle-label">Character preview unavailable</span></Html></group>}>
+      <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} controllers={poseControllers} pose={pose} /></Suspense>
     </BackgroundAssetBoundary>
-    {selected && onDragChange && poseControllers.filter((controller) => controller.worldPosition && (controller.name.startsWith('BONE|') || /^CTRL_(MANO|PIEDE|GOMITO|GINOCCHIO)/.test(controller.name))).map((controller) => <CharacterHandle key={controller.name} object={object} controller={controller} onDragChange={onDragChange} />)}
+    {selected && onDragChange && poseControllers.filter((controller) => controller.worldPosition && controller.morphTargets?.length).map((controller) => <CharacterHandle key={controller.name} object={object} controller={controller} previewOffset={pose[controller.name] ?? [0, 0, 0]} onPreviewOffset={(name, offset) => setDraftPose((current) => { const next = { ...current }; if (offset) next[name] = offset; else delete next[name]; return next; })} onDragChange={onDragChange} />)}
   </>;
 }
 
