@@ -421,7 +421,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       {collapsed && <div className="timeline-mini-row">
         <div className="collapsed-scene-row">
           <div className="collapsed-scene-overview" role="group" aria-label="Collapsed scene timeline">
-            <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
+            <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px`, '--timeline-second-width': `${timelineZoom}px`, '--timeline-thumbnail-width': `${Math.max(timelineZoom, 800 / durationSeconds)}px` } as React.CSSProperties}>
               {scenes.map((scene, index) => {
               const nextFrame = scenes[index + 1]?.frame ?? end + 1;
               const stripLeft = ((scene.frame - start) / project.settings.fps) * timelineZoom;

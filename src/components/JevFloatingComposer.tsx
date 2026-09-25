@@ -4,6 +4,7 @@ import { evaluateTransform } from '../domain/animation';
 import { semanticMotionLabel, type DecisionEngine } from '../domain/jev-action';
 import { describeMotionSpec } from '../domain/motion-spec';
 import { useEditor } from '../store/editor';
+import headerLogo from '../assets/abaco-scene-header.png';
 
 const engineStorageKey = 'scene-decision-engine';
 const formatDuration = (milliseconds: number) => milliseconds < 1_000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1_000).toFixed(2)} s`;
@@ -24,8 +25,10 @@ export default function JevFloatingComposer() {
   const [busy, setBusy] = useState(false);
   const [editingAction, setEditingAction] = useState<{ planId: string; actionId: string; frame: number }>();
   const [message, setMessage] = useState('');
+  const [manipulatingViewport, setManipulatingViewport] = useState(false);
   const [anchor, setAnchor] = useState<AiAnchor | undefined>({ x: 24, y: 52, side: 'right' });
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const manipulationTimer = useRef<number | undefined>(undefined);
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const activeScene = scenes.find((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1)) ?? scenes[0];
   const selected = useMemo(() => project.objects.find((candidate) => candidate.id === selectedId
@@ -51,6 +54,58 @@ export default function JevFloatingComposer() {
     };
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
+  }, []);
+  useEffect(() => {
+    let pointerStart: { id: number; x: number; y: number } | undefined;
+    const endManipulation = () => {
+      pointerStart = undefined;
+      window.clearTimeout(manipulationTimer.current);
+      manipulationTimer.current = window.setTimeout(() => setManipulatingViewport(false), 180);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.viewport')) return;
+      pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!pointerStart || pointerStart.id !== event.pointerId) return;
+      if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) < 3) return;
+      setManipulatingViewport(true);
+      window.clearTimeout(manipulationTimer.current);
+    };
+    const onPointerUp = (event: PointerEvent) => { if (pointerStart?.id === event.pointerId) endManipulation(); };
+    const onWheel = (event: WheelEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.viewport')) return;
+      setManipulatingViewport(true);
+      window.clearTimeout(manipulationTimer.current);
+      manipulationTimer.current = window.setTimeout(() => setManipulatingViewport(false), 180);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!['w', 'a', 's', 'd', 'q', 'e', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
+      setManipulatingViewport(true);
+      window.clearTimeout(manipulationTimer.current);
+    };
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (['w', 'a', 's', 'd', 'q', 'e', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) endManipulation();
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerUp, true);
+    window.addEventListener('wheel', onWheel, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.clearTimeout(manipulationTimer.current);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerUp, true);
+      window.removeEventListener('wheel', onWheel, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
   }, []);
   useEffect(() => { clearStroke(); setMessage(''); setEditingAction(undefined); setInputOpen(false); }, [selectedId, activeScene?.id]);
   useEffect(() => {
@@ -118,8 +173,9 @@ export default function JevFloatingComposer() {
   const composerStyle = anchor ? { left: anchor.x, top: anchor.y } as CSSProperties : undefined;
 
   if (!activeScene || !selected || !anchor) return null;
+  if (!inputOpen && manipulatingViewport) return null;
   if (!inputOpen) return <div className={`${composerClass} compact`} style={composerStyle}>
-    <button className="jev-composer-expand" type="button" aria-expanded={false} onClick={revealInput}>AI agent</button>
+    <button className="jev-composer-expand" type="button" aria-expanded={false} onClick={revealInput}><img src={headerLogo} alt="" />AI agent</button>
   </div>;
   return <div className={composerClass} style={composerStyle}>
     {savedDirection && !message && !editingAction && <details className="jev-direction-editor">

@@ -25,10 +25,28 @@ describe('Pannelli contestuali', () => {
   it('mostra il pulsante AI agent e apre l’input solo dopo il clic', () => {
     useEditor.getState().addObject('cube');
     render(<JevFloatingComposer />);
-    expect(screen.getByRole('button', { name: 'AI agent' })).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'AI agent' });
+    expect(button).toBeInTheDocument();
+    expect(button.querySelector('img')).toHaveAttribute('src');
     expect(screen.queryByRole('textbox', { name: 'Jev action' })).not.toBeInTheDocument();
     openAiAgent();
     expect(screen.getByRole('textbox', { name: 'Jev action' })).toBeInTheDocument();
+  });
+
+  it('nasconde il tasto AI durante lo spostamento e lo mostra di nuovo al rilascio', async () => {
+    useEditor.getState().addObject('cube');
+    render(<JevFloatingComposer />);
+    const viewport = document.createElement('div');
+    viewport.className = 'viewport';
+    document.body.append(viewport);
+    const button = screen.getByRole('button', { name: 'AI agent' });
+    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 20, clientY: 20 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 35, clientY: 20 });
+    expect(screen.queryByRole('button', { name: 'AI agent' })).not.toBeInTheDocument();
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'AI agent' })).toBeInTheDocument());
+    viewport.remove();
+    expect(button).not.toBeInTheDocument();
   });
 
   it('aumenta l’altezza dell’input quando il testo occupa più righe', () => {
