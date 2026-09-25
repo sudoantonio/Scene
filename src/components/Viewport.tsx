@@ -8,7 +8,7 @@ import { hitsTransformHandle } from '../domain/gizmo';
 import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
-import { controllerPose } from '../domain/controller-pose';
+import { controllerOffset, controllerPose } from '../domain/controller-pose';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -208,11 +208,82 @@ function BlendAssetModel({ source, object }: { source: string; object: SceneObje
   </group>;
 }
 
-function BlendAssetVisual({ object }: { object: SceneObject }) {
+type CharacterController = NonNullable<SceneObject['asset']['controllers']>[number];
+
+function CharacterHandle({ object, controller, onDragChange }: { object: SceneObject; controller: CharacterController; onDragChange(value: boolean): void }) {
+  const frame = useEditor((state) => state.currentFrame);
+  const startFrame = useEditor((state) => state.project.settings.frameStart);
+  const select = useEditor((state) => state.select);
+  const setControllerOffset = useEditor((state) => state.setControllerOffset);
+  const [hovered, setHovered] = useState(false);
+  const [draft, setDraft] = useState<Vec3>();
+  const drag = useRef<{ pointerId: number; x: number; y: number; base: THREE.Vector3; offset: Vec3; position: Vec3; moved: boolean } | undefined>(undefined);
+  const world = controller.worldPosition;
+  const worldKey = world?.join(',');
+  useEffect(() => { if (!drag.current) setDraft(undefined); }, [worldKey]);
+  const base: Vec3 = world ? world.map((value, axis) => (value - object.asset.boundsCenter[axis]) * object.asset.previewScale) as Vec3 : [0, 0, 0];
+  const name = controller.name.startsWith('BONE|') ? controller.name.split('|').at(-1)! : controller.name.replace(/^CTRL_/, '').replaceAll('_', ' ');
+  if (!world) return null;
+  const finish = (event: ThreeEvent<PointerEvent>) => {
+    const state = drag.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const pointerTarget = event.target as unknown as { hasPointerCapture?(id: number): boolean; releasePointerCapture?(id: number): void };
+    if (pointerTarget.hasPointerCapture?.(event.pointerId)) pointerTarget.releasePointerCapture?.(event.pointerId);
+    if (state.moved) {
+      const delta = new THREE.Vector3(...state.position).sub(state.base).multiplyScalar(1 / object.asset.previewScale);
+      setControllerOffset(object.id, controller.name, state.offset.map((value, axis) => value + delta.getComponent(axis)) as Vec3);
+    } else setDraft(undefined);
+    drag.current = undefined;
+    onDragChange(false);
+  };
+  return <group>
+    <mesh position={draft ?? base} renderOrder={100} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={(event) => { event.stopPropagation(); setHovered(false); if (!drag.current) document.body.style.cursor = ''; }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.stopPropagation(); select(object.id); onDragChange(true);
+        (event.target as unknown as { setPointerCapture?(id: number): void }).setPointerCapture?.(event.pointerId);
+        drag.current = { pointerId: event.pointerId, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY,
+          base: new THREE.Vector3(...base), offset: controllerOffset(object.asset, controller.name, frame, startFrame), position: base, moved: false };
+      }}
+      onPointerMove={(event) => {
+        const state = drag.current;
+        if (!state || state.pointerId !== event.pointerId) return;
+        event.stopPropagation();
+        const dx = event.nativeEvent.clientX - state.x;
+        const dy = event.nativeEvent.clientY - state.y;
+        if (Math.hypot(dx, dy) < 2) return;
+        const parent = event.eventObject.parent;
+        if (!parent) return;
+        parent.updateWorldMatrix(true, false);
+        event.camera.updateMatrixWorld();
+        const origin = parent.localToWorld(state.base.clone());
+        const right = new THREE.Vector3().setFromMatrixColumn(event.camera.matrixWorld, 0).normalize();
+        const up = new THREE.Vector3().setFromMatrixColumn(event.camera.matrixWorld, 1).normalize();
+        const height = Math.max(1, (event.nativeEvent.target as HTMLElement).getBoundingClientRect().height);
+        const depth = Math.max(.1, origin.distanceTo(event.camera.position));
+        const perPixel = event.camera instanceof THREE.PerspectiveCamera ? 2 * depth * Math.tan(THREE.MathUtils.degToRad(event.camera.fov / 2)) / height : 2 / height;
+        const movedWorld = origin.clone().addScaledVector(right, dx * perPixel).addScaledVector(up, -dy * perPixel);
+        const position = parent.worldToLocal(movedWorld);
+        state.position = position.toArray() as Vec3;
+        state.moved = true;
+        setDraft(state.position);
+      }} onPointerUp={finish} onPointerCancel={finish}>
+      <sphereGeometry args={[hovered || drag.current ? .12 : .095, 16, 12]} />
+      <meshBasicMaterial color={hovered || drag.current ? '#ffe085' : '#f4bd3d'} depthTest={false} />
+    </mesh>
+    {hovered && <Html center distanceFactor={8} position={[...(draft ?? base).slice(0, 2), (draft ?? base)[2] + .23] as Vec3} style={{ pointerEvents: 'none' }}><span className="character-handle-label">{name}</span></Html>}
+  </group>;
+}
+
+function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDragChange?: (value: boolean) => void }) {
   const [source, setSource] = useState<string>();
+  const [poseControllers, setPoseControllers] = useState<CharacterController[]>(object.asset.controllers ?? []);
   const updateObject = useEditor((state) => state.updateObject);
   const frame = useEditor((state) => state.currentFrame);
-  const poseSignature = JSON.stringify(controllerPose(object.asset, frame));
+  const startFrame = useEditor((state) => state.project.settings.frameStart);
+  const selected = useEditor((state) => state.selectedIds.includes(object.id));
+  const poseSignature = JSON.stringify(controllerPose(object.asset, frame, startFrame));
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -220,6 +291,7 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
       const metadata = object.asset.sourcePath
         ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath, pose: JSON.parse(poseSignature) as Record<string, Vec3> })
         : undefined;
+      if (active && metadata?.controllers) setPoseControllers(metadata.controllers);
       if (metadata && !object.asset.controllers?.length && (
         !!metadata.controllers?.length || metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index])
       )) {
@@ -236,9 +308,12 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
     return () => { active = false; window.clearTimeout(timer); };
   }, [object.asset.proxyPath, object.asset.sourcePath, poseSignature]);
   if (!source) return <AssetPlaceholder />;
-  return <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<AssetPlaceholder />}>
-    <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} /></Suspense>
-  </BackgroundAssetBoundary>;
+  return <>
+    <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<AssetPlaceholder />}>
+      <Suspense fallback={<AssetPlaceholder />}><BlendAssetModel source={source} object={object} /></Suspense>
+    </BackgroundAssetBoundary>
+    {selected && onDragChange && poseControllers.filter((controller) => controller.worldPosition && (controller.name.startsWith('BONE|') || /^CTRL_(MANO|PIEDE|GOMITO|GINOCCHIO)/.test(controller.name))).map((controller) => <CharacterHandle key={controller.name} object={object} controller={controller} onDragChange={onDragChange} />)}
+  </>;
 }
 
 export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model'; path: string }) {
@@ -297,7 +372,7 @@ function CameraVisual({ object }: { object: SceneObject }) {
   </group>;
 }
 
-function MeshVisual({ object, hideText = false }: { object: SceneObject; hideText?: boolean }) {
+function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneObject; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
     case 'cube': return <mesh castShadow>{material}<boxGeometry args={[2, 2, 2]} /></mesh>;
@@ -306,7 +381,7 @@ function MeshVisual({ object, hideText = false }: { object: SceneObject; hideTex
     case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
     case 'plane': return <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
     case 'text': return <Text visible={!hideText} color={object.color} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
-    case 'blend_asset': return <BlendAssetVisual object={object} />;
+    case 'blend_asset': return <BlendAssetVisual object={object} onDragChange={onDragChange} />;
     case 'camera': return <CameraVisual object={object} />;
     case 'area_light': return <mesh><circleGeometry args={[.7, 28]} /><meshBasicMaterial color={object.color} side={THREE.DoubleSide} /></mesh>;
     case 'point_light': return <mesh><sphereGeometry args={[.28, 16, 12]} /><meshBasicMaterial color={object.color} /></mesh>;
@@ -350,7 +425,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const helperOnly = object.kind === 'camera' || object.kind.includes('light');
   const helperSelected = selectedIds.includes(object.id) || selectedMotion?.objectId === object.id;
   useEffect(() => {
-    if (!helperSelected || !visible || !ref.current || object.kind === 'camera' || object.kind.includes('light')) return;
+    if (!helperSelected || !visible || !ref.current || object.kind === 'camera' || object.kind === 'blend_asset' || object.kind.includes('light')) return;
     const outline = new THREE.BoxHelper(ref.current, 0xd8ab35);
     outline.material.depthTest = false;
     outline.renderOrder = 30;
@@ -554,7 +629,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
       onDoubleClick={(event) => { event.stopPropagation(); selectMember(object.id); if (object.kind === 'text') { setTextDraft(text); setTextEditing(true); } }}
       onClick={motionEditing ? undefined : (event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={motionEditing ? undefined : startDirectDrag} onPointerMove={motionEditing ? undefined : moveDirectDrag} onPointerUp={motionEditing ? undefined : finishDirectDrag} onPointerCancel={motionEditing ? undefined : finishDirectDrag}>
-      <MeshVisual object={shown} hideText={textEditing} />
+      <MeshVisual object={shown} hideText={textEditing} onDragChange={onDragChange} />
       {textEditing && <Html center zIndexRange={[100, 0]}>
         <textarea className="viewport-text-editor" aria-label={`Edit ${object.name}`} autoFocus value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
           if (event.key === 'Escape') { event.preventDefault(); setTextDraft(text); setTextEditing(false); }
@@ -566,7 +641,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
   // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
   // e salti soprattutto durante la scala.
-  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
+  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera') || (object.kind === 'blend_asset' && !!object.asset.controllers?.length)) return visual;
   return <>{visual}<group ref={translationProxy} /><TransformControls ref={objectControls} object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={1.2} enabled
     showZ={!viewTranslation && !(object.kind === 'plane' && mode === 'scale')}
     onObjectChange={() => {

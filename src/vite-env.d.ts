@@ -17,8 +17,8 @@ declare global {
       loadAsset(path: string): Promise<string>;
       loadModel(path: string): Promise<{ format: 'glb'; source: string } | { format: 'obj'; source: string; materials?: string }>;
       chooseAudio(): Promise<{ sourcePath: string; name: string } | null>;
-      chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number] }> } | null>;
-      ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number] }> }>;
+      chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number] }> } | null>;
+      ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number] }> }>;
       generatePlan(project: AbacoProject, contactSheet?: string): Promise<BlenderPlan>;
       generateJevAction(input: JevActionInput): Promise<JevActionPlan>;
       onLayaProgress(callback: (progress: { file: string; received: number; total: number | null }) => void): () => void;

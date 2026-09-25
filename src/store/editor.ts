@@ -832,6 +832,9 @@ export const useEditor = create<EditorState>((set, get) => {
       const next = snapshot(state.project);
       const object = next.objects.find((item) => item.id === id && item.kind === 'blend_asset');
       if (!object?.asset.controllers?.some((item) => item.name === name)) return;
+      if (state.currentFrame > next.settings.frameStart && !(object.asset.controllerKeys ?? []).some((key) => key.name === name && key.frame <= next.settings.frameStart)) {
+        object.asset.controllerKeys = [...(object.asset.controllerKeys ?? []), { name, frame: next.settings.frameStart, offset: [0, 0, 0] }];
+      }
       object.asset.controllerKeys = (object.asset.controllerKeys ?? []).filter((key) => key.name !== name || key.frame !== state.currentFrame);
       object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset });
       commit(next);

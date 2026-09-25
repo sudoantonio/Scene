@@ -69,7 +69,7 @@ export const SceneObjectSchema = z.object({
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
     groundOffset: z.number().finite().nonnegative().default(1),
-    controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema })).optional(),
+    controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema, worldPosition: Vec3Schema.optional() })).optional(),
     controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema })).optional(),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 }),
   audio: z.object({

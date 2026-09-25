@@ -38,6 +38,17 @@ for armature in (obj for obj in bpy.context.scene.objects if obj.type == "ARMATU
         if isinstance(offset, list) and len(offset) == 3:
             bone.location = [float(bone.location[i]) + float(offset[i]) for i in range(3)]
 bpy.context.view_layer.update()
+for controller in controllers:
+    name = controller["name"]
+    if name.startswith("BONE|"):
+        _, armature_name, bone_name = name.split("|", 2)
+        armature = bpy.data.objects.get(armature_name)
+        bone = armature.pose.bones.get(bone_name) if armature else None
+        world = armature.matrix_world @ bone.head if bone else Vector((0, 0, 0))
+    else:
+        obj = bpy.data.objects.get(name)
+        world = obj.matrix_world.translation if obj else Vector((0, 0, 0))
+    controller["worldPosition"] = [round(float(v), 6) for v in world]
 
 # L'export glTF può ignorare curve, oggetti dentro collezioni nascoste e rig
 # complessi. Creiamo una fotografia statica valutata della geometria: preserva
