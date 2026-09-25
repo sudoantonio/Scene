@@ -220,9 +220,14 @@ function BlendAssetVisual({ object }: { object: SceneObject }) {
       const metadata = object.asset.sourcePath
         ? await window.abaco.ensureBlendAssetProxy({ sourcePath: object.asset.sourcePath, proxyPath: object.asset.proxyPath, pose: JSON.parse(poseSignature) as Record<string, Vec3> })
         : undefined;
-      if (metadata?.controllers?.length && !object.asset.controllers?.length) {
+      if (metadata && !object.asset.controllers?.length && (
+        !!metadata.controllers?.length || metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index])
+      )) {
         const current = useEditor.getState().project.objects.find((item) => item.id === object.id);
-        if (current) updateObject(object.id, { asset: { ...current.asset, controllers: metadata.controllers } });
+        if (current) updateObject(object.id, { asset: {
+          ...current.asset, boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale,
+          groundOffset: metadata.groundOffset, controllers: metadata.controllers,
+        } });
       }
       const value = await window.abaco.loadAsset(object.asset.proxyPath);
       if (active) setSource(value);
