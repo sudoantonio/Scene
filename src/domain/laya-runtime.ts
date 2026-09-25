@@ -46,6 +46,11 @@ const englishQuestionInstructions: Record<string, string> = {
   rotate_y: 'Should pitch around Y increase, decrease, or hold?',
   rotate_z: 'Should yaw around Z increase, decrease, or hold?',
   rotation_amount: 'How large should the rotation be?',
+  character_action: 'Should this character move body parts? Select none for whole-character translation or rotation. Use the available character_controls.',
+  character_part: 'Which body part is requested? Select none if no specific part is named.',
+  character_side: 'Which side of the character moves? Select both only when both sides are requested.',
+  character_direction: 'Which direction should the body part move?',
+  character_controller: 'Which available character control matches the requested body part? Select none when no joint is requested.',
 };
 
 const englishQuestionCriteria: Record<string, Record<string, string> | string[]> = {
@@ -82,6 +87,10 @@ const englishQuestionCriteria: Record<string, Record<string, string> | string[]>
   rotate_y: { increase: 'look up', decrease: 'look down', hold: 'no Y rotation' },
   rotate_z: { increase: 'turn or look right', decrease: 'turn or look left', hold: 'no Z rotation' },
   rotation_amount: ['10 degrees', '20 degrees', '45 degrees', '90 degrees', '180 degrees'],
+  character_action: { none: 'no joint movement', walk: 'alternating walking gait', run: 'energetic running gait', jump: 'bend and extend legs while jumping', raise: 'raise arm or leg', lower: 'lower arm or leg', wave: 'wave a hand', point: 'point with an arm', bend: 'bend elbow or knee', kick: 'kick with a foot', move_part: 'move a specified body part' },
+  character_part: { none: 'no specific part', hand: 'hand or wrist', elbow: 'elbow', arm: 'arm', foot: 'foot', knee: 'knee', leg: 'leg' },
+  character_side: { left: 'left side', right: 'right side', both: 'both sides' },
+  character_direction: { up: 'up', down: 'down', left: 'left', right: 'right', forward: 'forward', back: 'backward' },
 };
 
 export function compactLayaState(state: unknown) {
@@ -93,6 +102,7 @@ export function compactLayaState(state: unknown) {
     connector: source.connector,
     context_instruction: source.context_instruction,
     selected_target: source.selected_target,
+    character_controls: source.character_controls,
     local_interpretation: source.natural_language_hints,
     selected_motion_family: source.selected_motion_family,
     camera_action_hint: source.camera_action_hint,

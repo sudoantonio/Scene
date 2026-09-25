@@ -154,8 +154,10 @@ export default function JevFloatingComposer() {
           : ` · ${formatDuration(plan.performance.decisionMs)}`
         : '';
       const sequence = plan.decision?.sequence;
-      const motionSummary = sequence?.reduce((summary, step, index) => `${summary}${index ? step.relation === 'with' ? ' + ' : ' → ' : ''}${semanticMotionLabel(step.motion)}${step.referenceName ? ` ${step.referenceName}` : ''}`, '')
-        ?? (plan.decision?.motion ? `${semanticMotionLabel(plan.decision.motion)}${plan.decision.reference?.name ? ` ${plan.decision.reference.name}` : ''}` : '');
+      const directed = plan.blenderPlan.directionPlan?.actions;
+      const motionSummary = directed?.reduce((summary, step, index) => `${summary}${index ? step.relation === 'with' ? ' + ' : ' → ' : ''}${step.characterAction ? step.characterAction.replaceAll('_', ' ') : semanticMotionLabel(step.motion)}`, '')
+        ?? sequence?.reduce((summary, step, index) => `${summary}${index ? step.relation === 'with' ? ' + ' : ' → ' : ''}${semanticMotionLabel(step.motion)}${step.referenceName ? ` ${step.referenceName}` : ''}`, '')
+        ?? (plan.decision?.characterAction ? plan.decision.characterAction.replaceAll('_', ' ') : plan.decision?.motion ? `${semanticMotionLabel(plan.decision.motion)}${plan.decision.reference?.name ? ` ${plan.decision.reference.name}` : ''}` : '');
       const interpretation = motionSummary ? `: ${motionSummary}` : '';
       const followupMode = plan.blenderPlan.directionPlan?.prompts?.at(-1)?.mode;
       const followupLabel = followupMode === 'continue' ? 'Continuation applied' : followupMode === 'refine' ? 'Details added' : followupMode === 'correct' ? 'Correction applied' : 'Motion applied';
@@ -183,7 +185,7 @@ export default function JevFloatingComposer() {
       <div>{savedDirection.actions.map((action, index) => <button key={action.id} type="button" disabled={busy} onClick={() => {
         setEditingAction({ planId: savedDirection.id, actionId: action.id, frame: savedDirection.startFrame });
         setInstruction(action.instruction); inputRef.current?.focus();
-      }}>{index + 1}. {action.motionSpec ? describeMotionSpec(action.motionSpec) : semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· subject kept in frame' : ''}</button>)}</div>
+      }}>{index + 1}. {action.characterAction ? action.characterAction.replaceAll('_', ' ') : action.motionSpec ? describeMotionSpec(action.motionSpec) : semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· subject kept in frame' : ''}</button>)}</div>
     </details>}
     {editingAction && !message && <div className="jev-composer-message">Correct the selected motion <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Cancel</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}

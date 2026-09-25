@@ -75,4 +75,10 @@ describe('Laya local runtime', () => {
     expect(temporal.criteria).toEqual({ single: 'one action', simultaneous: 'actions happen during the same interval' });
     expect(family.criteria).toEqual({ locomotion: 'horizontal or radial subject translation', orientation: 'subject turn, look, or roll' });
   });
+  it('passes available character controls to Laya and translates joint questions', () => {
+    const state = compactLayaState({ instruction: 'alza il braccio destro', character_controls: [{ name: 'CTRL_MANO_DX', part: 'hand', side: 'right' }] });
+    expect(state.character_controls).toEqual([{ name: 'CTRL_MANO_DX', part: 'hand', side: 'right' }]);
+    const question = prepareLayaQuestion('character_action', { type: 'choice', instructions: 'Azione', criteria: { none: 'nessuna', raise: 'alza' } } as never) as { instructions: string; criteria: Record<string, string> };
+    expect(question.criteria).toEqual({ none: 'no joint movement', raise: 'raise arm or leg' });
+  });
 });

@@ -70,7 +70,7 @@ export const SceneObjectSchema = z.object({
     previewScale: z.number().finite().positive().default(1),
     groundOffset: z.number().finite().nonnegative().default(1),
     controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema, worldPosition: Vec3Schema.optional(), worldBasis: z.tuple([Vec3Schema, Vec3Schema, Vec3Schema]).optional(), morphTargets: z.tuple([z.string(), z.string(), z.string()]).optional(), morphStep: z.number().positive().optional() })).optional(),
-    controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema })).optional(),
+    controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema, source: z.enum(['user', 'ai']).optional() })).optional(),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 }),
   audio: z.object({
     duration: z.number().finite().nonnegative().default(0),
@@ -171,6 +171,7 @@ export const DirectionPlanSchema = z.object({
   })).optional(),
   actions: z.array(z.object({
     id: z.string().uuid(), instruction: z.string(), motion: z.string(),
+    characterAction: z.string().optional(),
     relation: z.enum(['then', 'with']), startFrame: z.number().int(), endFrame: z.number().int(),
     referenceId: z.string().uuid().optional(), keepInFrame: z.boolean(),
     distanceMeters: z.number(), durationSeconds: z.number(), durationExplicit: z.boolean().optional(),
@@ -235,10 +236,11 @@ const OperationValueSchema = z.object({
 
 export const PlanOperationSchema = z.object({
   id: z.string(),
-  type: z.enum(['set_keyframe', 'set_camera_cut']),
+  type: z.enum(['set_keyframe', 'set_camera_cut', 'set_controller_pose']),
   objectId: z.string().uuid(),
   frame: z.number().int().positive(),
-  property: z.enum(['position', 'rotation', 'scale', 'visibility', 'text', 'lens', 'camera_cut']),
+  property: z.enum(['position', 'rotation', 'scale', 'visibility', 'text', 'lens', 'camera_cut', 'controller_pose']),
+  controllerName: z.string().min(1).optional(),
   value: OperationValueSchema,
   interpolation: InterpolationSchema,
   rationale: z.string(),

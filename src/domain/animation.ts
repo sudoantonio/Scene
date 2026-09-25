@@ -71,6 +71,10 @@ export function validatePlan(project: AbacoProject, plan: BlenderPlan): string[]
     if (!object) errors.push(`${op.id}: oggetto inesistente`);
     if (op.frame < project.settings.frameStart || op.frame > project.settings.frameEnd) errors.push(`${op.id}: frame fuori intervallo`);
     if (op.type === 'set_camera_cut' && object?.kind !== 'camera') errors.push(`${op.id}: il taglio non riferisce una camera`);
+    if (op.type === 'set_controller_pose') {
+      if (op.property !== 'controller_pose' || !op.controllerName || !op.value.vector) errors.push(`${op.id}: posa del personaggio non valida`);
+      if (object?.kind !== 'blend_asset' || !object.asset.controllers?.some((controller) => controller.name === op.controllerName)) errors.push(`${op.id}: controllo del personaggio inesistente`);
+    }
     if (op.type === 'set_keyframe') {
       try {
         const value = planValue(op);
@@ -80,7 +84,7 @@ export function validatePlan(project: AbacoProject, plan: BlenderPlan): string[]
       } catch (error) { errors.push((error as Error).message); }
     }
     for (const id of op.commentIds) if (!comments.has(id)) errors.push(`${op.id}: commento inesistente ${id}`);
-    const key = `${op.type}:${op.objectId}:${op.frame}:${op.property}`;
+    const key = `${op.type}:${op.objectId}:${op.frame}:${op.property}:${op.controllerName ?? ''}`;
     if (conflicts.has(key)) errors.push(`${op.id}: operazione in conflitto`);
     conflicts.add(key);
   }
@@ -99,6 +103,15 @@ export function applyPlan(project: AbacoProject, plan: BlenderPlan): AbacoProjec
       continue;
     }
     const object = next.objects.find((item) => item.id === operation.objectId)!;
+    if (operation.type === 'set_controller_pose') {
+      const keys = object.asset.controllerKeys ?? (object.asset.controllerKeys = []);
+      const existing = keys.find((key) => key.name === operation.controllerName && key.frame === operation.frame);
+      const value = operation.value.vector!;
+      if (existing?.source === 'user' || (existing && !existing.source)) continue;
+      if (existing) Object.assign(existing, { offset: value, source: 'ai' as const });
+      else keys.push({ name: operation.controllerName!, frame: operation.frame, offset: value, source: 'ai' });
+      continue;
+    }
     const existing = object.keyframes.find((key) => key.frame === operation.frame && key.property === operation.property);
     const keyframe: Keyframe = {
       id: existing?.id ?? crypto.randomUUID(), frame: operation.frame, property: operation.property as AnimProperty,

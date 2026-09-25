@@ -4,6 +4,8 @@ import { BlenderPlanSchema, type AbacoProject, type BlenderPlan, type Keyframe, 
 import { applyPlan, evaluateProperty, evaluateTransform } from './animation';
 import { cameraBasis, cameraTarget, fromCameraSpace, toCameraSpace } from './camera-space';
 import { MotionSpecSchema, type MotionSpec } from './motion-spec';
+import { characterActionCriteria, characterControlSummary, characterMotionHint, planCharacterMotion, resolveCharacterMotion } from './character-motion';
+import { controllerOffset } from './controller-pose';
 
 export const JevChoiceAnswerSchema = z.object({
   type: z.literal('choice'),
@@ -81,6 +83,11 @@ export const JevActionResponseSchema = z.object({
     framing_action: JevChoiceAnswerSchema.optional(),
     framing_edge: JevChoiceAnswerSchema.optional(),
     rotation_amount: JevScoreAnswerSchema.optional(),
+    character_action: JevChoiceAnswerSchema.optional(),
+    character_part: JevChoiceAnswerSchema.optional(),
+    character_side: JevChoiceAnswerSchema.optional(),
+    character_direction: JevChoiceAnswerSchema.optional(),
+    character_controller: JevChoiceAnswerSchema.optional(),
   }),
   usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional(),
 });
@@ -210,6 +217,8 @@ function criteriaForFamily(family: MotionFamily | undefined, cameraOnly: boolean
 
 export function resolveMotionFamily(input: Pick<JevActionInput, 'instruction' | 'target' | 'gesture'>, predicted?: string): MotionFamily {
   const cameraOnly = input.target === 'camera';
+  const characterHint = !cameraOnly && characterMotionHint(input.instruction);
+  if (characterHint && !['walk', 'run', 'jump'].includes(characterHint.action)) return 'pose';
   const local = motionFamily(naturalMotionPrimitive(input.instruction, cameraOnly, input.gesture), cameraOnly);
   if (local && local !== 'path') return local;
   const parsed = MotionFamilySchema.safeParse(predicted);
@@ -281,6 +290,9 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
     ['none', 'Nessun elemento specifico è il riferimento dell’azione.'],
   ]);
   const standardContent = project.animationStandard?.content ?? '';
+  const characterControls = object?.kind === 'blend_asset' ? characterControlSummary(object)
+    .sort((a, b) => Number(normalizedInstruction(input.instruction).includes(normalizedInstruction(b.name.split('|').at(-1)!.replace(/^CTRL_/, '').replaceAll('_', ' ')))) - Number(normalizedInstruction(input.instruction).includes(normalizedInstruction(a.name.split('|').at(-1)!.replace(/^CTRL_/, '').replaceAll('_', ' ')))))
+    .slice(0, 24) : [];
   const naturalIntent = naturalMotionIntent(input.instruction, input.target === 'camera');
   const naturalMotion = naturalMotionPrimitive(input.instruction, input.target === 'camera', input.gesture);
   const naturalFamily = naturalMotion === 'follow_drawn_path' ? undefined : motionFamily(naturalMotion, input.target === 'camera');
@@ -291,6 +303,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       selected_target: selectedTarget ? { id: selectedTarget.id, name: selectedTarget.name, kind: selectedTarget.kind, role: input.target === 'camera' ? 'camera' : 'subject' } : null,
       camera_focus_target: focusObject ? { id: focusObject.id, name: focusObject.name, position: evaluateTransform(focusObject, input.frame).position } : null,
       selected_subject: object ? { id: object.id, name: object.name, kind: object.kind } : null,
+      character_controls: object?.kind === 'blend_asset' ? characterControls : null,
       available_subjects: project.objects.filter((candidate) => candidate.kind !== 'camera' && candidate.kind !== 'audio' && !candidate.kind.includes('light') && !candidate.screenSpace).map((candidate) => ({ id: candidate.id, name: candidate.name, kind: candidate.kind })),
       available_reference_objects: referenceObjects.map((candidate) => ({ id: candidate.id, name: candidate.name, kind: candidate.kind, position: evaluateTransform(candidate, input.frame).position })),
       scene_context: {
@@ -304,7 +317,7 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       },
       instruction: input.instruction,
       context_instruction: input.contextInstruction,
-      natural_language_hints: { family: naturalFamily ?? null, motion: naturalMotion === 'follow_drawn_path' && family && family !== 'path' ? null : naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null },
+      natural_language_hints: { family: naturalFamily ?? null, motion: naturalMotion === 'follow_drawn_path' && family && family !== 'path' ? null : naturalMotion ?? null, action: naturalIntent.action ?? null, direction: naturalIntent.direction ?? null, character_action: object?.kind === 'blend_asset' ? characterMotionHint(input.instruction)?.action ?? null : null },
       selected_motion_family: family ?? null,
       camera_action_hint: explicitCameraMotion(input.instruction, input.target === 'camera') ?? null,
       current_frame: input.frame,
@@ -344,6 +357,13 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       maintain_distance: { type: 'noul', instructions: 'La distanza dall’elemento di riferimento deve restare costante?' },
       framing_action: { type: 'choice', instructions: 'La frase descrive un rapporto con i bordi dell’inquadratura?', criteria: { none: 'Nessuna entrata o uscita dal quadro.', enter: 'Il soggetto entra, rientra o compare nell’inquadratura.', exit: 'Il soggetto esce o scompare dall’inquadratura.' } },
       framing_edge: { type: 'choice', instructions: 'Da quale bordo entra o verso quale bordo esce il soggetto?', criteria: { left: 'Bordo sinistro.', right: 'Bordo destro.', top: 'Bordo superiore.', bottom: 'Bordo inferiore.' } },
+      ...(object?.kind === 'blend_asset' && object.asset.controllers?.length ? {
+        character_action: { type: 'choice', instructions: 'Il personaggio deve muovere parti del corpo? Scegli none se si sposta o ruota soltanto tutto il personaggio. Usa solo controlli disponibili in character_controls.', criteria: characterActionCriteria },
+        character_part: { type: 'choice', instructions: 'Quale parte del corpo è esplicitamente coinvolta? Scegli none se la frase non la specifica.', criteria: { none: 'Non specificata.', hand: 'Mano o polso.', elbow: 'Gomito.', arm: 'Braccio.', foot: 'Piede.', knee: 'Ginocchio.', leg: 'Gamba.' } },
+        character_side: { type: 'choice', instructions: 'Quale lato del personaggio? Scegli both per entrambi; right quando non è specificato.', criteria: { left: 'Lato sinistro.', right: 'Lato destro.', both: 'Entrambi i lati.' } },
+        character_direction: { type: 'choice', instructions: 'In che direzione si muove la parte del corpo?', criteria: { up: 'Alto.', down: 'Basso.', left: 'Sinistra.', right: 'Destra.', forward: 'Avanti.', back: 'Indietro.' } },
+        character_controller: { type: 'choice', instructions: 'Quale controllo del personaggio corrisponde alla parte richiesta? Scegli none se nessuna articolazione è richiesta.', criteria: Object.fromEntries([['none', 'Nessuna articolazione.'], ...characterControls.map((controller) => [controller.name, `${controller.part ?? 'part'} · ${controller.side ?? 'center'}`])]) },
+      } : {}),
     },
   } as const;
 }
@@ -445,6 +465,7 @@ export const JevActionPlanSchema = z.object({
     sequence: z.array(z.object({ instruction: z.string(), motion: SemanticMotionSchema, relation: z.enum(['then', 'with']), referenceName: z.string().optional() })).optional(),
     reference: z.object({ objectId: z.string().uuid(), name: z.string() }).optional(),
     motionSpec: MotionSpecSchema,
+    characterAction: z.string().optional(),
     action: z.string(), direction: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), energy: z.number(), path: z.string(), actionable: z.number(),
     camera: z.object({ requested: z.boolean(), action: z.string(), distanceMeters: z.number(), durationSeconds: z.number(), path: z.string() }).optional(),
     gesture: z.object({ target: z.enum(['subject', 'camera']), points: z.number().int().positive() }).optional(),
@@ -536,7 +557,7 @@ export function mergeJevSequencePlans(plans: JevActionPlan[], instruction: strin
   if (plans.length === 1) return JevActionPlanSchema.parse({ ...plans[0], instruction });
   const operations = new Map<string, BlenderPlan['operations'][number]>();
   plans.forEach((plan) => plan.blenderPlan.operations.forEach((operation) => {
-    operations.set(`${operation.type}:${operation.objectId}:${operation.frame}:${operation.property}`, operation);
+    operations.set(`${operation.type}:${operation.objectId}:${operation.frame}:${operation.property}:${operation.controllerName ?? ''}`, operation);
   }));
   const first = plans[0]!;
   const last = plans.at(-1)!;
@@ -567,22 +588,32 @@ export function composeParallelJevPlans(project: AbacoProject, plans: JevActionP
   if (plans.length < 2) return JevActionPlanSchema.parse({ ...plans[0], instruction });
   const merged = mergeJevSequencePlans(plans, instruction);
   const appliedProjects = plans.map((plan) => applyPlan(project, plan.blenderPlan));
-  const keys = new Set(plans.flatMap((plan) => plan.blenderPlan.operations.map((operation) => `${operation.objectId}:${operation.property}`)));
-  const conflicting = new Set([...keys].filter((key) => plans.filter((plan) => plan.blenderPlan.operations.some((operation) => `${operation.objectId}:${operation.property}` === key)).length > 1));
-  const untouched = merged.blenderPlan.operations.filter((operation) => !conflicting.has(`${operation.objectId}:${operation.property}`));
+  const operationKey = (operation: BlenderPlan['operations'][number]) => JSON.stringify([operation.objectId, operation.property, operation.controllerName ?? '']);
+  const keys = new Set(plans.flatMap((plan) => plan.blenderPlan.operations.map(operationKey)));
+  const conflicting = new Set([...keys].filter((key) => plans.filter((plan) => plan.blenderPlan.operations.some((operation) => operationKey(operation) === key)).length > 1));
+  const untouched = merged.blenderPlan.operations.filter((operation) => !conflicting.has(operationKey(operation)));
   const composed: BlenderPlan['operations'] = [];
 
   for (const key of conflicting) {
-    const separator = key.indexOf(':');
-    const objectId = key.slice(0, separator);
-    const property = key.slice(separator + 1) as 'position' | 'rotation' | 'scale';
-    if (!['position', 'rotation', 'scale'].includes(property)) continue;
+    const [objectId, property, controllerName] = JSON.parse(key) as [string, 'position' | 'rotation' | 'scale' | 'controller_pose', string];
+    if (!['position', 'rotation', 'scale', 'controller_pose'].includes(property)) continue;
     const sourceObject = project.objects.find((candidate) => candidate.id === objectId);
     if (!sourceObject) continue;
     const contributors = plans.map((plan, index) => ({ plan, applied: appliedProjects[index]! }))
-      .filter(({ plan }) => plan.blenderPlan.operations.some((operation) => operation.objectId === objectId && operation.property === property));
-    const frames = [...new Set(contributors.flatMap(({ plan }) => plan.blenderPlan.operations.filter((operation) => operation.objectId === objectId && operation.property === property).map((operation) => operation.frame)))].sort((a, b) => a - b);
+      .filter(({ plan }) => plan.blenderPlan.operations.some((operation) => operationKey(operation) === key));
+    const frames = [...new Set(contributors.flatMap(({ plan }) => plan.blenderPlan.operations.filter((operation) => operationKey(operation) === key).map((operation) => operation.frame)))].sort((a, b) => a - b);
     for (const frame of frames) {
+      if (property === 'controller_pose') {
+        const baseline = controllerOffset(sourceObject.asset, controllerName, frame, project.settings.frameStart);
+        const vector = contributors.reduce<Vec3>((result, { applied }) => {
+          const candidate = applied.objects.find((object) => object.id === objectId);
+          const value = candidate ? controllerOffset(candidate.asset, controllerName, frame, project.settings.frameStart) : baseline;
+          return result.map((entry, axis) => entry + value[axis]! - baseline[axis]!) as Vec3;
+        }, [...baseline] as Vec3);
+        composed.push({ id: crypto.randomUUID(), type: 'set_controller_pose', objectId, frame, property, controllerName,
+          value: { vector, boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Composizione di movimenti simultanei del personaggio.', commentIds: [] });
+        continue;
+      }
       const baseline = evaluateTransform(sourceObject, frame)[property];
       const vector = contributors.reduce<Vec3>((result, { applied }) => {
         const candidate = applied.objects.find((object) => object.id === objectId);
@@ -1108,9 +1139,11 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const rotationAmount = explicitMeasurement(input.instruction, 'rotation') ?? [10, 20, 45, 90, 180][Math.max(0, Math.min(4, Math.round(answers.rotation_amount?.score ?? answers.distance.score)))]!;
   const naturalIntent = naturalMotionIntent(input.instruction, cameraOnly);
   const localMotion = naturalMotionPrimitive(input.instruction, cameraOnly, input.gesture);
+  const characterIntent = object?.kind === 'blend_asset' ? resolveCharacterMotion(input.instruction, answers, object) : undefined;
+  const articulationOnly = !!characterIntent && !['walk', 'run', 'jump'].includes(characterIntent.action);
   const parsedModelMotion = SemanticMotionSchema.safeParse(answers.motion?.choice);
   const modelMotion = parsedModelMotion.success ? parsedModelMotion.data : undefined;
-  const motion = localMotion === 'follow_drawn_path' && modelMotion && modelMotion !== 'hold' ? modelMotion : localMotion ?? modelMotion;
+  const motion = articulationOnly ? 'hold' : localMotion === 'follow_drawn_path' && modelMotion && modelMotion !== 'hold' ? modelMotion : localMotion ?? modelMotion;
   const semanticIntent = motion ? semanticMotionIntent(motion) : undefined;
   const referenceObject = resolveInstructionReference(project, input, input.objectId, answers.reference_object?.choice);
   const requiresReference = motion === 'move_toward_object' || motion === 'move_away_object' || motion === 'look_at_object';
@@ -1130,7 +1163,8 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   const cameraConfidences = cameraRequested ? [answers.motion?.confidence ?? answers.camera_action?.confidence, answers.distance.confidence, answers.duration.confidence, answers.path.confidence].filter((entry): entry is number => entry !== undefined) : [];
   const confidences = [...subjectConfidences, ...cameraConfidences];
   const modelConfidence = Math.min(...(confidences.length ? confidences : [0]));
-  const confidence = input.engine === 'laya' && motion && motion === localMotion ? Math.max(.9, modelConfidence) : modelConfidence;
+  const confidence = characterIntent && characterMotionHint(input.instruction) ? Math.max(.85, modelConfidence)
+    : input.engine === 'laya' && motion && motion === localMotion ? Math.max(.9, modelConfidence) : modelConfidence;
   const cameraIntent = explicitCameraDirection(input.instruction);
   const directionChoice = semanticIntent?.direction ?? cameraIntent ?? naturalIntent.direction ?? answers.direction?.choice ?? 'forward';
   let startPosition = input.startPosition ?? (object ? evaluateTransform(object, input.frame).position : [0, 0, 0]);
@@ -1157,6 +1191,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
   let action = object ? (semanticIntent?.action ?? naturalIntent.action ?? (gestureTarget === 'subject' ? (['jump', 'rise', 'descend'].includes(answers.action?.choice ?? '') ? answers.action!.choice : 'move') : cameraIntent && answers.action?.choice !== 'jump' ? 'move' : answers.action?.choice ?? 'hold')) : 'hold';
   if (object && hasAxisTranslation && action !== 'jump') action = translationAxes[2] !== 0 && translationAxes[0] === 0 && translationAxes[1] === 0 ? (translationAxes[2] > 0 ? 'rise' : 'descend') : 'move';
   if (object && hasAxisRotation && !hasAxisTranslation && action !== 'jump') action = 'turn';
+  if (articulationOnly) action = 'hold';
   const movementBasis = motionSpec.space === 'world' ? { forward: [1, 0, 0] as Vec3, right: [0, 1, 0] as Vec3 } : directions;
   const subjectAxisDirection = normalizeVector(add(add(scale(movementBasis.forward!, motionSpec.translation[0]), scale(movementBasis.right!, motionSpec.translation[1])), [0, 0, motionSpec.translation[2]]), direction);
   if (object && !missingReference && ['move', 'rise', 'descend'].includes(action)) endPosition = add(startPosition, scale(hasAxisTranslation && !cameraIntent ? subjectAxisDirection : direction, distance));
@@ -1174,7 +1209,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     const horizontal: Vec3 = directionChoice === 'up' || directionChoice === 'down' ? [0, 0, 0] : scale(direction, distance);
     endPosition = add(startPosition, horizontal);
   }
-  if (object && motionSpec.framing.action !== 'none') {
+  if (object && !articulationOnly && motionSpec.framing.action !== 'none') {
     const endpoints = framingEndpoints(project, input.sceneId, input.frame, startPosition, object, motionSpec.framing);
     startPosition = endpoints.start;
     endPosition = endpoints.end;
@@ -1186,7 +1221,7 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
       ? verticalStrokeProjector(input.gesture, startPosition, drawnRight)
       : horizontalStrokeProjector(input.gesture, startPosition)
     : undefined;
-  const subjectStroke = object && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition), subjectStrokeProjector) : undefined;
+  const subjectStroke = object && !articulationOnly && gestureTarget === 'subject' && input.gesture ? strokeTrajectory(input.gesture.points, startPosition, drawnRight, strokeVertical, distance, Math.min(12, endFrame - input.frame + 1), strokeProjection(input.gesture, startPosition), subjectStrokeProjector) : undefined;
   if (subjectStroke?.length) endPosition = subjectStroke[subjectStroke.length - 1]!.position;
   const value = (vector: Vec3) => ({ vector, boolean: null, text: null, number: null });
   const operations: BlenderPlan['operations'] = [];
@@ -1205,10 +1240,11 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: apexFrame, property: 'position', value: value([midpoint[0], midpoint[1], Math.max(startPosition[2], endPosition[2]) + Math.max(.35, distance * .5)]), interpolation: 'bezier', rationale: `Apice del salto scelto da ${engineLabel}.`, commentIds: [] });
   }
   if (!subjectStroke && object && ['move', 'rise', 'descend', 'jump'].includes(action)) operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'position', value: value(endPosition), interpolation, rationale: `Azione ${action} compilata dalle decisioni ${engineLabel}.`, commentIds: [] });
-  if (object && !missingReference && (action === 'turn' || hasAxisRotation)) {
+  if (object && !articulationOnly && !missingReference && (action === 'turn' || hasAxisRotation)) {
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: input.frame, property: 'rotation', value: value(objectTransform!.rotation), interpolation, rationale: 'Orientamento iniziale.', commentIds: [] });
     operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: object.id, frame: endFrame, property: 'rotation', value: value(endRotation), interpolation, rationale: `Rotazione scelta da ${engineLabel}.`, commentIds: [] });
   }
+  if (object?.kind === 'blend_asset' && characterIntent) operations.push(...planCharacterMotion(object, input.instruction, answers, input.frame, endFrame, answers.energy.score, project.settings.frameStart));
 
   const scene = scenes[sceneIndex];
   const cameraObject = cameraOnly
@@ -1288,15 +1324,16 @@ export function compileJevAction(project: AbacoProject, object: SceneObject | un
       operations.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: cameraObject.id, frame: cameraEndFrame, property: 'rotation', value: value(cameraEndRotation), interpolation: cameraInterpolation, rationale: `Orientamento camera ${cameraAction} scelto da ${engineLabel}.`, commentIds: [] });
     }
   }
-  const actionable = motion && motion !== 'hold' ? Math.max(.9, answers.actionable.noul) : object && naturalIntent.action && naturalIntent.action !== 'hold' ? Math.max(.9, answers.actionable.noul) : object ? answers.actionable.noul : 1;
+  const actionable = characterIntent || motion && motion !== 'hold' ? Math.max(.9, answers.actionable.noul) : object && naturalIntent.action && naturalIntent.action !== 'hold' ? Math.max(.9, answers.actionable.noul) : object ? answers.actionable.noul : 1;
   const warnings = confidence < .55 || actionable < .6 ? ['Decisione incerta: controllare il JSON e l’anteprima prima di applicare.'] : [];
   if (missingReference) warnings.push('Il movimento richiede un elemento di riferimento presente nella scena.');
+  if (characterIntent && !operations.some((operation) => operation.type === 'set_controller_pose')) warnings.push('Il personaggio non ha un controllo compatibile con la parte del corpo richiesta.');
   if (!operations.length) warnings.push('La descrizione non contiene un movimento applicabile al soggetto selezionato o alla camera.');
   const plan: BlenderPlan = { schemaVersion: 'BlenderPlanV1', summary: `${engineLabel} · Regia: ${input.instruction}`, assumptions: ['Le direzioni del soggetto sono relative alla camera attiva; i movimenti camera mantengono il soggetto selezionato come riferimento.'], warnings, operations };
   return JevActionPlanSchema.parse({
     schemaVersion: 'JevActionPlanV1', objectId: object?.id ?? null, instruction: input.instruction, model: response.model,
     status: confidence >= .55 && actionable >= .6 && operations.length ? 'ready' : 'review', confidence,
-    decision: { motion, motionSpec, action, direction: directionChoice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable, reference: referenceObject ? { objectId: referenceObject.id, name: referenceObject.name } : undefined, camera: { requested: cameraRequested, action: cameraAction, distanceMeters: cameraDistance, durationSeconds: cameraDuration, path: answers.camera_path?.choice ?? answers.path.choice }, gesture: gestureTarget && input.gesture ? { target: gestureTarget, points: input.gesture.points.length } : undefined },
+    decision: { motion, motionSpec, characterAction: characterIntent?.action, action, direction: directionChoice, distanceMeters: distance, durationSeconds: duration, energy: answers.energy.score, path: answers.path.choice, actionable, reference: referenceObject ? { objectId: referenceObject.id, name: referenceObject.name } : undefined, camera: { requested: cameraRequested, action: cameraAction, distanceMeters: cameraDistance, durationSeconds: cameraDuration, path: answers.camera_path?.choice ?? answers.path.choice }, gesture: gestureTarget && input.gesture ? { target: gestureTarget, points: input.gesture.points.length } : undefined },
     blenderPlan: plan,
   });
 }

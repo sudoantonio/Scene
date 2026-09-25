@@ -836,7 +836,7 @@ export const useEditor = create<EditorState>((set, get) => {
         object.asset.controllerKeys = [...(object.asset.controllerKeys ?? []), { name, frame: next.settings.frameStart, offset: [0, 0, 0] }];
       }
       object.asset.controllerKeys = (object.asset.controllerKeys ?? []).filter((key) => key.name !== name || key.frame !== state.currentFrame);
-      object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset });
+      object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset, source: 'user' });
       commit(next);
     },
     setSceneNote: (id, text) => {
@@ -1452,6 +1452,15 @@ export const useEditor = create<EditorState>((set, get) => {
         const properties = touched.get(object.id);
         if (!properties) return;
         object.keyframes = object.keyframes.filter((key) => !(key.frame >= scene.frame && key.frame < sceneEnd && properties.has(key.property) && key.source === 'ai' && key.purpose === 'motion' && key.commentIds.length === 0));
+      });
+      const posed = new Map<string, Set<string>>();
+      plan.operations.filter((operation) => operation.type === 'set_controller_pose' && operation.controllerName).forEach((operation) => {
+        const controls = posed.get(operation.objectId) ?? new Set<string>();
+        controls.add(operation.controllerName!); posed.set(operation.objectId, controls);
+      });
+      next.objects.forEach((object) => {
+        const controls = posed.get(object.id);
+        if (controls) object.asset.controllerKeys = object.asset.controllerKeys?.filter((key) => !(key.frame >= scene.frame && key.frame < sceneEnd && controls.has(key.name) && key.source === 'ai'));
       });
       if (plan.directionPlan) {
         next.directionPlans = [...(next.directionPlans ?? []).filter((entry) => entry.sceneId !== sceneId || entry.objectId !== plan.directionPlan!.objectId), plan.directionPlan];

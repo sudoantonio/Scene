@@ -1,6 +1,5 @@
 export const BLEND_ASSET_PROXY_SCRIPT = String.raw`import bpy
 import json
-import re
 import sys
 from pathlib import Path
 from mathutils import Vector
@@ -90,8 +89,7 @@ ground_offset = max(0.0, (center.z - minimum.z) * preview_scale)
 # Store each joint's local deformation as glTF morph targets. Three.js can
 # combine these on every pointer movement without starting Blender again.
 step = 0.25
-editable = [controller for controller in controllers if controller["name"].startswith("BONE|")
-            or re.match(r"CTRL_(MANO|PIEDE|GOMITO|GINOCCHIO)", controller["name"])]
+editable = [controller for controller in controllers if controller["name"].startswith(("BONE|", "CTRL_"))]
 for controller_index, controller in enumerate(editable):
     name = controller["name"]
     if name.startswith("BONE|"):

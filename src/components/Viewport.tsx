@@ -314,7 +314,7 @@ function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDra
         : undefined;
       if (active && metadata?.controllers) setPoseControllers(metadata.controllers);
       if (metadata && (
-        (!!metadata.controllers?.some((controller) => controller.worldBasis?.length) && !object.asset.controllers?.some((controller) => controller.worldBasis?.length))
+        JSON.stringify(metadata.controllers ?? []) !== JSON.stringify(object.asset.controllers ?? [])
         || metadata.previewScale !== object.asset.previewScale || metadata.groundOffset !== object.asset.groundOffset || metadata.boundsCenter.some((value, index) => value !== object.asset.boundsCenter[index])
       )) {
         const current = useEditor.getState().project.objects.find((item) => item.id === object.id);

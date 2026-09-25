@@ -282,7 +282,7 @@ const blendProxyJobs = new Map<string, Promise<BlendProxyMetadata>>();
 async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force = false, pose: Record<string, [number, number, number]> = {}): Promise<BlendProxyMetadata> {
   const resolvedSource = path.resolve(sourcePath);
   const resolvedProxy = path.resolve(proxyPath);
-  const markerPath = `${resolvedProxy}.v8.json`;
+  const markerPath = `${resolvedProxy}.v9.json`;
   const poseSignature = JSON.stringify(Object.entries(pose).sort(([a], [b]) => a.localeCompare(b)));
   const existing = blendProxyJobs.get(resolvedProxy);
   if (existing) {
