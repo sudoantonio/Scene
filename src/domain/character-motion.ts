@@ -218,15 +218,23 @@ export function planCharacterMotion(object: SceneObject, instruction: string, an
         if (elbow) { save(elbow, 0, [0, 0, 0]); save(elbow, 1, [0, 0, 0], true); }
         if (knee) { save(knee, 0, [0, 0, 0]); save(knee, 1, [0, 0, 0], true); }
       } else if (intent.action === 'wave') {
-        const raised = add(scale(up, height * .72 * intensity), scale(outward, height * .12));
-        const across = scale(axes.right, height * .08);
+        // A wave stays near the head. Energy changes the tempo and side-to-side
+        // motion, not the hand's height; otherwise stretchy rigs pull it far away.
+        const raised = add(scale(up, height * .57), scale(outward, height * .1));
+        const elbowRaised = add(scale(up, height * .27), scale(outward, height * .06));
+        const across = scale(outward, height * (energy >= 4 ? .085 : .06));
+        const sweeps = energy >= 4 ? 3 : 2;
         save(controller, 0, [0, 0, 0]);
         save(controller, .2, raised);
-        save(controller, .4, add(raised, across));
-        save(controller, .6, add(raised, scale(across, -1)));
-        save(controller, .8, add(raised, across));
+        if (elbow) { save(elbow, 0, [0, 0, 0]); save(elbow, .2, elbowRaised); }
+        for (let sweep = 0; sweep < sweeps * 2; sweep++) {
+          const progress = .2 + .6 * (sweep + 1) / (sweeps * 2);
+          const swing = scale(across, sweep % 2 === 0 ? 1 : -1);
+          save(controller, progress, add(raised, swing));
+          if (elbow) save(elbow, progress, add(elbowRaised, scale(swing, .2)));
+        }
         save(controller, 1, [0, 0, 0]);
-        if (elbow) { save(elbow, 0, [0, 0, 0]); save(elbow, .2, add(scale(up, height * .34), scale(outward, height * .07))); save(elbow, .8, add(scale(up, height * .34), scale(outward, height * .07))); save(elbow, 1, [0, 0, 0]); }
+        if (elbow) save(elbow, 1, [0, 0, 0]);
       } else if (intent.action === 'kick') {
         save(controller, 0, [0, 0, 0]);
         save(controller, .5, add(scale(forward, height * .25 * intensity), scale(up, height * .22 * intensity)));

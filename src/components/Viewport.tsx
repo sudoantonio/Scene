@@ -9,6 +9,7 @@ import { groundedPositionZ } from '../domain/ground';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta, controllerPose, controllerWorldDelta } from '../domain/controller-pose';
+import { controllerMotionPaths } from '../domain/controller-motion-path';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
@@ -1105,6 +1106,16 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   </group>;
 }
 
+function CharacterMotionPath({ points, keyPoints }: { points: Vec3[]; keyPoints: Vec3[] }) {
+  return <group renderOrder={22}>
+    <Line points={points} color="#f4bd3d" lineWidth={3} depthTest={false} transparent opacity={.9} raycast={() => null} />
+    {keyPoints.map((point, index) => <mesh key={index} position={point} renderOrder={23} raycast={() => null}>
+      <sphereGeometry args={[.045, 10, 8]} />
+      <meshBasicMaterial color="#ffe18a" depthTest={false} />
+    </mesh>)}
+  </group>;
+}
+
 function SelectionAiAnchor() {
   const selectedId = useEditor((state) => state.selectedId);
   const frame = useEditor((state) => state.currentFrame);
@@ -1211,6 +1222,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       return [{ object, keyframes: handles, points: filtered.map((sample) => sample.point), pointFrames: filtered.map((sample) => sample.frame), sceneId: activeCut.id }];
     });
   }, [activeCut?.id, cuts, objects, settings.frameEnd]);
+  const visibleCharacterPaths = useMemo(() => {
+    if (!activeCut) return [];
+    const sceneEnd = cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1;
+    return objects.filter((object) => object.kind === 'blend_asset' && selectedIds.includes(object.id))
+      .flatMap((object) => controllerMotionPaths(object, activeCut.frame, sceneEnd, settings.frameStart)
+        .map((path) => ({ ...path, objectId: object.id })));
+  }, [activeCut?.id, cuts, objects, selectedIds, settings.frameEnd, settings.frameStart]);
   const selectedObject = objects.find((object) => object.id === selectedId);
   const selectedGroup = groups.find((group) => group.memberIds.length === selectedIds.length && group.memberIds.every((id) => selectedIds.includes(id)));
   const canGroup = selectedIds.length > 1 && !selectedGroup && selectedIds.every((id) => {
@@ -1664,6 +1682,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {showMotionPaths && visibleMotionPaths.map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {showMotionPaths && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}

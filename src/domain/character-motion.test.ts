@@ -79,6 +79,11 @@ describe('Jev and Laya articulated character motions', () => {
     const elbow = keys.find((key) => key.controllerName === 'CTRL_GOMITO_DX' && key.frame === 49)!;
     expect(controllerWorldDelta(character.asset.controllers![0]!, hand.value.vector!)[2]).toBeGreaterThan(1);
     expect(controllerWorldDelta(character.asset.controllers![2]!, elbow.value.vector!)[2]).toBeGreaterThan(.4);
+    const wave = planCharacterMotion(character, 'saluta energicamente con la mano destra', { character_action: choice('wave') }, 1, 49, 5);
+    const handHeights = wave.filter((key) => key.controllerName === 'CTRL_MANO_DX')
+      .map((key) => .51 + controllerWorldDelta(character.asset.controllers![0]!, key.value.vector!)[2]);
+    expect(Math.max(...handHeights)).toBeLessThan(1.58);
+    expect(wave.some((key) => key.controllerName === 'CTRL_GOMITO_DX' && key.frame > 1 && key.frame < 49)).toBe(true);
   });
 
   it('animates a wave and returns the hand to its original pose', () => {
