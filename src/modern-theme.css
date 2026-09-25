@@ -927,16 +927,16 @@ body:has(.app-shell.theme-light) #root,
   border-radius: 0 8px 8px 0 !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .track-label {
-  background: #292929 !important;
+  background: var(--timeline-open-panel) !important;
   border-radius: 8px 0 0 8px !important;
   border-bottom: 0 !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .track {
-  background: #292929 !important;
+  background: var(--timeline-open-panel) !important;
   border-radius: 0 8px 8px 0 !important;
   border-bottom: 0 !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track-label,
 .app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track {
-  background: #343434 !important;
+  background: var(--timeline-open-panel) !important;
 }
