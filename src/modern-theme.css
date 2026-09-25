@@ -1044,39 +1044,35 @@ body:has(.app-shell.theme-light) #root,
 
 /* Scenography has a single direction document for the active scene. */
 .app-shell .scenography-content { gap: 15px !important; }
-.app-shell .scene-elements-section { gap: 14px; }
+.app-shell .scene-elements-section { gap: 12px; }
 .app-shell .scene-direction-card {
-  padding: 14px;
+  padding: 0;
   color: var(--ui-text);
-  background: #303030;
-  border: 1px solid #515151;
-  border-radius: 13px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
-.app-shell .scene-direction-heading { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
-.app-shell .scene-direction-heading > svg { color: #d6ad3c; flex: none; margin-top: 2px; }
-.app-shell .scene-direction-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.app-shell .scene-direction-heading { margin: 0 0 8px; }
 .app-shell .scene-direction-heading strong { font-size: 13px; font-weight: 650; }
-.app-shell .scene-direction-heading span { color: var(--ui-muted); font-size: 10px; line-height: 1.4; }
 .app-shell .scene-direction-input { position: relative; }
 .app-shell .scene-direction-input textarea {
   display: block;
   width: 100%;
-  min-height: 148px;
+  min-height: 138px;
   resize: vertical;
   padding: 11px 12px;
   color: var(--ui-text);
-  background: #252525;
-  border: 1px solid #4b4b4b;
-  border-radius: 9px;
+  background: #303030;
+  border: 0;
+  border-radius: 8px;
   font-size: 12px;
   line-height: 1.55;
 }
-.app-shell .scene-direction-input textarea:focus { outline: 0; border-color: #b99845; box-shadow: 0 0 0 2px rgba(216,171,53,.16); }
-.app-shell .scene-direction-help { display: block; padding: 8px 1px 0; color: var(--ui-muted); font-size: 10px; line-height: 1.4; }
+.app-shell .scene-direction-input textarea:focus { outline: 0; box-shadow: inset 0 0 0 1px rgba(216,171,53,.35); }
 .app-shell .scene-direction-menu {
   position: absolute;
   z-index: 100;
-  top: calc(100% - 22px);
+  top: calc(100% + 5px);
   left: 0;
   right: 0;
   max-height: 214px;
@@ -1087,35 +1083,20 @@ body:has(.app-shell.theme-light) #root,
   border-radius: 9px;
   box-shadow: 0 12px 26px rgba(0,0,0,.36);
 }
-.app-shell .scene-direction-menu button { width: 100%; min-height: 32px; padding: 5px 8px; display: flex; align-items: center; justify-content: space-between; color: #ececec; background: transparent; border: 0; border-radius: 5px; text-align: left; font-size: 11px; }
+.app-shell .scene-direction-menu button { width: 100%; min-height: 32px; padding: 5px 8px; display: flex; align-items: center; gap: 9px; color: #ececec; background: transparent; border: 0; border-radius: 5px; text-align: left; font-size: 11px; }
 .app-shell .scene-direction-menu button:is(:hover,.active) { background: #454545; }
+.app-shell .scene-direction-menu button > svg { flex: none; color: #c7b06d; }
+.app-shell .scene-direction-menu button > span { flex: 1; }
 .app-shell .scene-direction-menu small { color: #aaa; font-size: 9px; }
 .app-shell .scene-direction-menu p { margin: 0; padding: 9px; color: #b9b9b9; font-size: 11px; }
-.app-shell .scene-direction-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
-.app-shell .scene-direction-actions > span { color: var(--ui-muted); font-size: 10px; }
-.app-shell .scene-direction-save { min-height: 31px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; color: #1d1a10; background: #d8ab35; border: 0; border-radius: 7px; font-size: 10px; font-weight: 650; }
-.app-shell .scene-direction-save:disabled { color: #aaa; background: #454545; }
-.app-shell .scene-elements-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
-.app-shell .scene-elements-heading h3 { margin: 0; color: var(--ui-text); font-size: 12px; font-weight: 600; }
-.app-shell .scene-elements-heading span { color: var(--ui-muted); font-size: 10px; }
-.app-shell .scenography-outliner { gap: 5px; }
-.app-shell .scenography-content .scenography-object {
-  width: 100%;
-  min-height: 34px;
-  padding: 7px 9px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #d8d8d8;
-  background: #2d2d2d;
-  border: 1px solid #3d3d3d;
-  border-radius: 8px !important;
-  text-align: left;
-  font-size: 11px;
-}
-.app-shell .scenography-content .scenography-object.selected { color: #fff; background: #3b3b3b; border-color: #8d7946; }
-.app-shell .scenography-content .scenography-object svg { flex: none; color: #aaa; }
-.app-shell .scenography-content .scenography-object span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .animation-standard-slot { min-height: 34px; display: flex; align-items: center; gap: 5px; }
+.app-shell .animation-standard-file { flex: 1; min-width: 0; min-height: 34px; padding: 0 9px; display: flex; align-items: center; gap: 8px; color: #cfcfcf; background: #292929; border: 0; border-radius: 7px; text-align: left; font-size: 11px; }
+.app-shell .animation-standard-file > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .animation-standard-file > small { flex: none; color: #888; font-size: 10px; }
+.app-shell .animation-standard-file > svg { flex: none; color: #aaa; }
+.app-shell .animation-standard-icon { width: 34px; height: 34px; display: grid; place-items: center; color: #aaa; background: #292929; border: 0; border-radius: 7px; }
+.app-shell .animation-standard-slot button:hover { color: #fff; background: #343434; }
+.app-shell .animation-standard-slot [role="alert"], .app-shell .animation-standard-slot [role="status"] { margin: 0; font-size: 10px; }
 .app-shell.theme-dark .timeline:not(.collapsed) .ruler-label {
   border-radius: 8px 0 0 8px !important;
 }

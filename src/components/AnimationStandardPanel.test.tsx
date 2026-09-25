@@ -13,13 +13,13 @@ describe('Documento standard', () => {
     fireEvent.change(screen.getByLabelText('Animation standard document'), { target: { files: [file] } });
     await waitFor(() => expect(useEditor.getState().project.animationStandard?.content).toBe('Regole della scena'));
     expect(screen.getByText('standard.md')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Remove from project'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove animation standard' }));
     expect(useEditor.getState().project.animationStandard).toBeUndefined();
     expect(useEditor.getState().project.comments).toEqual([]);
   });
   it('rifiuta il documento vuoto e conserva quello precedente', async () => {
     render(<AnimationStandardPanel />);
-    fireEvent.click(screen.getByText('Use included cartoon standard'));
+    fireEvent.click(screen.getByRole('button', { name: 'Use included cartoon standard' }));
     const original = useEditor.getState().project.animationStandard;
     expect(original?.content).toContain('Confronto iniziale obbligatorio');
     const file = new File([' '], 'vuoto.md'); Object.defineProperty(file, 'text', { value: async () => ' ' });

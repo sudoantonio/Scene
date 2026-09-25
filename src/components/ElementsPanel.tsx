@@ -1,11 +1,10 @@
 import AnimationStandardPanel from './AnimationStandardPanel';
 import SceneDirectionInput from './SceneDirectionInput';
-import { Box, Check, Circle, Cone, Cylinder, FileBox, Image, MessageSquare, Music2, SquareDashed, TextCursorInput } from 'lucide-react';
-import { useState } from 'react';
+import { Box, Circle, Cone, Cylinder, FileBox, Image, Music2, SquareDashed, TextCursorInput } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ObjectKind } from '../domain/schema';
-import { combinedSceneDirection, sceneDirectionComments, sceneDirectionTargets } from '../domain/scene-direction';
+import { combinedSceneDirection, sceneDirectionTargets } from '../domain/scene-direction';
 import { useEditor } from '../store/editor';
-import { evaluateProperty } from '../domain/animation';
 import { inspectAudio } from '../domain/audio';
 
 const shapes: Array<{ kind: ObjectKind; label: string; icon: typeof Box }> = [
@@ -22,23 +21,37 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   const addBlendAsset = useEditor((state) => state.addBlendAsset);
   const addScreenImage = useEditor((state) => state.addScreenImage);
   const addAudio = useEditor((state) => state.addAudio);
-  const select = useEditor((state) => state.select);
   const setSceneDirection = useEditor((state) => state.setSceneDirection);
   const [directionDrafts, setDirectionDrafts] = useState<Record<string, string>>({});
+  const pendingSaves = useRef(new Map<string, { text: string; timer: ReturnType<typeof setTimeout> }>());
+  useEffect(() => () => {
+    for (const [sceneId, pending] of pendingSaves.current) {
+      clearTimeout(pending.timer);
+      useEditor.getState().setSceneDirection(sceneId, pending.text);
+    }
+    pendingSaves.current.clear();
+  }, []);
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const activeScene = scenes.filter((scene) => scene.frame <= frame).at(-1);
-  const sceneEnd = scenes.find((scene) => scene.frame > frame)?.frame ?? project.settings.frameEnd + 1;
-  const sceneObjects = project.objects.filter((object) => object.kind !== 'camera' && !object.kind.includes('light') && activeScene && (object.sceneIds.length === 0 || object.sceneIds.includes(activeScene.id)) && (
-    evaluateProperty(object, 'visibility', activeScene.frame) || object.keyframes.some((key) => key.property === 'visibility' && key.value === true && key.frame > activeScene.frame && key.frame < sceneEnd)
-  ));
   const savedDirection = activeScene ? combinedSceneDirection(project, activeScene.id) : '';
   const directionDraft = activeScene ? directionDrafts[activeScene.id] ?? savedDirection : '';
-  const directionComments = activeScene ? sceneDirectionComments(project, activeScene.id) : [];
-  const directionChanged = Boolean(activeScene && (directionDraft !== savedDirection || directionComments.some((comment) => comment.scope !== 'scene')));
-  const saveDirection = () => {
-    if (!activeScene || !directionChanged) return;
-    setSceneDirection(activeScene.id, directionDraft);
-    setDirectionDrafts((current) => ({ ...current, [activeScene.id]: directionDraft.trim() }));
+  const changeDirection = (text: string) => {
+    if (!activeScene) return;
+    const sceneId = activeScene.id;
+    setDirectionDrafts((current) => ({ ...current, [sceneId]: text }));
+    const previous = pendingSaves.current.get(sceneId);
+    if (previous) clearTimeout(previous.timer);
+    const timer = setTimeout(() => {
+      pendingSaves.current.delete(sceneId);
+      if (combinedSceneDirection(useEditor.getState().project, sceneId) !== text) setSceneDirection(sceneId, text);
+      setDirectionDrafts((current) => {
+        if (current[sceneId] !== text) return current;
+        const updated = { ...current };
+        delete updated[sceneId];
+        return updated;
+      });
+    }, 350);
+    pendingSaves.current.set(sceneId, { text, timer });
   };
   return <div className="elements-panel">
     {mode === 'add' ? <section className="add-section">
@@ -70,14 +83,10 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
       </div>
   </section> : <section className="outliner-section scene-elements-section">
       <div className="scene-direction-card">
-        <div className="scene-direction-heading"><MessageSquare size={16} /><div><strong>Scene direction</strong><span>One description for the scene and everyone in it</span></div></div>
-        <SceneDirectionInput value={directionDraft} onChange={(text) => activeScene && setDirectionDrafts((current) => ({ ...current, [activeScene.id]: text }))} onSave={saveDirection} targets={activeScene ? sceneDirectionTargets(project, activeScene.id) : []} selectedId={selectedId} />
-        <div className="scene-direction-actions"><span>{directionChanged ? 'Unsaved changes' : directionComments.length ? 'Saved for this scene' : 'No direction yet'}</span><button className="scene-direction-save" disabled={!directionChanged} onClick={saveDirection}><Check size={14} /> Save direction</button></div>
+        <div className="scene-direction-heading"><strong>Scene direction</strong></div>
+        <SceneDirectionInput value={directionDraft} onChange={changeDirection} targets={activeScene ? sceneDirectionTargets(project, activeScene.id) : []} selectedId={selectedId} />
       </div>
-      <div className="scene-elements-heading"><h3>In this scene</h3><span>{sceneObjects.length} elements</span></div>
-      <div className="outliner scenography-outliner">{sceneObjects.map((object) => <button key={object.id} className={`scenography-object ${selectedId === object.id ? 'selected' : ''}`} aria-label={`Select ${object.name}`} onClick={() => { select(object.id); if (object.kind === 'audio') window.dispatchEvent(new Event('abaco:edit-audio')); }}>{object.kind === 'audio' ? <Music2 size={14} /> : object.kind === 'text' ? <TextCursorInput size={14} /> : object.screenSpace ? <Image size={14} /> : <Box size={14} />}<span>{object.name}</span></button>)}</div>
-      {!sceneObjects.length && <p className="inspector-help">No elements in this scene.</p>}
-      <details className="scenography-standard"><summary>Animation standard{project.animationStandard ? ' · Attached' : ''}</summary><AnimationStandardPanel /></details>
+      <AnimationStandardPanel />
     </section>}
   </div>;
 }

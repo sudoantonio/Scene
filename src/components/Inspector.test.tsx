@@ -203,7 +203,7 @@ describe('Pannelli contestuali', () => {
     expect(evaluateTransform(object, 1).position).toEqual([2, 3, 1.5]);
   });
 
-  it('scrive e salva una sola descrizione della scena senza ricreare la textarea', () => {
+  it('salva automaticamente una sola descrizione della scena senza ricreare la textarea', async () => {
     useEditor.getState().addObject('cube');
     const initial = useEditor.getState();
     const scene = initial.project.cameraCuts[0];
@@ -212,8 +212,10 @@ describe('Pannelli contestuali', () => {
     fireEvent.change(input, { target: { value: 'Entra' } });
     expect(screen.getByRole('textbox', { name: 'Scene direction' })).toBe(input);
     fireEvent.change(input, { target: { value: 'Entra lentamente in scena.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
-    expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ scope: 'scene', sceneId: scene.id, text: 'Entra lentamente in scena.' })]));
+    expect(screen.queryByRole('button', { name: 'Save direction' })).not.toBeInTheDocument();
+    await waitFor(() => expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ scope: 'scene', sceneId: scene.id, text: 'Entra lentamente in scena.' })])));
+    act(() => useEditor.getState().undo());
+    expect(input).toHaveValue('');
   });
 
   it('mantiene bozza e contenitore quando si seleziona un elemento in Scenografia', () => {
@@ -223,13 +225,13 @@ describe('Pannelli contestuali', () => {
     const input = screen.getByLabelText('Scene direction');
     fireEvent.change(input, { target: { value: 'Bozza da conservare' } });
     act(() => useEditor.getState().select(undefined));
-    fireEvent.click(screen.getByRole('button', { name: 'Select Cube 1' }));
+    act(() => useEditor.getState().select(useEditor.getState().project.objects.find(o => o.name === 'Cube 1')!.id));
     expect(screen.getByRole('region', { name: 'Scenography content' })).toBe(body);
     expect(screen.getByLabelText('Scene direction')).toBe(input);
     expect(input).toHaveValue('Bozza da conservare');
   });
 
-  it('mostra solo gli elementi appartenenti alla scena e non salva bozze nella scena sbagliata', () => {
+  it('mostra nei suggerimenti solo gli elementi della scena e salva la bozza nella scena giusta', async () => {
     useEditor.getState().addObject('cube');
     useEditor.getState().addShot();
     const secondScene = useEditor.getState().project.cameraCuts[1];
@@ -237,24 +239,26 @@ describe('Pannelli contestuali', () => {
     const sphereName = useEditor.getState().project.objects.find(o => o.id === useEditor.getState().selectedId)!.name;
     useEditor.getState().setFrame(1);
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: `Select ${sphereName}` })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Scene direction'), { target: { value: '@', selectionStart: 1 } });
+    expect(screen.queryByRole('option', { name: `${sphereName} Element` })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Scene direction'), { target: { value: 'Prima scena' } });
     act(() => useEditor.getState().setFrame(secondScene.frame));
-    expect(screen.getByRole('button', { name: `Select ${sphereName}` })).toBeInTheDocument();
     expect(screen.getByLabelText('Scene direction')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Scene direction'), { target: { value: '@', selectionStart: 1 } });
+    expect(screen.getByRole('option', { name: `${sphereName} Element` })).toBeInTheDocument();
     act(() => useEditor.getState().setFrame(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
-    expect(useEditor.getState().project.comments[0]).toMatchObject({ text: 'Prima scena', sceneId: useEditor.getState().project.cameraCuts[0].id });
+    await waitFor(() => expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ text: 'Prima scena', sceneId: useEditor.getState().project.cameraCuts[0].id })])));
   });
 });
 
 describe('Scene direction mentions and motion presets', () => {
-  it('offers element motions after @mention and saves their prompts', () => {
+  it('offers element motions after @mention and saves their prompts', async () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
     const input = screen.getByLabelText('Scene direction');
     fireEvent.change(input, { target: { value: '@Cu', selectionStart: 3 } });
     expect(screen.getByRole('option', { name: 'Cube 1 Element' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Cube 1 Element' }).querySelector('svg')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Cube 1 Element' }));
     fireEvent.change(input, { target: { value: '@Cube 1 /', selectionStart: 9 } });
     expect(screen.getByRole('option', { name: 'Annoyed Emotion' })).toBeInTheDocument();
@@ -265,7 +269,7 @@ describe('Scene direction mentions and motion presets', () => {
     fireEvent.change(input, { target: { value: query, selectionStart: query.length } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(input).toHaveValue('@Cube 1 /scocciato /si-avvicina ');
-    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
+    await waitFor(() => expect(useEditor.getState().project.comments[0]?.presets?.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']));
     const comment = useEditor.getState().project.comments[0];
     expect(comment.scope).toBe('scene');
     expect(comment.presets?.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']);
@@ -273,7 +277,7 @@ describe('Scene direction mentions and motion presets', () => {
     expect(comment.targetIds).toContain(useEditor.getState().project.objects.find(o => o.name === 'Cube 1')!.id);
   });
 
-  it('offers camera motions after @camera and switches with the last mention', () => {
+  it('offers camera motions after @camera and switches with the last mention', async () => {
     const name = useEditor.getState().project.objects[0].name;
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
@@ -282,21 +286,17 @@ describe('Scene direction mentions and motion presets', () => {
     expect(screen.getByRole('option', { name: 'Static camera Camera' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Annoyed Emotion' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Static camera Camera' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save direction' }));
-    expect(useEditor.getState().project.comments[0].presets?.[0].id).toBe('camera-statica');
+    await waitFor(() => expect(useEditor.getState().project.comments[0]?.presets?.[0].id).toBe('camera-statica'));
     const next = `@${name} /camera-statica @Cube 1 /`;
     fireEvent.change(input, { target: { value: next, selectionStart: next.length } });
     expect(screen.getByRole('option', { name: 'Annoyed Emotion' })).toBeInTheDocument();
   });
 });
 
-it('allega lo standard direttamente da Scenografia', () => {
+it('mostra lo standard come riga compatta senza pannello apribile', () => {
   render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-  const section = screen.getByText('Animation standard').closest('details')!;
-  fireEvent.click(screen.getByText('Animation standard'));
-  expect(section).toHaveAttribute('open');
+  expect(screen.getByText('Animation standard').closest('details')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Use included cartoon standard' }));
   expect(useEditor.getState().project.animationStandard?.name).toBe('STANDARD_ANIMAZIONE_GENERALE.md');
-  expect(screen.getByText('Animation standard · Attached')).toBeInTheDocument();
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByText('STANDARD_ANIMAZIONE_GENERALE.md')).toBeInTheDocument();
 });

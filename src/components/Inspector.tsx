@@ -130,7 +130,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
       ['edit', SlidersHorizontal, 'Edit'], ['scene', Box, 'Scenography'], ['light', Sun, 'Lighting'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>}
     <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Edit controls' : panel === 'scene' ? 'Scenography content' : 'Lighting controls'} tabIndex={0}>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scene'}</strong><span>Scenography</span></header><ElementsPanel mode="scene" /><InspectorGroup title="Stage and background" icon={<Frame size={13} />} variant="setup"><BackgroundPanel /></InspectorGroup></div> : <>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scene'}</strong><span>Scenography</span></header><InspectorGroup title="Stage and background" icon={<Frame size={13} />} variant="setup"><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
       {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
         <div className="inspector-identity">
           <span className="inspector-kind">{object.kind === 'text' ? 'Text · 2D' : object.screenSpace ? 'Image · 2D' : 'Element · 3D'}</span>

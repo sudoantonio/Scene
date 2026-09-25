@@ -1337,7 +1337,7 @@ export const useEditor = create<EditorState>((set, get) => {
         const fallback = !mentioned.length && /(?:^|\s)\/[a-z][a-z0-9-]*(?=$|\s|[.,;:!?])/i.test(clean)
           ? targets.find((target) => target.id === state.selectedId)?.id : undefined;
         next.comments.push({
-          id: existing?.id ?? crypto.randomUUID(), text: clean,
+          id: existing?.id ?? crypto.randomUUID(), text,
           presets: resolvePresets(clean, 'scene', prior.flatMap((comment) => comment.presets ?? [])),
           targetIds: mentioned.length ? mentioned : fallback ? [fallback] : [],
           startFrame: scene.frame,
