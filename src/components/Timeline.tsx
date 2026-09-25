@@ -441,12 +441,12 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       <div className="timeline-center-stack">
         <div className="transport timeline-transport">
           <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Split clip at playhead" aria-label="Split clip at playhead"><Scissors size={15} /></button>
-          <button className="icon" title="Go to start" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
-          <button className="icon" title="Previous frame" aria-label="Previous frame" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
+          <button className="icon timeline-step" title="Go to start" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
+          <button className="icon timeline-step" title="Previous frame" aria-label="Previous frame" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
           <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
           <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Stop recording · ${recordingSession.touchedObjectIds.length} moved subjects` : 'Record camera and object motion'} aria-label={recordingSession ? 'Stop motion recording' : 'Record motion'} onClick={toggleRecording}><i /></button>
-          <button className="icon" title="Next frame" aria-label="Next frame" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
-          <button className="icon" title="Go to end" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
+          <button className="icon timeline-step" title="Next frame" aria-label="Next frame" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
+          <button className="icon timeline-step" title="Go to end" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
         </div>
       </div>
       <div className="timeline-actions"><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon timeline-toggle" title={collapsed ? 'Open timeline' : 'Collapse timeline'} aria-label={collapsed ? 'Open timeline' : 'Collapse timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>

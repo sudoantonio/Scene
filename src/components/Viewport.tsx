@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { Box, Eye, EyeOff, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
+import { ArrowLeft, Box, Eye, EyeOff, Focus, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
@@ -1545,7 +1545,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
-    {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Free view" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Free</span></button>}
+    {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Back to free view" onClick={() => setCameraView(false)}><ArrowLeft size={15} /><span>Back</span></button>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Blender-style camera controls">
         <button className="camera-hint-close" title="Hide instructions" aria-label="Hide instructions" onClick={() => setCameraHintVisible(false)}>×</button>
@@ -1557,12 +1557,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       </div>
     </div>}
     <div className="viewport-top-right">
-      <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Hide motion paths' : 'Show motion paths'} title={showMotionPaths ? 'Hide paths' : 'Show paths'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
       {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Transform tool">{([
         ['translate', 'Move', Move3d],
         ['rotate', 'Rotate', Rotate3d],
         ['scale', 'Scale', Scaling],
       ] as const).map(([mode, label, Icon]) => <button key={mode} disabled={!selectedTransformable} title={selectedTransformable ? label : `Select an element to use ${label.toLowerCase()}`} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
+    </div>
+    <div className="viewport-bottom-right">
+      <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Hide motion paths' : 'Show motion paths'} title={showMotionPaths ? 'Hide paths' : 'Show paths'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
     </div>
     {!cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => setCameraView(true)} onFind={() => {
       const controls = orbitRef.current;

@@ -711,6 +711,11 @@ body:has(.app-shell.theme-light) #root,
 }
 .app-shell .motion-path-visibility:hover,
 .app-shell .motion-path-visibility.active { color: var(--ui-text); background: var(--ui-raised); }
+.app-shell .viewport-bottom-right { position: absolute; z-index: 5; right: 12px; bottom: 12px; display: flex; align-items: center; }
+.app-shell .camera-mode .viewport-bottom-right {
+  right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
+  bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+}
 
 /* L'input AI può ridursi a un solo pulsante senza coprire la scena. */
 .app-shell .jev-composer-input {
@@ -742,11 +747,11 @@ body:has(.app-shell.theme-light) #root,
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
 .app-shell .jev-composer-expand:hover { background: var(--ui-raised); }
-.app-shell .jev-floating-composer.anchored.compact { width: auto; }
+.app-shell .jev-floating-composer.anchored.compact { width: auto; padding: 0 !important; background: transparent !important; border: 0 !important; border-radius: 999px !important; box-shadow: none !important; }
 .app-shell .jev-floating-composer.anchored.compact .jev-composer-expand {
-  min-width: 82px;
-  height: 32px;
-  padding: 0 12px 0 9px;
+  min-width: 116px;
+  height: 40px;
+  padding: 0 15px 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -755,15 +760,15 @@ body:has(.app-shell.theme-light) #root,
   background: rgba(35,35,35,.94);
   border: 1px solid rgba(255,255,255,.12);
   border-radius: 999px !important;
-  font-size: 10px;
+  font-size: 12px;
   box-shadow: 0 4px 14px rgba(0,0,0,.22);
 }
 .app-shell .jev-floating-composer.anchored.compact .jev-composer-expand img {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   display: block;
   object-fit: contain;
-  flex: 0 0 18px;
+  flex: 0 0 26px;
 }
 .app-shell .jev-floating-composer.anchored.compact .jev-composer-expand:hover { background: var(--ui-raised); }
 .app-shell .jev-floating-composer.anchored .jev-composer-close { display: none; }
@@ -984,8 +989,13 @@ body:has(.app-shell.theme-light) #root,
   background-position: left center !important;
   background-repeat: repeat-x !important;
   background-size: var(--timeline-thumbnail-width, var(--timeline-second-width, 90px)) auto !important;
+  border-left: 1px solid rgba(255,255,255,.76);
+  border-right: 2px solid rgba(255,255,255,.82);
+  box-shadow: inset -1px 0 rgba(0,0,0,.72);
 }
 .app-shell .timeline.collapsed .collapsed-scene-playhead { z-index: 20; }
+.app-shell .timeline-transport .timeline-step { width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+.app-shell .timeline-transport .timeline-step svg { width: 20px; height: 20px; }
 .app-shell.timeline-sidebar-docked > .slim-headbar { grid-column: 1 / -1; grid-row: 1; }
 .app-shell.timeline-sidebar-docked > .workspace { grid-column: 1; grid-row: 2; min-width: 0; }
 .app-shell.timeline-sidebar-docked > .timeline-sidebar-divider { grid-column: 2; grid-row: 2 / 5; width: 10px; height: auto; cursor: ew-resize; }
