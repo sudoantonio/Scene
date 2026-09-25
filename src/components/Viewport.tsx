@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Billboard, Grid, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
+import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { Box, Eye, EyeOff, Focus, ImageOff, LayoutTemplate, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
@@ -289,7 +289,7 @@ function CameraVisual({ object }: { object: SceneObject }) {
   </group>;
 }
 
-function MeshVisual({ object }: { object: SceneObject }) {
+function MeshVisual({ object, hideText = false }: { object: SceneObject; hideText?: boolean }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
     case 'cube': return <mesh castShadow>{material}<boxGeometry args={[2, 2, 2]} /></mesh>;
@@ -297,7 +297,7 @@ function MeshVisual({ object }: { object: SceneObject }) {
     case 'cylinder': return <mesh castShadow>{material}<cylinderGeometry args={[1, 1, 2, 32]} /></mesh>;
     case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
     case 'plane': return <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
-    case 'text': return <Text color={object.color} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
+    case 'text': return <Text visible={!hideText} color={object.color} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
     case 'blend_asset': return <BlendAssetVisual object={object} />;
     case 'camera': return <CameraVisual object={object} />;
     case 'area_light': return <mesh><circleGeometry args={[.7, 28]} /><meshBasicMaterial color={object.color} side={THREE.DoubleSide} /></mesh>;
@@ -326,7 +326,10 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const mode = useEditor((state) => state.gizmoMode);
   const select = useEditor((state) => state.select);
   const setTransform = useEditor((state) => state.setTransform);
+  const updateObject = useEditor((state) => state.updateObject);
   const setPlaying = useEditor((state) => state.setPlaying);
+  const [textEditing, setTextEditing] = useState(false);
+  const [textDraft, setTextDraft] = useState('');
   const transform = evaluateTransform(object, currentFrame);
   const text = evaluateProperty(object, 'text', currentFrame) as string;
   const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', currentFrame) as boolean;
@@ -518,11 +521,19 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
     gizmoCleanup.current?.();
   }, []);
 
+  const commitTextEdit = () => { updateObject(object.id, { text: textDraft }); setTextEditing(false); };
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
       onPointerOver={motionEditing ? undefined : (event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={motionEditing ? undefined : (event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
+      onDoubleClick={object.kind === 'text' ? (event) => { event.stopPropagation(); select(object.id); setTextDraft(text); setTextEditing(true); } : undefined}
       onClick={motionEditing ? undefined : (event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={motionEditing ? undefined : startDirectDrag} onPointerMove={motionEditing ? undefined : moveDirectDrag} onPointerUp={motionEditing ? undefined : finishDirectDrag} onPointerCancel={motionEditing ? undefined : finishDirectDrag}>
-      <MeshVisual object={shown} />
+      <MeshVisual object={shown} hideText={textEditing} />
+      {textEditing && <Html center zIndexRange={[100, 0]}>
+        <textarea className="viewport-text-editor" aria-label={`Edit ${object.name}`} autoFocus value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
+          if (event.key === 'Escape') { event.preventDefault(); setTextDraft(text); setTextEditing(false); }
+          else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); commitTextEdit(); }
+        }} />
+      </Html>}
     </group>;
 
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto

@@ -6,7 +6,7 @@ import App from './App';
 
 vi.mock('./components/Viewport', () => ({ default: () => <div />, captureContactSheet: vi.fn() }));
 vi.mock('./components/Inspector', () => ({ default: ({ panel, floating, onToggleCollapse }: { panel: string; floating?: boolean; onToggleCollapse?(): void }) => <div data-testid="inspector">{floating ? `Pannello ${panel}` : panel}<button aria-label="Riduci pannello destro" onClick={onToggleCollapse}>Riduci</button></div> }));
-vi.mock('./components/Timeline', () => ({ default: () => <div /> }));
+vi.mock('./components/Timeline', () => ({ default: ({ collapsed, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?(): void }) => <div className={`timeline ${collapsed ? 'collapsed' : ''}`}><button aria-label={collapsed ? 'Open timeline' : 'Collapse timeline'} onClick={onToggleCollapse}>Timeline</button></div> }));
 vi.mock('./components/ElementsPanel', () => ({ default: () => <div /> }));
 
 type SaveResult = { project: AbacoProject; path: string } | null;
@@ -45,12 +45,24 @@ describe('Salvataggi e apertura progetto', () => {
     expect(screen.getByTestId('inspector')).toBeInTheDocument();
   });
 
-  it('mostra l’input AI selezionando un soggetto senza comandi di riduzione', () => {
+  it('mostra il pulsante AI agent sul soggetto e apre l’input solo al clic', () => {
     useEditor.getState().addObject('cube');
     render(<App />);
+    expect(screen.getByRole('button', { name: 'AI agent' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Action input')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'AI agent' }));
     expect(screen.getByLabelText('Action input')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Riduci input AI' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Espandi input AI' })).not.toBeInTheDocument();
+  });
+
+  it('docks the right panel beside the closed timeline and restores the open layout', () => {
+    render(<App />);
+    const shell = document.querySelector('.app-shell')!;
+    expect(shell).not.toHaveClass('timeline-sidebar-docked');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse timeline' }));
+    expect(shell).toHaveClass('timeline-sidebar-docked');
+    expect(screen.getByTestId('inspector').parentElement).toBe(shell);
+    fireEvent.click(screen.getByRole('button', { name: 'Open timeline' }));
+    expect(shell).not.toHaveClass('timeline-sidebar-docked');
   });
 
   it('espone Indietro e Avanti nell’headbar e supporta Ctrl+Z con Shift', () => {

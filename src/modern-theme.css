@@ -880,17 +880,20 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark .timeline:not(.collapsed) .scene-clip {
   color: #f1f1f1;
   background: #343434;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
+  border: 1px solid rgba(226, 235, 239, .62) !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 235, 239, .28);
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .scene-clip.active {
-  box-shadow: inset 0 0 0 2px #6aa8e8;
+  border-color: rgba(255, 255, 255, .86) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5);
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .scene-image {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
   background-position: left center !important;
   background-repeat: repeat-x !important;
-  background-size: var(--timeline-thumbnail-width, 135px) 100% !important;
+  /* Fit each preview to the clip's height and preserve the captured frame's aspect ratio. */
+  background-size: auto 100% !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .presence-segment {
   color: #e2f4e8;
@@ -911,6 +914,30 @@ body:has(.app-shell.theme-light) #root,
   background: #355b40 !important;
   box-shadow: inset 0 0 0 1px #578363;
 }
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-cube .presence-segment {
+  color: #e2f4e8; background: #315a40 !important; box-shadow: inset 0 0 0 1px #4c8860;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-sphere .presence-segment {
+  color: #d9f4f1; background: #245b58 !important; box-shadow: inset 0 0 0 1px #438b86;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-cylinder .presence-segment {
+  color: #deefff; background: #294f69 !important; box-shadow: inset 0 0 0 1px #4d83a4;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-cone .presence-segment {
+  color: #fff0d1; background: #65522b !important; box-shadow: inset 0 0 0 1px #a58949;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-plane .presence-segment {
+  color: #efe5ff; background: #514066 !important; box-shadow: inset 0 0 0 1px #8065a0;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-text .presence-segment {
+  color: #ffe5f3; background: #64405c !important; box-shadow: inset 0 0 0 1px #a36991;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-blend_asset .presence-segment {
+  color: #e3efff; background: #3c5269 !important; box-shadow: inset 0 0 0 1px #6685a3;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .object-row.object-kind-audio .audio-layer {
+  color: #f4e6ce; background: #5d4a32 !important; box-shadow: inset 0 0 0 1px #9d7c4d;
+}
 .app-shell.theme-dark .timeline:not(.collapsed) .recorded-motion-segment {
   color: #ffe7e4;
   background: #653636 !important;
@@ -925,7 +952,29 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll {
   row-gap: 4px;
   background: var(--timeline-open-panel) !important;
+  position: relative;
 }
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll::after {
+  content: '';
+  position: absolute;
+  z-index: 90;
+  top: 5px;
+  bottom: 0;
+  left: calc(180px + var(--timeline-playhead-x, 0px));
+  width: 2px;
+  background: #f0c547;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .22), 0 0 5px rgba(240, 197, 71, .32);
+  pointer-events: none;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll > :is(.timeline-ruler, .track) > i {
+  display: none !important;
+}
+.app-shell.timeline-sidebar-docked > .slim-headbar { grid-column: 1 / -1; grid-row: 1; }
+.app-shell.timeline-sidebar-docked > .workspace { grid-column: 1; grid-row: 2; min-width: 0; }
+.app-shell.timeline-sidebar-docked > .timeline-sidebar-divider { grid-column: 2; grid-row: 2 / 5; width: 10px; height: auto; cursor: ew-resize; }
+.app-shell.timeline-sidebar-docked > .inspector { grid-column: 3; grid-row: 2 / 5; min-width: 0; min-height: 0; }
+.app-shell.timeline-sidebar-docked > .timeline-sidebar-resizer { grid-column: 1; grid-row: 3; }
+.app-shell.timeline-sidebar-docked > .timeline { grid-column: 1; grid-row: 4; min-width: 0; }
 .app-shell.theme-dark .timeline:not(.collapsed) .ruler-label {
   border-radius: 8px 0 0 8px !important;
 }

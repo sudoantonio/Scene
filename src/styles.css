@@ -1700,6 +1700,21 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .panel-resizer.vertical::after { width: .5px; }
 .panel-resizer.horizontal::after { height: .5px; }
 .camera-frame-guide { outline-width: .5px; }
+.viewport-text-editor {
+  width: min(340px, 40vw);
+  min-height: 44px;
+  max-height: 180px;
+  padding: 8px 10px;
+  color: #ededed;
+  background: rgba(35,35,35,.96);
+  border: 1px solid rgba(255,255,255,.5) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  font: 15px/1.4 system-ui, sans-serif;
+  text-align: center;
+  resize: both;
+  pointer-events: auto;
+}
 
 /* La miniatura della camera resta distinguibile anche nella vista libera. */
 .live-camera-preview { border-width: 1px !important; border-color: #74746f !important; }

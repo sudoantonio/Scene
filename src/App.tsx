@@ -250,7 +250,8 @@ export default function App() {
 
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
-  return <div ref={shellRef} className={`app-shell theme-${theme}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px` }}>
+  const dockInspectorBesideTimeline = collapsed.timeline && !collapsed.right;
+  return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
     <AudioPlayback />
     <div className="slim-headbar">
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
@@ -260,11 +261,13 @@ export default function App() {
       </div>
       {collapsed.right && <button className="headbar-inspector-open" aria-label="Open side panel" title="Open panels" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>
-    <main ref={workspaceRef} className={`workspace ${collapsed.right ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
+    <main ref={workspaceRef} className={`workspace ${collapsed.right || dockInspectorBesideTimeline ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right || dockInspectorBesideTimeline ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
       <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
-      {!collapsed.right && <><div className="panel-resizer vertical" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
+      {!collapsed.right && !dockInspectorBesideTimeline && <><div className="panel-resizer vertical" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
     </main>
-    <div className="panel-resizer horizontal" title="Resize timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
+    {dockInspectorBesideTimeline && <div className="panel-resizer vertical timeline-sidebar-divider" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} />}
+    {dockInspectorBesideTimeline && <Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} />}
+    <div className={`panel-resizer horizontal ${dockInspectorBesideTimeline ? 'timeline-sidebar-resizer' : ''}`} title="Resize timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
     {message && <div className={`toast ${message.type}`}>{message.type === 'error' ? 'Error' : message.type === 'ok' ? 'Done' : 'Working'}<span>{message.text}</span></div>}
     {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
