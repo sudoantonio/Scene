@@ -142,7 +142,7 @@ export async function runLayaQuestions(
     if (question.type === 'choice') {
       const criteria = (question as { criteria: Record<string, string> }).criteria;
       const options = Object.keys(criteria);
-      if (!options.length) throw new Error(`La domanda ${name} non contiene opzioni.`);
+      if (!options.length) throw new Error(`Question ${name} has no options.`);
       if (options.length === 1) {
         const selected = options[0]!;
         answers[name] = { type: 'choice', choice: selected, confidence: 1, probabilities: { [selected]: 1 } } as Answer;

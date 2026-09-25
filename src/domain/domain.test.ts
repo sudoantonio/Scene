@@ -9,8 +9,20 @@ describe('AbacoSceneV1', () => {
   it('crea un progetto valido con camera iniziale', () => {
     const project = createProject();
     expect(ProjectSchema.parse(project).objects[0].kind).toBe('camera');
+    expect(project.name).toBe('New animatic');
+    expect(project.objects[0].name).toBe('Camera 1');
+    expect(project.cameraCuts[0].name).toBe('Scene 1');
     expect(project.cameraCuts[0].frame).toBe(1);
     expect(project.cameraCuts[0].lighting.preset).toBe('neutral');
+  });
+
+  it('uses English default names for new scene objects', () => {
+    expect(createSceneObject('cube', 1).name).toBe('Cube 1');
+    expect(createSceneObject('sphere', 2).name).toBe('Sphere 2');
+    expect(createSceneObject('text', 1)).toMatchObject({ name: 'Text 1', text: 'Text' });
+    expect(createSceneObject('area_light', 1).name).toBe('Area light 1');
+    expect(createSceneObject('point_light', 1).name).toBe('Point light 1');
+    expect(createSceneObject('sun_light', 1).name).toBe('Sun 1');
   });
 
   it('aggiunge l’illuminazione predefinita ai vecchi progetti', () => {
@@ -353,7 +365,7 @@ describe('scene indipendenti', () => {
   it('mantiene e aggiorna il keyframe camera selezionato quando la scena separa una camera condivisa', () => {
     const project = createProject();
     const firstScene = project.cameraCuts[0];
-    project.cameraCuts.push({ ...structuredClone(firstScene), id: crypto.randomUUID(), frame: 40, name: 'Scena 2' });
+    project.cameraCuts.push({ ...structuredClone(firstScene), id: crypto.randomUUID(), frame: 40, name: 'Scene 2' });
     const camera = project.objects.find((object) => object.id === firstScene.cameraId)!;
     camera.keyframes.push({ id: 'shared-point', frame: 20, property: 'position', value: [4, -6, 4], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] });
     camera.keyframes.push({ id: 'shared-rotation', frame: 20, property: 'rotation', value: [65, 0, 25], interpolation: 'linear', source: 'user', purpose: 'motion', commentIds: [] });
@@ -896,7 +908,7 @@ describe('scene indipendenti', () => {
     useEditor.getState().splitScene();
     const project = useEditor.getState().project;
     expect(project.cameraCuts.map((scene) => scene.frame).sort((a, b) => a - b)).toEqual([1, 36]);
-    expect(project.cameraCuts.map((scene) => scene.name)).toEqual(['Scena 1', 'Scena 2']);
+    expect(project.cameraCuts.map((scene) => scene.name)).toEqual(['Scene 1', 'Scene 2']);
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 

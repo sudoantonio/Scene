@@ -32,7 +32,7 @@ async function inferFollowup(previousPlan: DirectionPlan, instruction: string, r
   if (choice === 'continue' || choice === 'refine' || choice === 'new') return { mode: choice as 'continue' | 'refine' | 'new' };
   const match = choice.match(/^correct_(\d+)$/);
   const action = match ? previousPlan.actions[Number(match[1]) - 1] : undefined;
-  if (!action) throw new Error('Non è chiaro quale movimento correggere. Selezionalo dal menu Regia oppure nominalo nella frase.');
+  if (!action) throw new Error('It is unclear which motion to correct. Select it from the Direction menu or name it in your request.');
   return { mode: 'correct' as const, actionId: action.id };
 }
 
@@ -61,14 +61,14 @@ export async function interpretDirection(instruction: string, run: DecisionRunne
       } } },
     }));
     let choice = response.answers.clause_relation.choice;
-    if (!['join', 'then', 'with', 'keep_in_frame'].includes(choice)) throw new Error('Relazione tra le azioni non riconosciuta.');
+    if (!['join', 'then', 'with', 'keep_in_frame'].includes(choice)) throw new Error('The relationship between the actions was not recognized.');
     if (choice === 'keep_in_frame') { constraints.push(right); continue; }
     if (/poi|quindi|successivamente|dopodich|[;.]/i.test(connector)) choice = 'then';
     else if (/mentre|contemporaneamente|allo stesso tempo/i.test(connector)) choice = 'with';
     if (choice === 'join') left.instruction += ` ${connector} ${right}`;
     else actions.push({ instruction: right, relation: choice as 'then' | 'with' });
   }
-  if (actions.length > 16) throw new Error('La richiesta contiene più di 16 azioni: dividila in due richieste.');
+  if (actions.length > 16) throw new Error('The request contains more than 16 actions. Split it into two requests.');
   return { actions, constraints };
 }
 
@@ -81,7 +81,7 @@ function explicitSeconds(text: string) {
 export function allocateDirectionFrames(groups: { frames: number; explicit: boolean }[], available: number) {
   const fixed = groups.reduce((sum, group) => sum + (group.explicit ? group.frames : 0), 0);
   const flexible = groups.filter((group) => !group.explicit);
-  if (fixed + flexible.length > available) throw new Error('La sequenza non entra nella scena con le durate richieste. Aumenta la durata della scena. Nessun movimento è stato applicato.');
+  if (fixed + flexible.length > available) throw new Error('The sequence does not fit in the scene with the requested durations. Increase the scene duration. No motion was applied.');
   const desired = flexible.reduce((sum, group) => sum + group.frames, 0);
   const budget = Math.min(available - fixed, desired);
   let remaining = budget, weight = desired, count = flexible.length;
@@ -95,11 +95,11 @@ export function allocateDirectionFrames(groups: { frames: number; explicit: bool
 }
 
 export async function planDirection(project: AbacoProject, input: Omit<JevActionInput, 'project'>, run: DecisionRunner): Promise<JevActionPlan> {
-  if (!input.objectId) throw new Error('Seleziona un elemento.');
+  if (!input.objectId) throw new Error('Select an element.');
   const scenes = [...project.cameraCuts].sort((a, b) => a.frame - b.frame);
   const index = scenes.findIndex((scene) => scene.id === input.sceneId);
   const scene = scenes[index];
-  if (!scene) throw new Error('Scena inesistente.');
+  if (!scene) throw new Error('The scene does not exist.');
   const end = (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
   let previousPlan = input.directionPlanId ? project.directionPlans?.find((plan) => plan.id === input.directionPlanId && plan.objectId === input.objectId && plan.sceneId === input.sceneId) : undefined;
   let inferredMode: 'new' | 'refine' | 'continue' | 'correct' | undefined;
@@ -109,7 +109,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
     if (followup.actionId) input = { ...input, editActionId: followup.actionId };
     if (followup.mode === 'new') previousPlan = undefined;
   }
-  if (input.editActionId && !previousPlan?.actions.some((action) => action.id === input.editActionId)) throw new Error('Il movimento da modificare non esiste più.');
+  if (input.editActionId && !previousPlan?.actions.some((action) => action.id === input.editActionId)) throw new Error('The motion to edit no longer exists.');
   const directionMode = previousPlan ? (input.editActionId ? 'correct' : input.directionMode ?? inferredMode ?? 'refine') : 'new';
   let interpreted;
   if (previousPlan && input.editActionId) {
@@ -175,8 +175,8 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
       const ref = resolveCameraFocusObject(working, input.sceneId, frame, draft.clause.instruction, scene.framing.target) ?? modelReference ?? focus;
       const actionUntil = frame + Math.max(1, Math.round(draft.frames * sizes[groupIndex]! / Math.max(...group.map((entry) => entry.frames))));
       const compiled = compileJevAction(working, object, { ...input, instruction: draft.clause.instruction, contextInstruction: fullInstruction, referenceId: ref?.id, frame, endFrame: actionUntil, startPosition: object ? evaluateTransform(object, frame).position : null, gesture: direction.actions.length === 0 ? input.gesture : undefined }, draft.raw);
-      if (!compiled.decision.motion || (!compiled.blenderPlan.operations.length && compiled.decision.motion !== 'hold')) throw new Error(`Azione non applicabile: “${draft.clause.instruction}”. Nessun movimento è stato applicato.`);
-      if (interpreted.constraints.length && input.target === 'camera' && ['pan_left', 'pan_right', 'tilt_up', 'tilt_down'].includes(compiled.decision.motion)) throw new Error('La rotazione richiesta è in conflitto con il vincolo di mantenere il soggetto al centro. Specifica quale inquadratura desideri.');
+      if (!compiled.decision.motion || (!compiled.blenderPlan.operations.length && compiled.decision.motion !== 'hold')) throw new Error(`Action cannot be applied: “${draft.clause.instruction}”. No motion was applied.`);
+      if (interpreted.constraints.length && input.target === 'camera' && ['pan_left', 'pan_right', 'tilt_up', 'tilt_down'].includes(compiled.decision.motion)) throw new Error('The requested rotation conflicts with keeping the subject centered. Specify the framing you want.');
       compiled.decision.relation = draft.clause.relation;
       // Stretch/compress the generated interval as a whole, preserving its internal timing.
       const last = Math.max(frame + 1, ...compiled.blenderPlan.operations.map((operation) => operation.frame));
@@ -188,7 +188,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
     if (interpreted.constraints.length && input.target === 'camera') {
       const reference = direction.actions.at(-1)!.referenceId;
       const target = working.objects.find((object) => object.id === reference);
-      if (!target) throw new Error('Non trovo il soggetto da mantenere inquadrato. Usa il suo nome nella richiesta.');
+      if (!target) throw new Error('The subject to keep in frame could not be found. Use its name in the request.');
       const preview = applyPlan(working, combined.blenderPlan);
       const camera = preview.objects.find((object) => object.id === input.objectId)!;
       combined.blenderPlan.operations = combined.blenderPlan.operations.filter((operation) => operation.property !== 'rotation');
@@ -199,7 +199,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
         let rotation = rotationToward(evaluateTransform(camera, time).position, evaluateTransform(target, time).position);
         if (previous) rotation = rotation.map((angle, axis) => angle + 360 * Math.round((previous![axis]! - angle) / 360)) as typeof rotation;
         previous = rotation;
-        samples.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: input.objectId!, frame: time, property: 'rotation', value: { vector: rotation, number: null, boolean: null, text: null }, interpolation: 'linear', rationale: 'Mantieni il soggetto inquadrato.', commentIds: [] });
+        samples.push({ id: crypto.randomUUID(), type: 'set_keyframe', objectId: input.objectId!, frame: time, property: 'rotation', value: { vector: rotation, number: null, boolean: null, text: null }, interpolation: 'linear', rationale: 'Keep the subject in frame.', commentIds: [] });
       }
       const retained = new Set([0, samples.length - 1]);
       const simplify = (a: number, b: number) => {
@@ -221,11 +221,11 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
       const camera = working.objects.find((object) => object.id === input.objectId)!;
       if (input.target === 'camera' && target) {
         const distance = (time: number) => new THREE.Vector3(...evaluateTransform(camera, time).position).distanceTo(new THREE.Vector3(...evaluateTransform(target, time).position));
-        if ((action.motion === 'dolly_in' && distance(until) >= distance(frame) - 1e-6) || (action.motion === 'dolly_out' && distance(until) <= distance(frame) + 1e-6)) throw new Error('La traiettoria non rispetta la distanza richiesta dal soggetto. Nessun movimento è stato applicato.');
+        if ((action.motion === 'dolly_in' && distance(until) >= distance(frame) - 1e-6) || (action.motion === 'dolly_out' && distance(until) <= distance(frame) + 1e-6)) throw new Error('The path does not preserve the requested distance from the subject. No motion was applied.');
         if (action.keepInFrame) for (let time = frame; time <= until; time++) {
           const transform = evaluateTransform(camera, time);
           const toward = new THREE.Vector3(...evaluateTransform(target, time).position).sub(new THREE.Vector3(...transform.position)).normalize();
-          if (toward.dot(cameraBasis(transform.rotation)[1]) < .999) throw new Error('Il vincolo di inquadratura non è stato rispettato.');
+          if (toward.dot(cameraBasis(transform.rotation)[1]) < .999) throw new Error('The framing constraint was not preserved.');
         }
       }
     }
@@ -243,7 +243,7 @@ export async function planDirection(project: AbacoProject, input: Omit<JevAction
     for (let time = action.startFrame; time <= action.endFrame; time++) {
       const transform = evaluateTransform(finalCamera, time);
       const toward = new THREE.Vector3(...evaluateTransform(reference, time).position).sub(new THREE.Vector3(...transform.position)).normalize();
-      if (toward.dot(cameraBasis(transform.rotation)[1]) < .999) throw new Error('La sequenza completa perde il soggetto tra due azioni. Nessun movimento è stato applicato.');
+      if (toward.dot(cameraBasis(transform.rotation)[1]) < .999) throw new Error('The complete sequence loses the subject between two actions. No motion was applied.');
     }
   }
   return result;

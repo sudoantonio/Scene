@@ -8,9 +8,9 @@ import { evaluateProperty } from '../domain/animation';
 import { inspectAudio } from '../domain/audio';
 
 const shapes: Array<{ kind: ObjectKind; label: string; icon: typeof Box }> = [
-  { kind: 'cube', label: 'Cubo', icon: Box }, { kind: 'sphere', label: 'Sfera', icon: Circle },
-  { kind: 'cylinder', label: 'Cilindro', icon: Cylinder }, { kind: 'cone', label: 'Cono', icon: Cone },
-  { kind: 'plane', label: 'Piano', icon: SquareDashed },
+  { kind: 'cube', label: 'Cube', icon: Box }, { kind: 'sphere', label: 'Sphere', icon: Circle },
+  { kind: 'cylinder', label: 'Cylinder', icon: Cylinder }, { kind: 'cone', label: 'Cone', icon: Cone },
+  { kind: 'plane', label: 'Plane', icon: SquareDashed },
 ];
 
 type CommentDraft = { sceneId: string; scope: TimelineCommentScope; objectId?: string; text: string };
@@ -22,9 +22,9 @@ function SceneCommentControl({ scope, label, prompt, comment, text, disabled, on
   onEdit(): void; onChange(value: string): void; onCancel(): void; onSave(): void; onRemove(): void;
 }) {
   return <div className={`scenography-comment-control ${comment ? 'has-comment' : ''}`}>
-    {text === undefined ? <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={disabled} title={comment ? `Modifica commento ${label}` : `Aggiungi commento ${label}`} onClick={onEdit}>{comment ? <DirectionPreview value={comment.text} scope={scope} /> : <span>{prompt}</span>}</button> : <div className="scenography-comment-editor">
-      <DirectionInput scope={scope} label={`Indicazione ${label}`} value={text} onChange={onChange} onSave={onSave} onClose={onCancel} />
-      <div className="scenography-comment-actions">{comment && <button className="icon danger" title="Elimina commento" onClick={onRemove}><Trash2 size={13} /></button>}<button className="subtle comment-cancel" onClick={onCancel}>Annulla</button><button className="subtle comment-save" disabled={!text.trim()} onClick={onSave}><Check size={13} /> Salva</button></div>
+    {text === undefined ? <button className={comment ? 'scenography-comment-preview' : 'scenography-add-comment'} disabled={disabled} title={comment ? `Edit ${label} comment` : `Add ${label} comment`} onClick={onEdit}>{comment ? <DirectionPreview value={comment.text} scope={scope} /> : <span>{prompt}</span>}</button> : <div className="scenography-comment-editor">
+      <DirectionInput scope={scope} label={`Direction for ${label}`} value={text} onChange={onChange} onSave={onSave} onClose={onCancel} />
+      <div className="scenography-comment-actions">{comment && <button className="icon danger" title="Delete comment" onClick={onRemove}><Trash2 size={13} /></button>}<button className="subtle comment-cancel" onClick={onCancel}>Cancel</button><button className="subtle comment-save" disabled={!text.trim()} onClick={onSave}><Check size={13} /> Save</button></div>
     </div>}
   </div>;
 }
@@ -64,52 +64,52 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   const renderComment = (scope: TimelineCommentScope, label: string, objectId?: string) => {
     const comment = commentFor(scope, objectId);
     const editing = commentEditor?.sceneId === activeScene?.id && commentEditor?.scope === scope && commentEditor.objectId === objectId;
-    const prompt = scope === 'scene' ? 'Descrivi la scena' : scope === 'framing' ? 'Descrivi il movimento camera' : `Descrivi il movimento di ${label}`;
+    const prompt = scope === 'scene' ? 'Describe the scene' : scope === 'framing' ? 'Describe the camera motion' : `Describe ${label} motion`;
     return <SceneCommentControl scope={scope} label={label} prompt={prompt} comment={comment} text={editing ? commentEditor.text : undefined} disabled={!activeScene} onEdit={() => openComment(scope, objectId)} onChange={(text) => setCommentEditor((current) => current && { ...current, text })} onCancel={() => setCommentEditor(undefined)} onSave={saveComment} onRemove={() => removeComment(scope, objectId)} />;
   };
   return <div className="elements-panel">
     {mode === 'add' ? <section className="add-section">
-      <div className="section-heading"><h2>Aggiungi elemento</h2></div>
-      <h2>Forme</h2>
+      <div className="section-heading"><h2>Add element</h2></div>
+      <h2>Shapes</h2>
       <div className="shape-row">{shapes.map(({ kind, label, icon: Icon }) => <button key={kind} className="shape-button" onClick={() => addObject(kind)}><Icon size={15} /><span>{label}</span></button>)}</div>
-      <h2 className="spaced-title">Inserisci</h2>
+      <h2 className="spaced-title">Insert</h2>
       <div className="quick-add">
-        <button onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Testo</span></button>
-        <button onClick={async () => { try { if (!window.abaco) throw new Error('L’importazione immagini è disponibile nell’app desktop.'); const image = await window.abaco.chooseBackground('image'); if (image) addScreenImage({ sourcePath: image.path, dataUrl: await window.abaco.loadAsset(image.path), name: image.name }); } catch (error) { window.alert(error instanceof Error ? error.message : 'Importazione immagine non riuscita.'); } }}><Image size={15} /><span>Immagine</span></button>
+        <button onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Text</span></button>
+        <button onClick={async () => { try { if (!window.abaco) throw new Error('Image import is available in the desktop app.'); const image = await window.abaco.chooseBackground('image'); if (image) addScreenImage({ sourcePath: image.path, dataUrl: await window.abaco.loadAsset(image.path), name: image.name }); } catch (error) { window.alert(error instanceof Error ? error.message : 'Image import failed.'); } }}><Image size={15} /><span>Image</span></button>
         <button onClick={async () => {
           try {
-            if (!window.abaco) throw new Error('L’importazione .blend è disponibile nell’app desktop.');
+            if (!window.abaco) throw new Error('.blend import is available in the desktop app.');
             const asset = await window.abaco.chooseBlendAsset();
             if (asset) addBlendAsset(asset);
-          } catch (error) { window.alert(error instanceof Error ? error.message : 'Importazione Blender non riuscita.'); }
-        }}><FileBox size={15} /><span>Asset Blender</span></button>
+          } catch (error) { window.alert(error instanceof Error ? error.message : 'Blender import failed.'); }
+        }}><FileBox size={15} /><span>Blender asset</span></button>
         <button onClick={async () => {
           try {
-            if (!window.abaco) throw new Error('L’importazione audio è disponibile nell’app desktop.');
+            if (!window.abaco) throw new Error('Audio import is available in the desktop app.');
             const asset = await window.abaco.chooseAudio();
             if (!asset) return;
             const source = await window.abaco.loadAsset(asset.sourcePath);
             const analysis = await inspectAudio(source);
             addAudio({ ...asset, ...analysis });
             window.dispatchEvent(new Event('abaco:edit-audio'));
-          } catch (error) { window.alert(error instanceof Error ? error.message : 'Importazione audio non riuscita.'); }
+          } catch (error) { window.alert(error instanceof Error ? error.message : 'Audio import failed.'); }
         }}><Music2 size={15} /><span>Audio</span></button>
       </div>
   </section> : <section className="outliner-section scene-elements-section">
-      <details className="scenography-standard"><summary>Standard animazione{project.animationStandard ? ' · Allegato' : ''}</summary><AnimationStandardPanel /></details>
-      <h3 className="inspector-list-heading">Regia</h3>
+      <details className="scenography-standard"><summary>Animation standard{project.animationStandard ? ' · Attached' : ''}</summary><AnimationStandardPanel /></details>
+      <h3 className="inspector-list-heading">Direction</h3>
       <div className="scenography-context-comments">
-        <article className="scenography-note-card"><div className="scenography-note-title"><MessageSquare size={14} /><strong>Scena</strong></div>{renderComment('scene', activeScene?.name ?? 'scena')}</article>
+        <article className="scenography-note-card"><div className="scenography-note-title"><MessageSquare size={14} /><strong>Scene</strong></div>{renderComment('scene', activeScene?.name ?? 'scene')}</article>
         <article className="scenography-note-card"><div className="scenography-note-title"><Video size={14} /><strong>Camera</strong></div>{renderComment('framing', activeCamera?.name ?? 'camera')}</article>
       </div>
-      <h3 className="inspector-list-heading">Elementi <span>{sceneObjects.length}</span></h3>
+      <h3 className="inspector-list-heading">Elements <span>{sceneObjects.length}</span></h3>
       <div className="outliner scenography-outliner">{sceneObjects.map((object) => {
         return <div key={object.id} className={`scenography-object ${selectedId === object.id ? 'selected' : ''}`}>
-          <button className="outliner-item" aria-label={`Seleziona ${object.name}`} onClick={() => { select(object.id); if (object.kind === 'audio') window.dispatchEvent(new Event('abaco:edit-audio')); }}>{object.kind === 'audio' ? <Music2 size={14} /> : object.kind === 'text' ? <TextCursorInput size={14} /> : object.screenSpace ? <Image size={14} /> : <Box size={14} />}<span>{object.name}</span></button>
+          <button className="outliner-item" aria-label={`Select ${object.name}`} onClick={() => { select(object.id); if (object.kind === 'audio') window.dispatchEvent(new Event('abaco:edit-audio')); }}>{object.kind === 'audio' ? <Music2 size={14} /> : object.kind === 'text' ? <TextCursorInput size={14} /> : object.screenSpace ? <Image size={14} /> : <Box size={14} />}<span>{object.name}</span></button>
           {renderComment('object', object.name, object.id)}
         </div>;
       })}</div>
-      {!sceneObjects.length && <p className="inspector-help">Nessun elemento in questa scena.</p>}
+      {!sceneObjects.length && <p className="inspector-help">No elements in this scene.</p>}
     </section>}
   </div>;
 }

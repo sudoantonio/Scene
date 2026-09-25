@@ -22,19 +22,19 @@ export default function BackgroundPanel() {
     const sceneId = cut?.id;
     try {
       setError('');
-      if (!window.abaco) throw new Error('L’importazione dello sfondo è disponibile nell’app desktop.');
+      if (!window.abaco) throw new Error('Background import is available in the desktop app.');
       const selected = await window.abaco.chooseBackground(kind);
       if (selected && sceneId && useEditor.getState().project.id === projectId) updateBackground({ kind, ...selected }, sceneId);
-    } catch (reason) { setError((reason as Error).message || 'Impossibile caricare lo sfondo.'); }
+    } catch (reason) { setError((reason as Error).message || 'Could not load the background.'); }
   };
   return <section className="background-panel">
-    <span className="scene-subtitle">Sfondo</span>
+    <span className="scene-subtitle">Background</span>
     <div className="background-actions">
-      <div className="scene-aspect"><select aria-label="Formato inquadratura" value={format} onChange={(event) => { const next = formats.find((item) => item.label === event.target.value); if (next) updateSettings({ resolutionX: next.width, resolutionY: next.height }); }}>{format === 'custom' && <option value="custom">Personalizzato</option>}{formats.map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}</select></div>
-      <button onClick={() => choose('image')}><Image size={16} /><span>Immagine</span></button>
-      <button onClick={() => choose('model')}><Box size={16} /><span>File 3D</span></button>
+      <div className="scene-aspect"><select aria-label="Frame format" value={format} onChange={(event) => { const next = formats.find((item) => item.label === event.target.value); if (next) updateSettings({ resolutionX: next.width, resolutionY: next.height }); }}>{format === 'custom' && <option value="custom">Custom</option>}{formats.map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}</select></div>
+      <button onClick={() => choose('image')}><Image size={16} /><span>Image</span></button>
+      <button onClick={() => choose('model')}><Box size={16} /><span>3D file</span></button>
     </div>
-    {background.kind !== 'none' && <div className="background-current"><span title={background.path}>{background.name}</span><button aria-label="Rimuovi sfondo" title="Rimuovi" onClick={() => updateBackground(defaultBackground())}><Trash2 size={14} /></button></div>}
+    {background.kind !== 'none' && <div className="background-current"><span title={background.path}>{background.name}</span><button aria-label="Remove background" title="Remove" onClick={() => updateBackground(defaultBackground())}><Trash2 size={14} /></button></div>}
     {error && <small className="background-error">{error}</small>}
   </section>;
 }

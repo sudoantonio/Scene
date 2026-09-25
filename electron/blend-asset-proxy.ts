@@ -17,7 +17,7 @@ source_objects = [obj for obj in visible_objects if not explicitly_excluded(obj)
 if not source_objects:
     source_objects = visible_objects
 if not source_objects:
-    raise RuntimeError("Il file non contiene oggetti 3D visibili")
+    raise RuntimeError("The file contains no visible 3D objects")
 
 # L'export glTF può ignorare curve, oggetti dentro collezioni nascoste e rig
 # complessi. Creiamo una fotografia statica valutata della geometria: preserva
@@ -43,7 +43,7 @@ for source in source_objects:
         continue
 
 if not preview_objects:
-    raise RuntimeError("Il file non contiene geometria convertibile per l'anteprima")
+    raise RuntimeError("The file contains no geometry that can be converted for preview")
 
 points = []
 for obj in preview_objects:

@@ -55,7 +55,7 @@ export default function JevFloatingComposer() {
   useEffect(() => { window.localStorage.setItem(engineStorageKey, engine); }, [engine]);
   useEffect(() => window.abaco?.onLayaProgress?.(({ file, received, total }) => {
     const percent = total ? ` · ${Math.min(100, Math.round(received / total * 100))}%` : '';
-    setMessage(`Laya · download iniziale ${file}${percent}`);
+    setMessage(`Laya · initial download ${file}${percent}`);
   }), []);
   useEffect(() => {
     if (!message || busy) return;
@@ -74,7 +74,7 @@ export default function JevFloatingComposer() {
   const generate = async () => {
     const currentInstruction = instruction.trim();
     if (!selected || !activeScene || !currentInstruction || busy) return;
-    if (!window.abaco) { setMessage(`${engineLabel} è disponibile nell’app desktop Scene.`); return; }
+    if (!window.abaco) { setMessage(`${engineLabel} is available in the Scene desktop app.`); return; }
     setBusy(true); setMessage('');
     try {
       const requestFrame = editingAction?.frame ?? frame;
@@ -85,11 +85,11 @@ export default function JevFloatingComposer() {
         instruction: currentInstruction,
         gesture: stroke.points.length > 1 ? { points: stroke.points, target, viewMode: stroke.viewMode, viewRotation: stroke.viewRotation, viewPosition: stroke.viewPosition, verticalFovDegrees: stroke.verticalFovDegrees, aspect: stroke.aspect } : undefined,
       });
-      if (!plan.blenderPlan.operations.length) throw new Error(`${engineLabel} non ha trovato un movimento applicabile.`);
+      if (!plan.blenderPlan.operations.length) throw new Error(`${engineLabel} did not find an applicable motion.`);
       acceptJevPlan(plan.blenderPlan, activeScene.id);
       const timing = plan.performance
         ? plan.performance.modelLoadMs > 1_000
-          ? ` · totale ${formatDuration(plan.performance.totalMs)}, decisione ${formatDuration(plan.performance.decisionMs)}`
+          ? ` · total ${formatDuration(plan.performance.totalMs)}, decision ${formatDuration(plan.performance.decisionMs)}`
           : ` · ${formatDuration(plan.performance.decisionMs)}`
         : '';
       const sequence = plan.decision?.sequence;
@@ -97,39 +97,39 @@ export default function JevFloatingComposer() {
         ?? (plan.decision?.motion ? `${semanticMotionLabel(plan.decision.motion)}${plan.decision.reference?.name ? ` ${plan.decision.reference.name}` : ''}` : '');
       const interpretation = motionSummary ? `: ${motionSummary}` : '';
       const followupMode = plan.blenderPlan.directionPlan?.prompts?.at(-1)?.mode;
-      const followupLabel = followupMode === 'continue' ? 'Continuazione applicata' : followupMode === 'refine' ? 'Dettagli aggiunti' : followupMode === 'correct' ? 'Correzione applicata' : 'Movimento applicato';
-      clearStroke(); setInstruction(''); setEditingAction(undefined); setMessage(`${engineLabel} · ${followupLabel}${interpretation} a ${selected.name}${timing}.`);
+      const followupLabel = followupMode === 'continue' ? 'Continuation applied' : followupMode === 'refine' ? 'Details added' : followupMode === 'correct' ? 'Correction applied' : 'Motion applied';
+      clearStroke(); setInstruction(''); setEditingAction(undefined); setMessage(`${engineLabel} · ${followupLabel}${interpretation} to ${selected.name}${timing}.`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : `${engineLabel} non ha completato la richiesta.`);
+      setMessage(cause instanceof Error ? cause.message : `${engineLabel} did not complete the request.`);
     } finally { setBusy(false); }
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey) return;
     event.preventDefault(); void generate();
   };
-  const placeholder = `${selected?.name ?? ''}: cosa deve fare?`;
+  const placeholder = `${selected?.name ?? ''}: what should it do?`;
   const composerClass = `jev-floating-composer anchored ${anchor?.side === 'left' ? 'anchor-left' : 'anchor-right'} ${message ? 'has-message' : ''}`;
   const composerStyle = anchor ? { left: anchor.x, top: anchor.y } as CSSProperties : undefined;
 
   if (!activeScene || !selected || !anchor) return null;
   return <div className={composerClass} style={composerStyle}>
     {savedDirection && !message && !editingAction && <details className="jev-direction-editor">
-      <summary>Regia · {savedDirection.actions.length} movimenti</summary>
+      <summary>Direction · {savedDirection.actions.length} {savedDirection.actions.length === 1 ? 'motion' : 'motions'}</summary>
       <div>{savedDirection.actions.map((action, index) => <button key={action.id} type="button" disabled={busy} onClick={() => {
         setEditingAction({ planId: savedDirection.id, actionId: action.id, frame: savedDirection.startFrame });
         setInstruction(action.instruction); inputRef.current?.focus();
-      }}>{index + 1}. {action.motionSpec ? describeMotionSpec(action.motionSpec) : semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· soggetto inquadrato' : ''}</button>)}</div>
+      }}>{index + 1}. {action.motionSpec ? describeMotionSpec(action.motionSpec) : semanticMotionLabel(action.motion)} · {action.durationSeconds.toFixed(1)} s {action.keepInFrame ? '· subject kept in frame' : ''}</button>)}</div>
     </details>}
-    {editingAction && !message && <div className="jev-composer-message">Correggi il movimento selezionato <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Annulla</button></div>}
+    {editingAction && !message && <div className="jev-composer-message">Correct the selected motion <button type="button" disabled={busy} onClick={() => { setEditingAction(undefined); setInstruction(''); }}>Cancel</button></div>}
     {message && <div className="jev-composer-message" role="status">{message}</div>}
-    <div className="jev-composer-input" aria-label="Input azione" title={`Soggetto: ${selected.name}`}>
-      <select className="decision-engine-switch" aria-label="Modello azione" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as DecisionEngine)}>
+    <div className="jev-composer-input" aria-label="Action input" title={`Subject: ${selected.name}`}>
+      <select className="decision-engine-switch" aria-label="Action model" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as DecisionEngine)}>
         <option value="jev">Jev</option>
         <option value="laya">Laya</option>
       </select>
-      <textarea ref={inputRef} aria-label={`Azione ${engineLabel}`} rows={1} value={instruction} disabled={busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} sta creando il movimento…` : placeholder} />
-      <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} title={stroke.points.length > 1 ? 'Ridisegna traiettoria' : 'Disegna traiettoria'} disabled={busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
-      <button className="jev-composer-send" aria-label="Crea movimento" title="Crea movimento · Invio" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
+      <textarea ref={inputRef} aria-label={`${engineLabel} action`} rows={1} value={instruction} disabled={busy} onChange={(event) => setInstruction(event.target.value)} onKeyDown={keyDown} placeholder={busy ? `${engineLabel} is creating the motion…` : placeholder} />
+      <button className={`jev-composer-tool ${stroke.active || stroke.points.length > 1 ? 'active' : ''}`} aria-label={stroke.points.length > 1 ? 'Redraw path' : 'Draw path'} title={stroke.points.length > 1 ? 'Redraw path' : 'Draw path'} disabled={busy} onClick={() => { setStrokePoints([]); setStrokeActive(true); }}><Pencil size={16} /></button>
+      <button className="jev-composer-send" aria-label="Create motion" title="Create motion · Enter" disabled={!canSubmit} onClick={() => void generate()}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowUp size={17} />}</button>
     </div>
   </div>;
 }

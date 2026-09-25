@@ -41,23 +41,23 @@ describe('Salvataggi e apertura progetto', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Riduci pannello destro' }));
     expect(screen.queryByTestId('inspector')).not.toBeInTheDocument();
     expect(document.querySelector('.panel-resizer.vertical')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Apri pannello laterale' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open side panel' }));
     expect(screen.getByTestId('inspector')).toBeInTheDocument();
   });
 
   it('mostra l’input AI selezionando un soggetto senza comandi di riduzione', () => {
     useEditor.getState().addObject('cube');
     render(<App />);
-    expect(screen.getByLabelText('Input azione')).toBeInTheDocument();
+    expect(screen.getByLabelText('Action input')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Riduci input AI' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Espandi input AI' })).not.toBeInTheDocument();
   });
 
   it('espone Indietro e Avanti nell’headbar e supporta Ctrl+Z con Shift', () => {
     render(<App />);
-    expect(screen.getByRole('button', { name: 'Indietro' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
     act(() => useEditor.getState().addObject('cube'));
-    fireEvent.click(screen.getByRole('button', { name: 'Indietro' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(useEditor.getState().project.objects.some((object) => object.kind === 'cube')).toBe(false);
     fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', ctrlKey: true, shiftKey: true });
     expect(useEditor.getState().project.objects.some((object) => object.kind === 'cube')).toBe(true);

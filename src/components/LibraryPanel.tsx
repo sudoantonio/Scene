@@ -35,14 +35,14 @@ export default function LibraryPanel({ collapsed, onToggleCollapse }: { collapse
     window.addEventListener('abaco:scene-thumbnail', receive);
     return () => window.removeEventListener('abaco:scene-thumbnail', receive);
   }, [project.id, scenes.map((scene) => scene.id).join(':')]);
-  if (collapsed) return <aside className="left-panel panel-collapsed"><button title="Apri pannello" aria-label="Apri pannello sinistro" onClick={onToggleCollapse}><PanelLeftOpen size={16} /></button></aside>;
+  if (collapsed) return <aside className="left-panel panel-collapsed"><button title="Open panel" aria-label="Open left panel" onClick={onToggleCollapse}><PanelLeftOpen size={16} /></button></aside>;
   return <aside className="left-panel slides-only">
-    <button className="panel-collapse panel-collapse-left" title="Riduci pannello" aria-label="Riduci pannello sinistro" onClick={onToggleCollapse}><PanelLeftClose size={15} /></button>
+    <button className="panel-collapse panel-collapse-left" title="Collapse panel" aria-label="Collapse left panel" onClick={onToggleCollapse}><PanelLeftClose size={15} /></button>
     <div className="slides-list">{scenes.map((scene, index) => {
       const end = scenes[index + 1]?.frame ?? project.settings.frameEnd + 1;
       const active = frame >= scene.frame && frame < end;
-      return <button key={scene.id} aria-label={`Scena ${index + 1}`} title={`Scena ${index + 1}`} className={`slide-button ${active ? 'active' : ''}`} onClick={() => { setFrame(scene.frame); select(undefined); window.dispatchEvent(new CustomEvent('abaco:select-scene', { detail: { sceneId: scene.id } })); }}><ScenePreview frame={scene.frame} number={index + 1} thumbnail={thumbnails[scene.id]} aspect={aspect} /></button>;
+      return <button key={scene.id} aria-label={`Scene ${index + 1}`} title={`Scene ${index + 1}`} className={`slide-button ${active ? 'active' : ''}`} onClick={() => { setFrame(scene.frame); select(undefined); window.dispatchEvent(new CustomEvent('abaco:select-scene', { detail: { sceneId: scene.id } })); }}><ScenePreview frame={scene.frame} number={index + 1} thumbnail={thumbnails[scene.id]} aspect={aspect} /></button>;
     })}</div>
-    <button className="add-slide" aria-label="Nuova scena" title="Nuova scena" onClick={addShot}><Plus size={17} /></button>
+    <button className="add-slide" aria-label="New scene" title="New scene" onClick={addShot}><Plus size={17} /></button>
   </aside>;
 }

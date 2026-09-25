@@ -13,14 +13,14 @@ describe('Menu slash', () => {
     render(<Form />);
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: '/scoc', selectionStart: 5 } });
-    expect(screen.getByRole('option', { name: /Scocciato/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Annoyed/ })).toBeInTheDocument();
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(input).toHaveValue('');
-    expect(screen.getByText('Scocciato')).toBeInTheDocument();
+    expect(screen.getByText('Annoyed')).toBeInTheDocument();
     fireEvent.change(input, { target: { value: '/si-av', selectionStart: 6 } });
-    fireEvent.click(screen.getByRole('option', { name: /Si avvicina/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Approaches/ }));
     expect(input).toHaveValue('');
-    expect(screen.getByText('Si avvicina')).toBeInTheDocument();
+    expect(screen.getByText('Approaches')).toBeInTheDocument();
     expect(screen.queryByText(/postura afflosciata/)).not.toBeInTheDocument();
   });
   it('converte un vecchio token in badge, conserva il testo libero e consente la rimozione', () => {
@@ -30,10 +30,10 @@ describe('Menu slash', () => {
     }
     render(<Existing />);
     expect(screen.getByRole('textbox')).toHaveValue('saluta la camera');
-    expect(screen.getByText('Felice')).toBeInTheDocument();
+    expect(screen.getByText('Happy')).toBeInTheDocument();
     expect(screen.getByText('/felice saluta la camera')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Rimuovi Felice' }));
-    expect(screen.queryByText('Felice')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Happy' }));
+    expect(screen.queryByText('Happy')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue('saluta la camera');
     expect(screen.getByRole('status')).toHaveTextContent('saluta la camera');
   });
@@ -43,17 +43,17 @@ describe('Menu slash', () => {
       return <><DirectionInput value={value} onChange={setValue} scope="object" onSave={() => {}} onClose={() => {}} /><output role="status">{value}</output></>;
     }
     render(<Sequence />);
-    expect(screen.getByText('Progressione emotiva')).toBeInTheDocument();
+    expect(screen.getByText('Emotional progression')).toBeInTheDocument();
     expect(screen.getAllByText('→')).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Sposta prima Spaventato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move Frightened earlier' }));
     expect(screen.getByRole('status')).toHaveTextContent('/spaventato /sorpreso /scocciato controlla la bocca');
   });
   it('filtra le camere e chiude solo il menu al primo Escape', () => {
     const close = vi.fn(); render(<Form scope="framing" close={close} />);
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
-    expect(screen.getByRole('option', { name: /Camera statica/ })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /Scocciato/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Static camera/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Annoyed/ })).not.toBeInTheDocument();
     fireEvent.keyDown(input, { key: 'Escape' }); expect(close).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Escape' }); expect(close).toHaveBeenCalledOnce();
   });

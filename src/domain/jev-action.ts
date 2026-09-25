@@ -295,8 +295,8 @@ export function jevActionRequest(project: AbacoProject, object: SceneObject | un
       available_reference_objects: referenceObjects.map((candidate) => ({ id: candidate.id, name: candidate.name, kind: candidate.kind, position: evaluateTransform(candidate, input.frame).position })),
       scene_context: {
         project: { id: project.id, name: project.name, fps: project.settings.fps, frame_range: [project.settings.frameStart, project.settings.frameEnd], resolution: [project.settings.resolutionX, project.settings.resolutionY] },
-        active_scene: activeScene ? { id: activeScene.id, name: activeScene.name ?? `Scena ${sceneIndex + 1}`, frame_range: [activeScene.frame, sceneEnd], framing: activeScene.framing, lighting: activeScene.lighting, background: { kind: activeScene.background.kind, name: activeScene.background.name } } : null,
-        timeline_scenes: scenes.map((scene, index) => ({ id: scene.id, name: scene.name ?? `Scena ${index + 1}`, frame: scene.frame, camera_id: scene.cameraId })),
+        active_scene: activeScene ? { id: activeScene.id, name: activeScene.name ?? `Scene ${sceneIndex + 1}`, frame_range: [activeScene.frame, sceneEnd], framing: activeScene.framing, lighting: activeScene.lighting, background: { kind: activeScene.background.kind, name: activeScene.background.name } } : null,
+        timeline_scenes: scenes.map((scene, index) => ({ id: scene.id, name: scene.name ?? `Scene ${index + 1}`, frame: scene.frame, camera_id: scene.cameraId })),
         objects: sceneObjects,
         directions: project.comments.filter((comment) => comment.sceneId === input.sceneId || (comment.startFrame <= sceneEnd && comment.endFrame >= (activeScene?.frame ?? input.frame))).map((comment) => ({ text: comment.text, scope: comment.scope ?? null, target_ids: comment.targetIds, status: comment.status })),
         animation_brief: project.animationBrief ?? null,

@@ -8,9 +8,12 @@
   --timeline-right-gutter: var(--editor-gutter);
   --ui-text: #ececec;
   --ui-muted: #a2a2a2;
-  --ui-surface: #202020;
-  --ui-raised: #2b2b2b;
-  --ui-hover: #353535;
+  --ui-primary: #383838;
+  --ui-secondary: #232323;
+  --ui-tertiary: #5a5a5a;
+  --ui-surface: var(--ui-secondary);
+  --ui-raised: var(--ui-primary);
+  --ui-hover: var(--ui-tertiary);
   --ui-edge: rgba(255, 255, 255, .08);
   --ui-subsection: color-mix(in srgb, var(--ui-raised) 25%, var(--ui-surface));
   padding: 10px var(--editor-gutter) 12px;
@@ -18,8 +21,8 @@
 }
 
 .app-shell.theme-dark {
-  --timeline-label-base: #171717;
-  --bg: #0d0d0d;
+  --timeline-label-base: var(--ui-secondary);
+  --bg: var(--ui-secondary);
   --panel: var(--ui-surface);
   --panel-2: var(--ui-raised);
   --line: #343434;
@@ -74,9 +77,9 @@
 .app-shell .quick-add-menu:has(.quick-add-popover) .slim-add { background: var(--ui-hover); }
 .app-shell :is(.left-panel, .inspector) { border: 0; }
 .app-shell .inspector { background: var(--ui-surface); border: 1px solid rgba(255, 255, 255, .14) !important; box-shadow: none; }
-.app-shell.theme-dark .left-panel { background: #191919; }
+.app-shell.theme-dark .left-panel { background: var(--ui-secondary); }
 .app-shell.theme-light .left-panel { background: #f3f3f3; }
-.app-shell.theme-dark :is(.inspector, .simple-inspector .right-tabs, .inspector-scroll) { background: #191919; }
+.app-shell.theme-dark :is(.inspector, .simple-inspector .right-tabs, .inspector-scroll) { background: var(--ui-secondary); }
 .app-shell.theme-light :is(.inspector, .simple-inspector .right-tabs, .inspector-scroll) { background: #f3f3f3; }
 .app-shell .panel-resizer::after { border-radius: 2px; background: #787878; }
 .app-shell :is(.viewport, .canvas-stage) { border-radius: var(--radius-panel) !important; }
@@ -168,11 +171,11 @@
   background: linear-gradient(90deg, var(--timeline-label-base) 0 180px, var(--ui-subsection) 180px 100%);
 }
 .app-shell .timeline .timecode { color: var(--ui-text); font-variant-numeric: tabular-nums; }
-.app-shell.theme-dark .timeline :is(.track, .ruler) { background-color: #222; border-color: #2c2c2c !important; }
+.app-shell.theme-dark .timeline :is(.track, .ruler) { background-color: var(--ui-primary); border-color: var(--ui-tertiary) !important; }
 .app-shell .timeline .track { background-color: transparent !important; border: 0 !important; }
-.app-shell.theme-dark .timeline .track-pair.active .track { background-color: #292929; }
+.app-shell.theme-dark .timeline .track-pair.active .track { background-color: var(--ui-tertiary); }
 .app-shell .timeline .track-pair.active .track { background-color: transparent !important; }
-.app-shell.theme-dark .timeline :is(.track-label, .ruler-label) { border-color: #232323 !important; }
+.app-shell.theme-dark .timeline :is(.track-label, .ruler-label) { border-color: var(--ui-secondary) !important; }
 .app-shell .timeline :is(.scene-clip, .presence-segment, .recorded-motion-segment, .motion-segment) { border-radius: 2px !important; }
 .app-shell .timeline .scene-clip { top: var(--timeline-clip-inset); bottom: var(--timeline-clip-inset); }
 .app-shell .timeline .scene-image { border-radius: inherit; }
@@ -584,6 +587,85 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .timeline.collapsed :is(.collapsed-scene-overview, .collapsed-add-scene, .collapsed-scene-content) { height: 22px; }
 .app-shell .timeline.collapsed .timeline-control-row { height: 44px; padding: 3px 13px 7px; align-items: start; }
 .app-shell .timeline.collapsed :is(.timeline-context, .timeline-center-stack, .timeline-actions) { align-self: start; }
+
+/* Collapsed timeline: the scene strip and its controls share one right edge. */
+.app-shell .timeline.collapsed .timeline-mini-row,
+.app-shell .timeline.collapsed .timeline-control-row {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.app-shell .timeline.collapsed .collapsed-scene-row {
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+}
+.app-shell .timeline.collapsed .collapsed-scene-overview,
+.app-shell .timeline.collapsed .collapsed-scene-content {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+.app-shell .timeline.collapsed .collapsed-add-scene {
+  width: 28px !important;
+  min-width: 28px;
+  height: 28px !important;
+  min-height: 28px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+}
+.app-shell .timeline.collapsed .timeline-actions {
+  min-width: 28px;
+}
+.app-shell .timeline.collapsed .timeline-actions .timeline-toggle {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+/* Keep the timeline expander out of the way until the timeline is in use. */
+.app-shell .timeline .timeline-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.app-shell .timeline:hover .timeline-toggle,
+.app-shell .timeline:focus-within .timeline-toggle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* REC has no outer ring. Idle is a larger dot; active is a minimal stop bar. */
+.app-shell .timeline-record,
+.app-shell .timeline-record:not(.active) {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell .timeline-record > i {
+  width: 15px;
+  height: 15px;
+  background: #e15050;
+  border-radius: 50%;
+}
+.app-shell .timeline-record.active {
+  width: 28px !important;
+  min-width: 28px !important;
+  background: transparent !important;
+  border: 0 !important;
+  animation: none !important;
+}
+.app-shell .timeline-record.active > i {
+  width: 17px;
+  height: 11px;
+  background: #ef4141;
+  border-radius: 2px;
+}
 .app-shell .timeline.collapsed .timeline-toolbar { overflow: visible; }
 .app-shell .timeline.collapsed .timeline-control-row { display: grid; visibility: visible; opacity: 1; }
 
@@ -686,5 +768,16 @@ body:has(.app-shell.theme-light) #root,
 
 /* La superficie vuota della timeline coincide con lo sfondo del programma. */
 .app-shell.theme-dark :is(.timeline, .timeline-toolbar, .timeline-scroll) {
-  background: #252525 !important;
+  background: var(--ui-secondary) !important;
+}
+
+/* Three-level neutral palette. Yellow remains reserved for primary actions. */
+.app-shell.theme-dark :is(.slim-headbar, .timeline, .timeline-toolbar, .timeline-scroll, .simple-inspector, .simple-inspector .right-tabs, .simple-inspector .inspector-scroll) {
+  background-color: var(--ui-secondary) !important;
+}
+.app-shell.theme-dark :is(.inspector-group, .quick-add-popover, .jev-floating-composer, .timeline-comment-popover) {
+  background-color: var(--ui-primary) !important;
+}
+.app-shell.theme-dark :is(.secondary, .subtle, .slim-add, .decision-engine-switch, .jev-composer-tool, .icon):hover {
+  background-color: var(--ui-tertiary) !important;
 }

@@ -10,28 +10,28 @@ describe('Documento standard', () => {
     render(<AnimationStandardPanel />);
     const file = new File(['Regole della scena'], 'standard.md', { type: 'text/markdown' });
     Object.defineProperty(file, 'text', { value: async () => 'Regole della scena' });
-    fireEvent.change(screen.getByLabelText('Documento standard animazione'), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Animation standard document'), { target: { files: [file] } });
     await waitFor(() => expect(useEditor.getState().project.animationStandard?.content).toBe('Regole della scena'));
     expect(screen.getByText('standard.md')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Rimuovi dal progetto'));
+    fireEvent.click(screen.getByText('Remove from project'));
     expect(useEditor.getState().project.animationStandard).toBeUndefined();
     expect(useEditor.getState().project.comments).toEqual([]);
   });
   it('rifiuta il documento vuoto e conserva quello precedente', async () => {
     render(<AnimationStandardPanel />);
-    fireEvent.click(screen.getByText('Usa standard cartoon incluso'));
+    fireEvent.click(screen.getByText('Use included cartoon standard'));
     const original = useEditor.getState().project.animationStandard;
     expect(original?.content).toContain('Confronto iniziale obbligatorio');
     const file = new File([' '], 'vuoto.md'); Object.defineProperty(file, 'text', { value: async () => ' ' });
-    fireEvent.change(screen.getByLabelText('Documento standard animazione'), { target: { files: [file] } });
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('vuoto'));
+    fireEvent.change(screen.getByLabelText('Animation standard document'), { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('empty'));
     expect(useEditor.getState().project.animationStandard).toEqual(original);
   });
   it('non allega al nuovo progetto un file selezionato nel precedente', async () => {
     render(<AnimationStandardPanel />);
     let finish!: (text: string) => void;
     const file = new File(['abc'], 'regole.md'); Object.defineProperty(file, 'text', { value: () => new Promise<string>(resolve => { finish = resolve; }) });
-    fireEvent.change(screen.getByLabelText('Documento standard animazione'), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Animation standard document'), { target: { files: [file] } });
     act(() => useEditor.getState().newProject());
     await act(async () => { finish('Regole'); });
     expect(useEditor.getState().project.animationStandard).toBeUndefined();

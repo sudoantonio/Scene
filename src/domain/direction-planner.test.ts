@@ -39,7 +39,7 @@ describe('Persistent direction planning', () => {
   });
   it('allocates time for every action and refuses impossible explicit durations', () => {
     expect(allocateDirectionFrames([{ frames: 120, explicit: false }, { frames: 120, explicit: false }], 89)).toEqual([45, 44]);
-    expect(() => allocateDirectionFrames([{ frames: 120, explicit: true }, { frames: 120, explicit: true }], 89)).toThrow('durate richieste');
+    expect(() => allocateDirectionFrames([{ frames: 120, explicit: true }, { frames: 120, explicit: true }], 89)).toThrow('requested durations');
   });
   it('creates an approach and retreat with shared focus in a three-second scene', async () => {
     const { project, camera, character, input } = fixture();
@@ -127,7 +127,7 @@ describe('Persistent direction planning', () => {
   it('does not apply a partial plan when requested durations exceed the scene', async () => {
     const { project, input } = fixture();
     input.instruction = 'la camera si avvicina in 4 secondi e poi si allontana in 4 secondi dal personaggio';
-    await expect(planDirection(project, input, runner)).rejects.toThrow('durate richieste');
+    await expect(planDirection(project, input, runner)).rejects.toThrow('requested durations');
     expect(project.objects[0]!.keyframes).toHaveLength(0);
   });
 });

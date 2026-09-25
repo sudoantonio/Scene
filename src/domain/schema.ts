@@ -7,7 +7,7 @@ export type Vec3 = z.infer<typeof Vec3Schema>;
 export const TransformSchema = z.object({
   position: Vec3Schema,
   rotation: Vec3Schema,
-  scale: Vec3Schema.refine((v) => v.every((n) => n > 0), 'La scala deve essere positiva'),
+  scale: Vec3Schema.refine((v) => v.every((n) => n > 0), 'Scale must be positive'),
 });
 export type Transform = z.infer<typeof TransformSchema>;
 
@@ -47,7 +47,7 @@ export const KeyframeSchema = z.object({
   commentIds: z.array(z.string().uuid()).default([]),
 }).superRefine((key, ctx) => {
   if (!isValidAnimationValue(key.property, key.value)) {
-    ctx.addIssue({ code: 'custom', path: ['value'], message: `Valore non valido per ${key.property}` });
+    ctx.addIssue({ code: 'custom', path: ['value'], message: `Invalid value for ${key.property}` });
   }
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
@@ -59,7 +59,7 @@ export const SceneObjectSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   visible: z.boolean(),
   transform: TransformSchema,
-  text: z.string().default('Testo'),
+  text: z.string().default('Text'),
   camera: z.object({ lens: z.number().positive() }).default({ lens: 50 }),
   light: z.object({ energy: z.number().nonnegative(), size: z.number().positive() }).default({ energy: 1000, size: 5 }),
   asset: z.object({
@@ -200,18 +200,18 @@ export const ProjectSchema = z.object({
   cameraCuts: z.array(CameraCutSchema),
 }).superRefine((project, ctx) => {
   if (project.settings.frameEnd < project.settings.frameStart) {
-    ctx.addIssue({ code: 'custom', path: ['settings', 'frameEnd'], message: 'Il frame finale precede quello iniziale' });
+    ctx.addIssue({ code: 'custom', path: ['settings', 'frameEnd'], message: 'The end frame is before the start frame' });
   }
   const ids = new Set(project.objects.map((object) => object.id));
   const sceneIds = new Set(project.cameraCuts.map((scene) => scene.id));
   for (const comment of project.comments) {
     if (comment.endFrame < comment.startFrame) ctx.addIssue({ code: 'custom', message: 'Intervallo commento non valido' });
-    for (const id of comment.targetIds) if (!ids.has(id)) ctx.addIssue({ code: 'custom', message: `Oggetto commento inesistente: ${id}` });
-    if (comment.sceneId && !sceneIds.has(comment.sceneId)) ctx.addIssue({ code: 'custom', message: `Scena commento inesistente: ${comment.sceneId}` });
+    for (const id of comment.targetIds) if (!ids.has(id)) ctx.addIssue({ code: 'custom', message: `Comment object not found: ${id}` });
+    if (comment.sceneId && !sceneIds.has(comment.sceneId)) ctx.addIssue({ code: 'custom', message: `Comment scene not found: ${comment.sceneId}` });
   }
   for (const cut of project.cameraCuts) {
     const camera = project.objects.find((object) => object.id === cut.cameraId);
-    if (!camera || camera.kind !== 'camera') ctx.addIssue({ code: 'custom', message: `Camera inesistente: ${cut.cameraId}` });
+    if (!camera || camera.kind !== 'camera') ctx.addIssue({ code: 'custom', message: `Camera not found: ${cut.cameraId}` });
   }
 });
 export type AbacoProject = z.infer<typeof ProjectSchema>;
@@ -250,8 +250,8 @@ export const emptyTransform = (): Transform => ({ position: [0, 0, 0], rotation:
 
 export function createSceneObject(kind: ObjectKind, index: number): SceneObject {
   const labels: Record<ObjectKind, string> = {
-    cube: 'Cubo', sphere: 'Sfera', cylinder: 'Cilindro', cone: 'Cono', plane: 'Piano', text: 'Testo', audio: 'Audio', blend_asset: 'Asset Blender',
-    camera: 'Camera', area_light: 'Luce area', point_light: 'Luce punto', sun_light: 'Sole',
+    cube: 'Cube', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', plane: 'Plane', text: 'Text', audio: 'Audio', blend_asset: 'Blender asset',
+    camera: 'Camera', area_light: 'Area light', point_light: 'Point light', sun_light: 'Sun',
   };
   const transform = emptyTransform();
   if (['cube', 'sphere', 'cylinder', 'cone'].includes(kind)) transform.position = [0, 0, 1];
@@ -268,7 +268,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   };
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
-    visible: true, transform, text: 'Testo', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
+    visible: true, transform, text: 'Text', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
     asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 },
     audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] },
     screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
@@ -279,8 +279,8 @@ export function createProject(): AbacoProject {
   const now = new Date().toISOString();
   const camera = createSceneObject('camera', 1);
   return {
-    schemaVersion: 'AbacoSceneV1', id: crypto.randomUUID(), name: 'Nuovo animatic', createdAt: now, updatedAt: now,
+    schemaVersion: 'AbacoSceneV1', id: crypto.randomUUID(), name: 'New animatic', createdAt: now, updatedAt: now,
     settings: { fps: 24, frameStart: 1, frameEnd: 72, resolutionX: 1920, resolutionY: 1080, units: 'meters' },
-    objects: [camera], comments: [], cameraCuts: [{ id: crypto.randomUUID(), cameraId: camera.id, frame: 1, source: 'user', commentIds: [], name: 'Scena 1', transition: 'cut', lighting: defaultLighting(), background: defaultBackground(), framing: defaultCameraFraming() }],
+    objects: [camera], comments: [], cameraCuts: [{ id: crypto.randomUUID(), cameraId: camera.id, frame: 1, source: 'user', commentIds: [], name: 'Scene 1', transition: 'cut', lighting: defaultLighting(), background: defaultBackground(), framing: defaultCameraFraming() }],
   };
 }

@@ -15,16 +15,16 @@ afterEach(() => { cleanup(); delete window.abaco; });
 describe('Pannelli contestuali', () => {
   it('nasconde l’input AI finché non viene selezionato un soggetto', () => {
     render(<JevFloatingComposer />);
-    expect(screen.queryByRole('textbox', { name: 'Azione Jev' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Jev action' })).not.toBeInTheDocument();
     expect(screen.queryByText('Soggetto di riferimento')).not.toBeInTheDocument();
     expect(screen.queryByText('Posizione iniziale')).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Pannello principale Jev' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Jev main panel' })).not.toBeInTheDocument();
   });
 
   it('aumenta l’altezza dell’input quando il testo occupa più righe', () => {
     useEditor.getState().addObject('cube');
     render(<JevFloatingComposer />);
-    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    const input = screen.getByRole('textbox', { name: 'Jev action' });
     Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 84 });
     fireEvent.change(input, { target: { value: 'Il soggetto entra da sinistra, si ferma al centro e poi guarda verso la camera.' } });
     expect(input).toHaveStyle({ height: '84px' });
@@ -40,9 +40,9 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    fireEvent.click(screen.getByText('Regia · 1 movimenti'));
+    fireEvent.click(screen.getByText('Direction · 1 motion'));
     fireEvent.click(screen.getByRole('button', { name: /camera indietro/ }));
-    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    const input = screen.getByRole('textbox', { name: 'Jev action' });
     expect(input).toHaveValue('si allontana');
     fireEvent.change(input, { target: { value: 'si allontana di 1 metro' } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -59,8 +59,8 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    expect(screen.queryByRole('combobox', { name: 'Tipo richiesta' })).not.toBeInTheDocument();
-    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    expect(screen.queryByRole('combobox', { name: 'Request type' })).not.toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: 'Jev action' });
     fireEvent.change(input, { target: { value: 'poi si allontana' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ directionPlanId: planId, frame: 12, instruction: 'poi si allontana' })));
@@ -73,8 +73,8 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Jev', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Jev', commentIds: [] }] } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
-    expect(input).toHaveAttribute('placeholder', expect.stringContaining('Cubo 1'));
+    const input = screen.getByRole('textbox', { name: 'Jev action' });
+    expect(input).toHaveAttribute('placeholder', expect.stringContaining('Cube 1'));
     fireEvent.change(input, { target: { value: 'vai a destra' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ objectId, target: 'subject', sceneId, instruction: 'vai a destra' })));
@@ -89,7 +89,7 @@ describe('Pannelli contestuali', () => {
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
     act(() => useEditor.getState().setJevStrokePoints([[.1, .5], [.9, .5]]));
-    const input = screen.getByRole('textbox', { name: 'Azione Jev' });
+    const input = screen.getByRole('textbox', { name: 'Jev action' });
     expect(input).toHaveAttribute('placeholder', expect.stringContaining(camera.name));
     fireEvent.change(input, { target: { value: 'avanza lentamente' } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -102,34 +102,34 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Laya', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Laya', commentIds: [] }] }, performance: { engine: 'laya', totalMs: 180, decisionMs: 120, modelLoadMs: 0, warm: true } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Modello azione' }), { target: { value: 'laya' } });
-    const input = screen.getByRole('textbox', { name: 'Azione Laya' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Action model' }), { target: { value: 'laya' } });
+    const input = screen.getByRole('textbox', { name: 'Laya action' });
     fireEvent.change(input, { target: { value: 'vai avanti' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(generateJevAction).toHaveBeenCalledWith(expect.objectContaining({ engine: 'laya', objectId, instruction: 'vai avanti' })));
     expect(window.localStorage.getItem('scene-decision-engine')).toBe('laya');
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Laya · Movimento applicato'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Laya · Motion applied'));
     expect(screen.getByRole('status')).toHaveTextContent('120 ms');
   });
 
   it('attiva il disegno dal solo input senza cambiare la vista', () => {
     useEditor.getState().addObject('cube');
     render(<JevFloatingComposer />);
-    fireEvent.click(screen.getByRole('button', { name: 'Disegna traiettoria' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw path' }));
     expect(useEditor.getState().cameraView).toBe(false);
     expect(useEditor.getState().jevStroke.active).toBe(true);
   });
 
-  it('mostra solo il volume audio in Modifica e lascia invariata la scheda Luce', () => {
+  it('mostra solo il volume audio in Modifica e lascia invariata la scheda Lighting', () => {
     useEditor.getState().addAudio({ sourcePath: '/sound.wav', name: 'Passi', duration: 2.5, waveform: [.2, .8, .4] });
     const view = render(<Inspector panel="edit" onPanelChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Luce' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Suono' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Volume audio')).toBeInTheDocument();
-    expect(screen.queryByText('Silenzia')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lighting' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sound' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Audio volume')).toBeInTheDocument();
+    expect(screen.queryByText('Mute')).not.toBeInTheDocument();
     expect(screen.queryByText('Loop')).not.toBeInTheDocument();
     view.rerender(<Inspector panel="light" onPanelChange={vi.fn()} />);
-    expect(screen.getByRole('region', { name: 'Controlli luce' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Lighting controls' })).toBeInTheDocument();
   });
 
   it('applica uno sfondo alla scena che ha avviato l’importazione anche dopo un cambio scena', async () => {
@@ -139,7 +139,7 @@ describe('Pannelli contestuali', () => {
     let resolve!: (value: { path: string; name: string }) => void;
     window.abaco = { chooseBackground: vi.fn(() => new Promise((done) => { resolve = done; })) } as unknown as NonNullable<Window['abaco']>;
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Immagine' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Image' }));
     act(() => useEditor.getState().setFrame(second.frame));
     await act(async () => { resolve({ path: '/background.png', name: 'Sfondo' }); });
     expect(useEditor.getState().project.cameraCuts[0].background).toMatchObject({ kind: 'image', path: '/background.png' });
@@ -149,13 +149,13 @@ describe('Pannelli contestuali', () => {
   it('separa le schede dal contenuto scorrevole e richiude i controlli secondari', () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="edit" onPanelChange={vi.fn()} />);
-    const body = screen.getByRole('region', { name: 'Controlli modifica' });
+    const body = screen.getByRole('region', { name: 'Edit controls' });
     expect(body).toHaveClass('inspector-scroll');
     expect(body).not.toContainElement(screen.getByRole('navigation'));
-    expect(screen.getByText('Posizione e dimensione').closest('details')).toHaveAttribute('open');
-    expect(screen.getByText('Rotazione', { exact: true }).closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByText('Aspetto').closest('details')).not.toHaveAttribute('open');
-    expect(body).toContainElement(screen.getByText('Valori numerici'));
+    expect(screen.getByText('Position and size').closest('details')).toHaveAttribute('open');
+    expect(screen.getByText('Rotation', { exact: true }).closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText('Appearance').closest('details')).not.toHaveAttribute('open');
+    expect(body).toContainElement(screen.getByText('Numeric values'));
   });
 
   it('appoggia un elemento selezionato sul piano', () => {
@@ -163,7 +163,7 @@ describe('Pannelli contestuali', () => {
     const id = useEditor.getState().selectedId!;
     useEditor.getState().setTransform(id, { position: [2, 3, 6], rotation: [0, 0, 0], scale: [1.5, 1.5, 1.5] });
     render(<Inspector panel="edit" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Appoggia al piano' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Place on ground' }));
     const object = useEditor.getState().project.objects.find((item) => item.id === id)!;
     expect(evaluateTransform(object, 1).position).toEqual([2, 3, 1.5]);
   });
@@ -173,30 +173,30 @@ describe('Pannelli contestuali', () => {
     const initial = useEditor.getState();
     const objectId = initial.selectedId!;
     const scene = initial.project.cameraCuts[0];
-    const label = scope === 'object' ? 'Cubo 1' : scope === 'framing' ? initial.project.objects.find(o => o.id === scene.cameraId)!.name : scene.name!;
+    const label = scope === 'object' ? 'Cube 1' : scope === 'framing' ? initial.project.objects.find(o => o.id === scene.cameraId)!.name : scene.name!;
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle(`Aggiungi commento ${label}`));
-    const input = screen.getByRole('textbox', { name: `Indicazione ${label}` });
+    fireEvent.click(screen.getByTitle(`Add ${label} comment`));
+    const input = screen.getByRole('textbox', { name: `Direction for ${label}` });
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: 'Entra' } });
-    expect(screen.getByRole('textbox', { name: `Indicazione ${label}` })).toBe(input);
+    expect(screen.getByRole('textbox', { name: `Direction for ${label}` })).toBe(input);
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: 'Entra lentamente in scena.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(useEditor.getState().project.comments).toEqual(expect.arrayContaining([expect.objectContaining({ scope, sceneId: scene.id, text: 'Entra lentamente in scena.', targetIds: scope === 'object' ? [objectId] : expect.any(Array) })]));
   });
 
   it('mantiene bozza e contenitore quando si seleziona un elemento in Scenografia', () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle('Aggiungi commento Scena 1'));
-    const body = screen.getByRole('region', { name: 'Contenuto scenografia' });
-    const input = screen.getByLabelText('Indicazione Scena 1');
+    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
+    const body = screen.getByRole('region', { name: 'Scenography content' });
+    const input = screen.getByLabelText('Direction for Scene 1');
     fireEvent.change(input, { target: { value: 'Bozza da conservare' } });
     act(() => useEditor.getState().select(undefined));
-    fireEvent.click(screen.getByRole('button', { name: 'Seleziona Cubo 1' }));
-    expect(screen.getByRole('region', { name: 'Contenuto scenografia' })).toBe(body);
-    expect(screen.getByLabelText('Indicazione Scena 1')).toBe(input);
+    fireEvent.click(screen.getByRole('button', { name: 'Select Cube 1' }));
+    expect(screen.getByRole('region', { name: 'Scenography content' })).toBe(body);
+    expect(screen.getByLabelText('Direction for Scene 1')).toBe(input);
     expect(input).toHaveValue('Bozza da conservare');
   });
 
@@ -208,14 +208,14 @@ describe('Pannelli contestuali', () => {
     const sphereName = useEditor.getState().project.objects.find(o => o.id === useEditor.getState().selectedId)!.name;
     useEditor.getState().setFrame(1);
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: `Seleziona ${sphereName}` })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('Aggiungi commento Scena 1'));
-    fireEvent.change(screen.getByLabelText('Indicazione Scena 1'), { target: { value: 'Prima scena' } });
+    expect(screen.queryByRole('button', { name: `Select ${sphereName}` })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
+    fireEvent.change(screen.getByLabelText('Direction for Scene 1'), { target: { value: 'Prima scena' } });
     act(() => useEditor.getState().setFrame(secondScene.frame));
-    expect(screen.getByRole('button', { name: `Seleziona ${sphereName}` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Select ${sphereName}` })).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     act(() => useEditor.getState().setFrame(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(useEditor.getState().project.comments[0]).toMatchObject({ text: 'Prima scena', sceneId: useEditor.getState().project.cameraCuts[0].id });
   });
 });
@@ -224,44 +224,44 @@ describe('Preset nei campi Scenografia', () => {
   it('mostra / nel campo del personaggio, combina due preset e ne conserva i prompt al salvataggio', () => {
     useEditor.getState().addObject('cube');
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle('Aggiungi commento Cubo 1'));
-    const input = screen.getByLabelText('Indicazione Cubo 1');
+    fireEvent.click(screen.getByTitle('Add Cube 1 comment'));
+    const input = screen.getByLabelText('Direction for Cube 1');
     fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
-    expect(screen.getByRole('option', { name: 'Scocciato Emozione' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Camera statica Camera' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('option', { name: 'Scocciato Emozione' }));
+    expect(screen.getByRole('option', { name: 'Annoyed Emotion' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Static camera Camera' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Annoyed Emotion' }));
     expect(input).toHaveValue('');
-    expect(screen.getByText('Scocciato')).toBeInTheDocument();
+    expect(screen.getByText('Annoyed')).toBeInTheDocument();
     const query = '/si-av';
     fireEvent.change(input, { target: { value: query, selectionStart: query.length } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(input).toHaveValue('');
-    expect(screen.getByText('Si avvicina')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    expect(screen.getByText('Approaches')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     const comment = useEditor.getState().project.comments[0];
     expect(comment.presets?.map(p => p.id)).toEqual(['scocciato', 'si-avvicina']);
     expect(comment.presets?.every(p => p.prompt.length > 100)).toBe(true);
-    expect(screen.getByLabelText('Preset salvati')).toBeInTheDocument();
+    expect(screen.getByLabelText('Saved presets')).toBeInTheDocument();
     expect(screen.queryByText('/scocciato /si-avvicina')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('Modifica commento Cubo 1'));
-    expect(screen.getByLabelText('Indicazione Cubo 1')).toHaveValue('');
-    expect(screen.getByText('Scocciato')).toBeInTheDocument();
-    expect(screen.getByText('Si avvicina')).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Edit Cube 1 comment'));
+    expect(screen.getByLabelText('Direction for Cube 1')).toHaveValue('');
+    expect(screen.getByText('Annoyed')).toBeInTheDocument();
+    expect(screen.getByText('Approaches')).toBeInTheDocument();
   });
 
   it('propone solo movimenti camera e lascia libera la descrizione narrativa', () => {
     const name = useEditor.getState().project.objects[0].name;
     render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-    fireEvent.click(screen.getByTitle(`Aggiungi commento ${name}`));
-    const input = screen.getByLabelText(`Indicazione ${name}`);
+    fireEvent.click(screen.getByTitle(`Add ${name} comment`));
+    const input = screen.getByLabelText(`Direction for ${name}`);
     fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
-    expect(screen.getByRole('option', { name: 'Camera statica Camera' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Scocciato Emozione' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('option', { name: 'Camera statica Camera' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salva' }));
+    expect(screen.getByRole('option', { name: 'Static camera Camera' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Annoyed Emotion' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Static camera Camera' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(useEditor.getState().project.comments[0].presets?.[0].id).toBe('camera-statica');
-    fireEvent.click(screen.getByTitle('Aggiungi commento Scena 1'));
-    const scene = screen.getByLabelText('Indicazione Scena 1');
+    fireEvent.click(screen.getByTitle('Add Scene 1 comment'));
+    const scene = screen.getByLabelText('Direction for Scene 1');
     expect(scene).toHaveValue('');
     fireEvent.change(scene, { target: { value: '/', selectionStart: 1 } });
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
@@ -270,11 +270,11 @@ describe('Preset nei campi Scenografia', () => {
 
 it('allega lo standard direttamente da Scenografia', () => {
   render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-  const section = screen.getByText('Standard animazione').closest('details')!;
-  fireEvent.click(screen.getByText('Standard animazione'));
+  const section = screen.getByText('Animation standard').closest('details')!;
+  fireEvent.click(screen.getByText('Animation standard'));
   expect(section).toHaveAttribute('open');
-  fireEvent.click(screen.getByRole('button', { name: 'Usa standard cartoon incluso' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Use included cartoon standard' }));
   expect(useEditor.getState().project.animationStandard?.name).toBe('STANDARD_ANIMAZIONE_GENERALE.md');
-  expect(screen.getByText('Standard animazione · Allegato')).toBeInTheDocument();
+  expect(screen.getByText('Animation standard · Attached')).toBeInTheDocument();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

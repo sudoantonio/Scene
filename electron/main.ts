@@ -33,7 +33,7 @@ function loadLayaRuntime(onProgress: (progress: { file: string; received: number
       .catch((cause) => {
         layaRuntimePromise = null;
         const detail = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(`Laya non è stato caricato. ${detail}`);
+        throw new Error(`Laya was not loaded. ${detail}`);
       });
   }
   return layaRuntimePromise;
@@ -46,39 +46,39 @@ function sendMenuCommand(command: MenuCommand) {
 function installApplicationMenu() {
   const template: MenuItemConstructorOptions[] = [
     { label: 'File', submenu: [
-      { label: 'Nuovo progetto', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('new') },
-      { label: 'Apri progetto…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('open') },
-      { label: 'Salva progetto', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
+      { label: 'New project', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('new') },
+      { label: 'Open project…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('open') },
+      { label: 'Save project', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { type: 'separator' },
-      { label: 'Esporta', submenu: [
+      { label: 'Export', submenu: [
         { label: 'Blender + Astra…', click: () => sendMenuCommand('export-astra') },
-        { label: 'Blender diretto', click: () => sendMenuCommand('export-direct') },
+        { label: 'Direct Blender export', click: () => sendMenuCommand('export-direct') },
       ] },
       { type: 'separator' },
-      { label: 'Impostazioni…', accelerator: 'CmdOrCtrl+,', click: () => sendMenuCommand('settings') },
+      { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => sendMenuCommand('settings') },
       { type: 'separator' },
-      { role: 'quit', label: 'Esci' },
+      { role: 'quit', label: 'Quit' },
     ] },
-    { label: 'Modifica', submenu: [
-      { label: 'Annulla', accelerator: 'CmdOrCtrl+Z', click: () => sendMenuCommand('undo') },
-      { label: 'Ripristina', accelerator: 'CmdOrCtrl+Shift+Z', click: () => sendMenuCommand('redo') },
+    { label: 'Edit', submenu: [
+      { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => sendMenuCommand('undo') },
+      { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => sendMenuCommand('redo') },
       { type: 'separator' },
-      { role: 'cut', label: 'Taglia' },
-      { role: 'copy', label: 'Copia' },
-      { role: 'paste', label: 'Incolla' },
-      { role: 'selectAll', label: 'Seleziona tutto' },
+      { role: 'cut', label: 'Cut' },
+      { role: 'copy', label: 'Copy' },
+      { role: 'paste', label: 'Paste' },
+      { role: 'selectAll', label: 'Select all' },
     ] },
-    { label: 'Vista', submenu: [
-      { label: 'Apri finestra inquadratura', accelerator: 'CmdOrCtrl+Shift+P', click: () => openPreviewWindow() },
+    { label: 'View', submenu: [
+      { label: 'Open camera preview', accelerator: 'CmdOrCtrl+Shift+P', click: () => openPreviewWindow() },
       { type: 'separator' },
-      { role: 'togglefullscreen', label: 'Schermo intero' },
+      { role: 'togglefullscreen', label: 'Full screen' },
     ] },
-    { label: 'Finestra', submenu: [
-      { role: 'minimize', label: 'Riduci a icona' },
-      { role: 'close', label: 'Chiudi' },
+    { label: 'Window', submenu: [
+      { role: 'minimize', label: 'Minimize' },
+      { role: 'close', label: 'Close' },
     ] },
-    { label: 'Aiuto', submenu: [
-      { label: 'Informazioni su Scene', click: () => dialog.showMessageBox(mainWindow!, { type: 'info', title: 'Scene', message: 'Scene', detail: `Versione ${app.getVersion()}\nEditor locale per animatic 3D.` }) },
+    { label: 'Help', submenu: [
+      { label: 'About Scene', click: () => dialog.showMessageBox(mainWindow!, { type: 'info', title: 'Scene', message: 'Scene', detail: `Version ${app.getVersion()}\nLocal editor for 3D animatics.` }) },
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -93,7 +93,7 @@ async function openPreviewWindow() {
   }
   previewWindow = new BrowserWindow({
     width: 1100, height: 700, minWidth: 480, minHeight: 320,
-    backgroundColor: '#090909', title: 'Inquadratura — Scene',
+    backgroundColor: '#090909', title: 'Camera Preview — Scene',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
@@ -120,7 +120,7 @@ async function readSettings(): Promise<Settings> {
 async function writeSettings(settings: Settings) {
   await fs.mkdir(path.dirname(settingsPath()), { recursive: true });
   if ((settings.apiKey || settings.jevApiKey) && !safeStorage.isEncryptionAvailable()) {
-    throw new Error('La cifratura di sistema non è disponibile: le chiavi API non sono state salvate.');
+    throw new Error('System encryption is unavailable. API keys were not saved.');
   }
   const encryptedApiKey = settings.apiKey ? safeStorage.encryptString(settings.apiKey).toString('base64') : undefined;
   const encryptedJevApiKey = settings.jevApiKey ? safeStorage.encryptString(settings.jevApiKey).toString('base64') : undefined;
@@ -142,7 +142,7 @@ async function fileExists(filePath: string) {
 }
 async function imageFileDataUrl(filePath: string) {
   const image = nativeImage.createFromPath(filePath);
-  if (image.isEmpty()) throw new Error(`Immagine non leggibile: ${path.basename(filePath)}`);
+  if (image.isEmpty()) throw new Error(`Unreadable image: ${path.basename(filePath)}`);
   const size = image.getSize();
   const maxSide = 2560;
   const scale = Math.min(1, maxSide / Math.max(size.width, size.height));
@@ -156,7 +156,7 @@ const mediaMimeTypes: Record<string, string> = {
 async function mediaFileDataUrl(filePath: string) {
   const extension = path.extname(filePath).toLowerCase();
   const mime = mediaMimeTypes[extension];
-  if (!mime) throw new Error(`Formato audio non supportato: ${extension || 'sconosciuto'}`);
+  if (!mime) throw new Error(`Unsupported audio format: ${extension || 'unknown'}`);
   const buffer = await fs.readFile(filePath);
   return `data:${mime};base64,${buffer.toString('base64')}`;
 }
@@ -171,7 +171,7 @@ async function makePortableProject(project: AbacoProject, root: string) {
   const copied = new Map<string, string>();
   const copyAsset = async (source: string, category: string, identity: string, fallback?: string) => {
     const usable = isDataUrl(source) ? source : source && await fileExists(source) ? source : fallback;
-    if (!usable) throw new Error(`Asset mancante durante l’esportazione: ${source || identity}`);
+    if (!usable) throw new Error(`Missing asset during export: ${source || identity}`);
     const cached = copied.get(usable);
     if (cached) return cached;
     const encoded = isDataUrl(usable) ? dataUrlBuffer(usable) : undefined;
@@ -251,7 +251,7 @@ async function runProcess(command: string, args: string[], cwd: string): Promise
     child.stdout.on('data', (chunk) => { output += chunk.toString(); });
     child.stderr.on('data', (chunk) => { output += chunk.toString(); });
     child.on('error', reject);
-    child.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`Blender è terminato con codice ${code}.\n${output}`)));
+    child.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`Blender exited with code ${code}.\n${output}`)));
   });
 }
 
@@ -302,15 +302,15 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
     try {
       const output = await runProcess(invocation.command, [...invocation.prefix, resolvedSource, '--background', '--python', scriptPath, '--', resolvedProxy], cacheDir);
       const marker = output.split(/\r?\n/).find((line) => line.startsWith('ABACO_BLEND_ASSET='));
-      if (!marker) throw new Error(`Blender non ha creato l’anteprima dell’asset.\n${output}`);
+      if (!marker) throw new Error(`Blender did not create the asset preview.\n${output}`);
       const metadata = JSON.parse(marker.slice('ABACO_BLEND_ASSET='.length)) as BlendProxyMetadata;
-      if (!metadata.meshCount) throw new Error('Il file Blender non ha prodotto geometria visibile per l’anteprima.');
+      if (!metadata.meshCount) throw new Error('The Blender file did not produce visible geometry for the preview.');
       await atomicWrite(markerPath, JSON.stringify({ ...metadata, sourcePath: resolvedSource, sourceMtimeMs: sourceStats.mtimeMs }));
       return metadata;
     } catch (error) {
       await fs.rm(resolvedProxy, { force: true }).catch(() => undefined);
       await fs.rm(markerPath, { force: true }).catch(() => undefined);
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('Blender non trovato. Configuralo in File → Impostazioni.');
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('Blender was not found. Configure it under File → Settings.');
       throw error;
     } finally {
       await fs.rm(scriptPath, { force: true }).catch(() => undefined);
@@ -367,7 +367,7 @@ ipcMain.on('preview:frame', (_event, incomingFrame: number) => {
 ipcMain.handle('preview:get', () => latestPreviewState);
 
 ipcMain.handle('project:open', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile', 'openDirectory'], title: 'Apri progetto o cartella Scene', filters: [{ name: 'Scene', extensions: ['json'] }] });
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile', 'openDirectory'], title: 'Open Scene project or folder', filters: [{ name: 'Scene', extensions: ['json'] }] });
   if (result.canceled || !result.filePaths[0]) return null;
   let filePath = result.filePaths[0];
   if ((await fs.stat(filePath)).isDirectory()) {
@@ -375,7 +375,7 @@ ipcMain.handle('project:open', async () => {
     const projectFile = entries.find((entry) => entry === 'project.abaco.json')
       ?? entries.find((entry) => entry.endsWith('.abaco.json'))
       ?? entries.find((entry) => entry === 'input.json');
-    if (!projectFile) throw new Error('La cartella non contiene un progetto Abaco ricaricabile.');
+    if (!projectFile) throw new Error('The folder does not contain a reloadable Scene project.');
     filePath = path.join(filePath, projectFile);
   }
   const stored = ProjectSchema.parse(JSON.parse(await fs.readFile(filePath, 'utf8')));
@@ -405,22 +405,22 @@ ipcMain.handle('settings:save', async (_event, incoming: { apiKey?: string; jevA
   return { ok: true };
 });
 ipcMain.handle('settings:chooseBlender', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Seleziona l’eseguibile Blender' });
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Select Blender executable' });
   return result.canceled ? null : result.filePaths[0];
 });
 
 ipcMain.handle('background:choose', async (_event, kind: 'image' | 'model') => {
   const filters = kind === 'image'
-    ? [{ name: 'Immagini', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
-    : [{ name: 'Modelli 3D', extensions: ['glb', 'obj'] }];
-  const result = await dialog.showOpenDialog(mainWindow!, { properties: kind === 'model' ? ['openFile', 'openDirectory'] : ['openFile'], title: kind === 'image' ? 'Scegli uno sfondo' : 'Scegli un modello GLB, OBJ o una cartella', filters });
+    ? [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    : [{ name: '3D models', extensions: ['glb', 'obj'] }];
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: kind === 'model' ? ['openFile', 'openDirectory'] : ['openFile'], title: kind === 'image' ? 'Choose a background' : 'Choose a GLB or OBJ model, or a folder', filters });
   if (result.canceled || !result.filePaths[0]) return null;
   let selected = result.filePaths[0];
   if (kind === 'model' && (await fs.stat(selected)).isDirectory()) {
     const entries = await fs.readdir(selected);
     const model = entries.sort((a, b) => a.localeCompare(b)).find((entry) => path.extname(entry).toLowerCase() === '.glb')
       ?? entries.sort((a, b) => a.localeCompare(b)).find((entry) => path.extname(entry).toLowerCase() === '.obj');
-    if (!model) throw new Error('La cartella non contiene un modello GLB o OBJ.');
+    if (!model) throw new Error('The folder does not contain a GLB or OBJ model.');
     selected = path.join(selected, model);
   }
   return { path: selected, name: path.basename(selected) };
@@ -440,7 +440,7 @@ ipcMain.handle('model:load', async (_event, filePath: string) => {
     const buffer = await fs.readFile(filePath);
     return { format: 'glb' as const, source: `data:model/gltf-binary;base64,${buffer.toString('base64')}` };
   }
-  if (extension !== '.obj') throw new Error(`Formato scenografia non supportato: ${extension || 'sconosciuto'}`);
+  if (extension !== '.obj') throw new Error(`Unsupported scenery format: ${extension || 'unknown'}`);
   const source = await fs.readFile(filePath, 'utf8');
   const materialName = source.match(/^\s*mtllib\s+(.+)\s*$/mi)?.[1]?.trim();
   let materials: string | undefined;
@@ -453,7 +453,7 @@ ipcMain.handle('model:load', async (_event, filePath: string) => {
 
 ipcMain.handle('audio:choose', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openFile'], title: 'Aggiungi audio',
+    properties: ['openFile'], title: 'Add audio',
     filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] }],
   });
   if (result.canceled || !result.filePaths[0]) return null;
@@ -463,8 +463,8 @@ ipcMain.handle('audio:choose', async () => {
 
 ipcMain.handle('blendAsset:choose', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openFile'], title: 'Aggiungi un personaggio o asset Blender',
-    filters: [{ name: 'File Blender', extensions: ['blend'] }],
+    properties: ['openFile'], title: 'Add a character or Blender asset',
+    filters: [{ name: 'Blender files', extensions: ['blend'] }],
   });
   if (result.canceled || !result.filePaths[0]) return null;
   const sourcePath = path.resolve(result.filePaths[0]);
@@ -473,24 +473,24 @@ ipcMain.handle('blendAsset:choose', async () => {
   const proxyPath = path.join(cacheDir, `${assetId}.glb`);
   const metadata = await buildBlendAssetProxy(sourcePath, proxyPath, true);
   return {
-    sourcePath, proxyPath, collectionName: 'Scena Blender',
+    sourcePath, proxyPath, collectionName: 'Blender Scene',
     name: path.basename(sourcePath, path.extname(sourcePath)),
     boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale, groundOffset: metadata.groundOffset,
   };
 });
 
 ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string }) => {
-  if (!asset.sourcePath || !asset.proxyPath) throw new Error('Percorso dell’asset Blender non valido.');
+  if (!asset.sourcePath || !asset.proxyPath) throw new Error('Invalid Blender asset path.');
   return buildBlendAssetProxy(asset.sourcePath, asset.proxyPath);
 });
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {
   const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
   if (!project.comments.some((comment) => comment.status === 'pending')) {
-    return { schemaVersion: 'BlenderPlanV1', summary: 'Esportazione della scena corrente senza istruzioni Astra.', assumptions: [], warnings: ['Nessun commento pending: sono state preservate scena, camera e animazioni esistenti.'], operations: [] };
+    return { schemaVersion: 'BlenderPlanV1', summary: 'Current scene export without Astra instructions.', assumptions: [], warnings: ['No pending comments: the existing scene, camera, and animations were preserved.'], operations: [] };
   }
   const settings = await readSettings();
-  if (!settings.apiKey) throw new Error('Configura prima la chiave API OpenAI nelle impostazioni.');
+  if (!settings.apiKey) throw new Error('Configure the OpenAI API key in Settings first.');
   const client = new OpenAI({ apiKey: settings.apiKey });
   const content: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify(compactProject(project)) }];
   if (payload.contactSheet?.startsWith('data:image/')) content.push({ type: 'input_image', image_url: payload.contactSheet, detail: 'low' });
@@ -500,10 +500,10 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
     input: [{ role: 'user', content }] as never,
     text: { format: { type: 'json_schema', name: 'blender_plan_v1', strict: true, schema: blenderPlanJsonSchema } } as never,
   });
-  if (!response.output_text) throw new Error('Astra non ha restituito un piano utilizzabile.');
+  if (!response.output_text) throw new Error('Astra did not return a usable plan.');
   const plan = BlenderPlanSchema.parse(JSON.parse(response.output_text));
   const errors = validatePlan(project, plan);
-  if (errors.length) throw new Error(`Il piano è stato rifiutato:\n${errors.join('\n')}`);
+  if (errors.length) throw new Error(`The plan was rejected:\n${errors.join('\n')}`);
   return plan;
 });
 
@@ -514,16 +514,16 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
   const project = ProjectSchema.parse(parsed.project);
   const selected = parsed.objectId ? project.objects.find((candidate) => candidate.id === parsed.objectId) : undefined;
   const object = parsed.target === 'camera' ? undefined : selected;
-  if (parsed.target === 'camera' && (!selected || selected.kind !== 'camera')) throw new Error('La camera selezionata non è valida.');
+  if (parsed.target === 'camera' && (!selected || selected.kind !== 'camera')) throw new Error('The selected camera is invalid.');
   if (parsed.target !== 'camera' && parsed.objectId && (!object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace)) {
-    throw new Error('Seleziona un personaggio o un elemento 3D animabile.');
+    throw new Error('Select an animatable character or 3D element.');
   }
-  if (object && !parsed.startPosition) throw new Error('La posizione iniziale del soggetto non è valida.');
-  if (!project.cameraCuts.some((scene) => scene.id === parsed.sceneId)) throw new Error('La scena attiva non esiste più.');
+  if (object && !parsed.startPosition) throw new Error('The subject starting position is invalid.');
+  if (!project.cameraCuts.some((scene) => scene.id === parsed.sceneId)) throw new Error('The active scene no longer exists.');
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene) => scene.id === parsed.sceneId);
   const sceneEnd = (scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1) - 1;
-  if (parsed.frame >= sceneEnd) throw new Error('Porta il cursore prima dell’ultimo fotogramma della scena per creare un movimento.');
+  if (parsed.frame >= sceneEnd) throw new Error('Move the playhead before the last frame of the scene to create motion.');
   const wasWarm = engine === 'laya' && Boolean(layaRuntimePromise);
   const loadStartedAt = Date.now();
   let modelLoadMs = 0;
@@ -536,7 +536,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
     modelLoadMs = Date.now() - loadStartedAt;
   } else {
     const settings = await readSettings();
-    if (!settings.jevApiKey) throw new Error('Configura prima la chiave API TypeSafe/Jev nelle impostazioni.');
+    if (!settings.jevApiKey) throw new Error('Configure the TypeSafe/Jev API key in Settings first.');
     jevApiKey = settings.jevApiKey;
   }
   let decisionMs = 0;
@@ -553,7 +553,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
       });
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        throw new Error(`Jev non ha completato la richiesta (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
+        throw new Error(`Jev did not complete the request (${response.status}).${detail ? ` ${detail.slice(0, 240)}` : ''}`);
       }
       raw = await response.json();
     }
@@ -569,7 +569,7 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
   const plan = BlenderPlanSchema.parse(payload.plan);
   const errors = validatePlan(project, plan);
   if (errors.length) throw new Error(errors.join('\n'));
-  if (!payload.projectPath) throw new Error('Salva il progetto prima di generare il file Blender.');
+  if (!payload.projectPath) throw new Error('Save the project before generating the Blender file.');
   const exportsRoot = path.join(path.dirname(payload.projectPath), 'exports');
   await fs.mkdir(exportsRoot, { recursive: true });
   const entries = await fs.readdir(exportsRoot).catch(() => [] as string[]);
@@ -594,7 +594,7 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
     const invocation = await blenderCommand([tempDir]);
     const output = await runProcess(invocation.command, [...invocation.prefix, '--background', '--python-exit-code', '1', '--python', scriptPath, '--', inputPath, planPath, blendPath, audioPath], tempDir);
     if (!output.includes('ABACO_ANIMATIC_COMPLETE') || !(await fs.stat(blendPath)).size) {
-      throw new Error('Blender non ha generato un file completo.');
+      throw new Error('Blender did not generate a complete file.');
     }
     await fs.writeFile(path.join(tempDir, 'blender.log'), output);
     await fs.rename(tempDir, finalDir);

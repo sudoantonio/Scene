@@ -325,7 +325,7 @@ const makeSceneCameraExclusive = (project: AbacoProject, scene: AbacoProject['ca
   const lens = evaluateProperty(source, 'lens', scene.frame) as number;
   const camera = structuredClone(source);
   camera.id = crypto.randomUUID();
-  camera.name = `Camera ${scene.name ?? 'scena'}`;
+  camera.name = `Camera ${scene.name ?? 'scene'}`;
   camera.transform = structuredClone(transform);
   camera.keyframes = source.keyframes
     .filter((key) => key.frame >= scene.frame && key.frame < sceneEnd)
@@ -339,7 +339,7 @@ const makeSceneCameraExclusive = (project: AbacoProject, scene: AbacoProject['ca
   return camera;
 };
 
-const renameScenes = (project: AbacoProject) => project.cameraCuts.sort((a, b) => a.frame - b.frame).forEach((scene, index) => { scene.name = `Scena ${index + 1}`; });
+const renameScenes = (project: AbacoProject) => project.cameraCuts.sort((a, b) => a.frame - b.frame).forEach((scene, index) => { scene.name = `Scene ${index + 1}`; });
 const syncScopedCommentRanges = (project: AbacoProject) => {
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   for (const comment of project.comments) {
@@ -507,7 +507,7 @@ export const useEditor = create<EditorState>((set, get) => {
       fresh.screenCrop = fresh.screenSpace && current.screenSpace ? structuredClone(current.screenCrop) : [0, 0, 0, 0];
       if (replacement.asset) fresh.asset = structuredClone(replacement.asset);
       if (replacement.kind === 'text') {
-        fresh.text = replacement.text?.trim() || 'Testo';
+        fresh.text = replacement.text?.trim() || 'Text';
         const sceneIds = new Set(fresh.sceneIds);
         for (const scene of next.cameraCuts) {
           if (!sceneIds.size || sceneIds.has(scene.id)) putKey(fresh, scene.frame, 'text', fresh.text, 'constant');
@@ -538,7 +538,7 @@ export const useEditor = create<EditorState>((set, get) => {
         const sourceNote = object.sceneNotes.filter((note) => note.frame <= sourceFrame).sort((a, b) => b.frame - a.frame)[0]?.text;
         if (sourceNote) object.sceneNotes.push({ frame: nextFrame, text: sourceNote });
       }
-      const newScene: AbacoProject['cameraCuts'][number] = { id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scena ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) };
+      const newScene: AbacoProject['cameraCuts'][number] = { id: crypto.randomUUID(), cameraId: sourceCut.cameraId, frame: nextFrame, source: 'user', commentIds: [], name: `Scene ${cuts.length + 1}`, transition: 'auto', lighting: structuredClone(sourceCut.lighting), background: structuredClone(sourceCut.background), framing: structuredClone(sourceCut.framing) };
       next.cameraCuts.push(newScene);
       for (const object of next.objects) {
         if (!object.sceneIds.length || object.kind === 'camera' || object.kind.includes('light')) continue;

@@ -24,7 +24,7 @@ describe('Regia con preset e standard portatili', () => {
       status: 'pending' as const,
     };
     const expanded = expandedDirection(comment);
-    expect(expanded).toContain('Progressione emotiva obbligatoria: Sicuro → Sorpreso → Spaventato → Scocciato');
+    expect(expanded).toContain('Progressione emotiva obbligatoria: Confident → Surprised → Frightened → Annoyed');
     expect(expanded).toContain('Non mediarle in un’unica posa');
     expect(expanded).toContain('#### Azioni e movimenti');
     expect(expanded.match(/#### Vincoli condivisi/g)).toHaveLength(1);
@@ -41,7 +41,7 @@ describe('Regia con preset e standard portatili', () => {
     useEditor.getState().loadProject(saved, '/test.abaco.json');
     useEditor.getState().setTimelineComment('object', p.cameraCuts[0].id, '/scocciato', target.id);
     expect(useEditor.getState().project.comments[0].presets).toHaveLength(1);
-    expect(expandedDirection(useEditor.getState().project.comments[0])).not.toContain('[Preset Si avvicina');
+    expect(expandedDirection(useEditor.getState().project.comments[0])).not.toContain('[Preset Approaches');
   });
   it('include lo standard e i prompt nel JSON senza dipendere dal file originale', async () => {
     const p = createProject();
@@ -53,7 +53,7 @@ describe('Regia con preset e standard portatili', () => {
     expect(reopened.animationStandard).toEqual(p.animationStandard);
     expect(reopened.comments[0].presets?.[0].prompt).toContain('Mantieni invariati');
     expect(reopened.animationBrief).toContain('attendi le risposte');
-    expect(reopened.animationBrief).toContain('[Preset Camera statica');
+    expect(reopened.animationBrief).toContain('[Preset Static camera');
     expect(p.comments[0].presets).toBeUndefined();
   });
   it('rende esplicita nel brief la costruzione per beat e pose contrastate', () => {
@@ -61,7 +61,7 @@ describe('Regia con preset e standard portatili', () => {
     const target = p.objects[0];
     p.comments.push({ id: crypto.randomUUID(), text: '/sorpreso /spaventato /scocciato', scope: 'object', sceneId: p.cameraCuts[0].id, targetIds: [target.id], startFrame: 1, endFrame: 72, status: 'pending' });
     const brief = prepareAnimationProject(p).animationBrief!;
-    expect(brief).toContain('Sorpreso → Spaventato → Scocciato');
+    expect(brief).toContain('Surprised → Frightened → Annoyed');
     expect(brief).toContain('Non limitarti a miscelare cursori emotivi');
   });
   it('mantiene i vecchi progetti validi e la descrizione narrativa vuota', () => {

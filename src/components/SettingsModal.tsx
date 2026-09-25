@@ -16,24 +16,24 @@ export default function SettingsModal({ onClose }: { onClose(): void }) {
   useEffect(() => { window.abaco?.getSettings().then((settings) => { setHasKey(settings.hasApiKey); setHasJevKey(settings.hasJevApiKey); setReasoning(settings.reasoning); setBlenderPath(settings.blenderPath); }); }, []);
   const browse = async () => { const path = await window.abaco?.chooseBlender(); if (path) setBlenderPath(path); };
   const save = async () => {
-    if (!window.abaco) return setStatus('Apri questa schermata nell’app desktop Electron.');
+    if (!window.abaco) return setStatus('Open this screen in the Electron desktop app.');
     await window.abaco.saveSettings({ apiKey: apiKey || undefined, jevApiKey: jevApiKey || undefined, reasoning, blenderPath: blenderPath || undefined });
-    setStatus('Impostazioni salvate.'); setHasKey(Boolean(apiKey) || hasKey); setHasJevKey(Boolean(jevApiKey) || hasJevKey); setApiKey(''); setJevApiKey('');
+    setStatus('Settings saved.'); setHasKey(Boolean(apiKey) || hasKey); setHasJevKey(Boolean(jevApiKey) || hasJevKey); setApiKey(''); setJevApiKey('');
   };
-  return <Modal title="Impostazioni" onClose={onClose}>
+  return <Modal title="Settings" onClose={onClose}>
     <div className="settings-form">
-      <label className="field"><span>Chiave API OpenAI</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? 'Chiave configurata · inserisci per sostituire' : 'sk-…'} /></div><small>Viene cifrata dal sistema e non entra mai nel progetto.</small></label>
-      <label className="field"><span>Chiave API TypeSafe · Jev</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={jevApiKey} onChange={(event) => setJevApiKey(event.target.value)} placeholder={hasJevKey ? 'Chiave configurata · inserisci per sostituire' : 'Chiave TypeSafe'} /></div><small>Serve solo a Jev. Laya gira in locale e non richiede una chiave; al primo uso scarica il modello. La chiave Jev viene cifrata e non entra nel progetto.</small></label>
-      <label className="field"><span>Ragionamento Astra</span><select value={reasoning} onChange={(event) => setReasoning(event.target.value as 'medium' | 'high')}><option value="medium">Medium · consigliato</option><option value="high">High · scene più complesse</option></select></label>
-      <label className="field"><span>Eseguibile Blender</span><div className="path-picker"><input value={blenderPath} onChange={(event) => setBlenderPath(event.target.value)} placeholder="Rilevato automaticamente" /><button className="icon" onClick={browse}><FolderOpen size={16} /></button></div><small>Su Mac cerca Blender in Applicazioni, Desktop e Applicazioni utente.</small></label>
-      <details className="advanced-panel settings-advanced"><summary>Progetto avanzato</summary><div className="settings-grid">
-        <label className="field"><span>Frame al secondo</span><input type="number" min="1" max="120" value={projectSettings.fps} onChange={(event) => updateSettings({ fps: Number(event.target.value) })} /></label>
-        <label className="field"><span>Durata (frame)</span><input type="number" min="1" value={projectSettings.frameEnd} onChange={(event) => updateSettings({ frameEnd: Number(event.target.value) })} /></label>
-        <label className="field"><span>Larghezza</span><input type="number" min="1" value={projectSettings.resolutionX} onChange={(event) => updateSettings({ resolutionX: Number(event.target.value) })} /></label>
-        <label className="field"><span>Altezza</span><input type="number" min="1" value={projectSettings.resolutionY} onChange={(event) => updateSettings({ resolutionY: Number(event.target.value) })} /></label>
+      <label className="field"><span>OpenAI API key</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? 'Key configured · enter a new one to replace it' : 'sk-…'} /></div><small>Encrypted by the system and never stored in the project.</small></label>
+      <label className="field"><span>TypeSafe API key · Jev</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={jevApiKey} onChange={(event) => setJevApiKey(event.target.value)} placeholder={hasJevKey ? 'Key configured · enter a new one to replace it' : 'TypeSafe key'} /></div><small>Used only by Jev. Laya runs locally and needs no key; it downloads the model on first use. The Jev key is encrypted and never stored in the project.</small></label>
+      <label className="field"><span>Astra reasoning</span><select value={reasoning} onChange={(event) => setReasoning(event.target.value as 'medium' | 'high')}><option value="medium">Medium · recommended</option><option value="high">High · more complex scenes</option></select></label>
+      <label className="field"><span>Blender executable</span><div className="path-picker"><input value={blenderPath} onChange={(event) => setBlenderPath(event.target.value)} placeholder="Detected automatically" /><button className="icon" onClick={browse}><FolderOpen size={16} /></button></div><small>On Mac, Blender is searched for in Applications, Desktop, and the user Applications folder.</small></label>
+      <details className="advanced-panel settings-advanced"><summary>Advanced project settings</summary><div className="settings-grid">
+        <label className="field"><span>Frames per second</span><input type="number" min="1" max="120" value={projectSettings.fps} onChange={(event) => updateSettings({ fps: Number(event.target.value) })} /></label>
+        <label className="field"><span>Duration (frames)</span><input type="number" min="1" value={projectSettings.frameEnd} onChange={(event) => updateSettings({ frameEnd: Number(event.target.value) })} /></label>
+        <label className="field"><span>Width</span><input type="number" min="1" value={projectSettings.resolutionX} onChange={(event) => updateSettings({ resolutionX: Number(event.target.value) })} /></label>
+        <label className="field"><span>Height</span><input type="number" min="1" value={projectSettings.resolutionY} onChange={(event) => updateSettings({ resolutionY: Number(event.target.value) })} /></label>
       </div></details>
       {status && <p className="settings-status">{status}</p>}
     </div>
-    <footer className="modal-actions"><button className="secondary" onClick={onClose}>Chiudi</button><button className="primary" onClick={save}>Salva impostazioni</button></footer>
+    <footer className="modal-actions"><button className="secondary" onClick={onClose}>Close</button><button className="primary" onClick={save}>Save settings</button></footer>
   </Modal>;
 }

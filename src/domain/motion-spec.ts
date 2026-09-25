@@ -27,18 +27,18 @@ const axisPart = (value: number, positive: string, negative: string) => value > 
 
 export function describeMotionSpec(spec: MotionSpec) {
   const parts = [
-    axisPart(spec.translation[0], 'avanti', 'indietro'),
-    axisPart(spec.translation[1], 'destra', 'sinistra'),
-    axisPart(spec.translation[2], 'alto', 'basso'),
-    axisPart(spec.rotation[0], 'roll destro', 'roll sinistro'),
-    axisPart(spec.rotation[1], 'pitch alto', 'pitch basso'),
-    axisPart(spec.rotation[2], 'yaw destro', 'yaw sinistro'),
+    axisPart(spec.translation[0], 'forward', 'backward'),
+    axisPart(spec.translation[1], 'right', 'left'),
+    axisPart(spec.translation[2], 'up', 'down'),
+    axisPart(spec.rotation[0], 'roll right', 'roll left'),
+    axisPart(spec.rotation[1], 'pitch up', 'pitch down'),
+    axisPart(spec.rotation[2], 'yaw right', 'yaw left'),
   ].filter(Boolean);
-  if (spec.path === 'orbit') parts.unshift('orbita');
-  if (spec.path === 'follow') parts.unshift('inseguimento');
-  if (spec.path === 'drawn') parts.unshift('tratto disegnato');
-  if (spec.framing.action === 'enter') parts.unshift(`entra nell’inquadratura da ${spec.framing.edge === 'left' ? 'sinistra' : spec.framing.edge === 'right' ? 'destra' : spec.framing.edge === 'top' ? 'sopra' : 'sotto'}`);
-  if (spec.framing.action === 'exit') parts.unshift(`esce dall’inquadratura verso ${spec.framing.edge === 'left' ? 'sinistra' : spec.framing.edge === 'right' ? 'destra' : spec.framing.edge === 'top' ? 'sopra' : 'sotto'}`);
-  if (spec.constraints.lookAtReference) parts.push('soggetto inquadrato');
-  return parts.join(' + ') || 'fermo';
+  if (spec.path === 'orbit') parts.unshift('orbit');
+  if (spec.path === 'follow') parts.unshift('follow');
+  if (spec.path === 'drawn') parts.unshift('drawn path');
+  if (spec.framing.action === 'enter') parts.unshift(`enters the frame from the ${spec.framing.edge}`);
+  if (spec.framing.action === 'exit') parts.unshift(`exits the frame toward the ${spec.framing.edge}`);
+  if (spec.constraints.lookAtReference) parts.push('subject kept in frame');
+  return parts.join(' + ') || 'still';
 }

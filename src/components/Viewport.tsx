@@ -47,10 +47,10 @@ function JevStrokeOverlay({ width, height, viewMode, getViewContext }: { width: 
   };
   if (!stroke.active && stroke.points.length < 2) return null;
   const polyline = stroke.points.map(([x, y]) => `${x * width},${y * height}`).join(' ');
-  return <svg className={`jev-stroke-overlay ${stroke.active ? 'drawing' : ''}`} aria-label="Disegna traiettoria Jev" width={width} height={height} viewBox={`0 0 ${width} ${height}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
+  return <svg className={`jev-stroke-overlay ${stroke.active ? 'drawing' : ''}`} aria-label="Draw Jev path" width={width} height={height} viewBox={`0 0 ${width} ${height}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
     <defs><marker id="jev-stroke-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs>
     {stroke.points.length > 1 && <polyline points={polyline} markerEnd="url(#jev-stroke-arrow)" />}
-    {stroke.active && stroke.points.length < 2 && <text x="50%" y="50%" textAnchor="middle">Trascina per disegnare la traiettoria</text>}
+    {stroke.active && stroke.points.length < 2 && <text x="50%" y="50%" textAnchor="middle">Drag to draw the path</text>}
   </svg>;
 }
 
@@ -160,7 +160,7 @@ function ObjBackground({ source, materials }: { source: string; materials?: stri
       loader.setMaterials(creator);
     }
     const object = loader.parse(source);
-    // Blender scrive gli OBJ con Y verso l'alto. Scene usa Z verso l'alto:
+    // Blender scrive gli OBJ con Y verso l'alto. Scenes usa Z verso l'alto:
     // incorporiamo la conversione nell'oggetto, quindi lo centriamo e lo
     // appoggiamo al piano per evitare offset residui del file sorgente.
     orientObjBackground(object);
@@ -702,9 +702,9 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
   const elevation = THREE.MathUtils.degToRad(scene.lighting.elevation);
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
-  if (collapsed) return <button className="live-camera-preview-collapsed" title="Espandi anteprima camera" aria-label="Espandi anteprima camera" onClick={() => setCollapsed(false)}><Video size={15} /></button>;
+  if (collapsed) return <button className="live-camera-preview-collapsed" title="Expand camera preview" aria-label="Expand camera preview" onClick={() => setCollapsed(false)}><Video size={15} /></button>;
   return <div className="live-camera-preview" style={{ width: aspect < 1 ? 'clamp(92px, 14%, 128px)' : undefined }}>
-    <button className="live-camera-preview-open" onClick={onOpen} title="Apri la vista camera" aria-label="Apri l'anteprima della camera">
+    <button className="live-camera-preview-open" onClick={onOpen} title="Open camera view" aria-label="Open camera preview">
     <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}><Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true }}>
       <WebGLContextGuard onLost={recoverRenderer} />
       <color attach="background" args={[dark ? '#353535' : '#f1f1ef']} />
@@ -714,15 +714,15 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
       <ShotCamera object={camera} aspect={aspect} frame={frame} />
     </Canvas><ReadonlyScreenLayers objects={objects} frame={frame} /></div></button>
-    <button className="live-camera-preview-find" title="Trova camera" aria-label="Trova camera" onClick={onFind}><Focus size={13} /></button>
-    <button className="live-camera-preview-collapse" title="Riduci anteprima camera" aria-label="Riduci anteprima camera" onClick={() => setCollapsed(true)}><Minimize2 size={13} /></button>
+    <button className="live-camera-preview-find" title="Find camera" aria-label="Find camera" onClick={onFind}><Focus size={13} /></button>
+    <button className="live-camera-preview-collapse" title="Collapse camera preview" aria-label="Collapse camera preview" onClick={() => setCollapsed(true)}><Minimize2 size={13} /></button>
   </div>;
 }
 
 export function ScreenAssetImage({ source, name = '' }: { source: string; name?: string }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [source]);
-  if (failed || !source) return <div className="screen-image-missing" title={name ? `Immagine non disponibile: ${name}` : 'Immagine non disponibile'}><ImageOff aria-hidden="true" /></div>;
+  if (failed || !source) return <div className="screen-image-missing" title={name ? `Image unavailable: ${name}` : 'Image unavailable'}><ImageOff aria-hidden="true" /></div>;
   return <img src={source} alt={name} draggable={false} onError={() => setFailed(true)} />;
 }
 
@@ -807,7 +807,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       const selected = selectedId === object.id;
       return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
         <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
-        {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Ruota livello" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Ridimensiona livello" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
+        {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Rotate layer" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Resize layer" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
       </div>;
     })}
   </div>;
@@ -1270,7 +1270,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         pending.x = 0; pending.y = 0; pending.persist = true; pending.timer = undefined;
         if (cameraView) tiltShotCameraFromTrackpad(x, y, persist);
         // La vista libera usa lo stesso free-look smussato del frame: ruota lo
-        // sguardo sul posto, senza orbitare attorno a un punto della scena.
+        // sguardo sul posto, senza orbitare attorno a un point della scena.
         else tiltViewFromTrackpad(orbitRef.current, x, y);
       }, 24);
       return;
@@ -1524,24 +1524,24 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
     {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
-    {cameraView && <button className="view-toggle active" title="Torna alla vista libera" aria-label="Vista libera" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Libera</span></button>}
+    {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Free view" onClick={() => setCameraView(false)}><LayoutTemplate size={15} /><span>Free</span></button>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
-      <div className="camera-drone-hint" aria-label="Comandi camera stile Blender">
-        <button className="camera-hint-close" title="Nascondi istruzioni" aria-label="Nascondi istruzioni" onClick={() => setCameraHintVisible(false)}>×</button>
-        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {selectedTransformable ? `muove ${selectedTransformable.name}` : cameraView ? 'muove la camera' : 'muove la visuale'}</span>
-        <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternativa</span>
-        <span><kbd>Q</kbd><kbd>E</kbd> giù / su</span>
-        <small>2 dita inclina · Shift + 2 dita sposta</small>
-        <small>Shift veloce · Alt lento</small>
+      <div className="camera-drone-hint" aria-label="Blender-style camera controls">
+        <button className="camera-hint-close" title="Hide instructions" aria-label="Hide instructions" onClick={() => setCameraHintVisible(false)}>×</button>
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {selectedTransformable ? `moves ${selectedTransformable.name}` : cameraView ? 'moves the camera' : 'moves the view'}</span>
+        <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> alternative</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> down / up</span>
+        <small>Two fingers tilt · Shift + two fingers pan</small>
+        <small>Shift fast · Alt slow</small>
       </div>
     </div>}
     <div className="viewport-top-right">
-      <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Nascondi traiettorie movimento' : 'Mostra traiettorie movimento'} title={showMotionPaths ? 'Nascondi traiettorie' : 'Mostra traiettorie'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
-      {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Strumento trasformazione">{([
-        ['translate', 'Sposta', Move3d],
-        ['rotate', 'Ruota', Rotate3d],
-        ['scale', 'Scala', Scaling],
-      ] as const).map(([mode, label, Icon]) => <button key={mode} disabled={!selectedTransformable} title={selectedTransformable ? label : `Seleziona un elemento per usare ${label.toLowerCase()}`} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
+      <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Hide motion paths' : 'Show motion paths'} title={showMotionPaths ? 'Hide paths' : 'Show paths'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
+      {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Transform tool">{([
+        ['translate', 'Move', Move3d],
+        ['rotate', 'Rotate', Rotate3d],
+        ['scale', 'Scale', Scaling],
+      ] as const).map(([mode, label, Icon]) => <button key={mode} disabled={!selectedTransformable} title={selectedTransformable ? label : `Select an element to use ${label.toLowerCase()}`} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
     </div>
     {!cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => setCameraView(true)} onFind={() => {
       const controls = orbitRef.current;
@@ -1553,10 +1553,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     }} />}
     {!hasContent && !cameraView && <div className="start-card">
       <div className="start-icon"><Box size={26} /></div>
-      <strong>Crea la prima scena</strong>
-      <p>Aggiungi una forma o un testo. Poi trascinalo direttamente nello spazio.</p>
-      <div><button className="primary" onClick={() => addObject('cube')}><Plus size={16} /> Forma</button><button className="secondary" onClick={() => addObject('text')}><TextCursorInput size={16} /> Testo</button></div>
+      <strong>Create your first scene</strong>
+      <p>Add a shape or text, then drag it directly in the workspace.</p>
+      <div><button className="primary" onClick={() => addObject('cube')}><Plus size={16} /> Shape</button><button className="secondary" onClick={() => addObject('text')}><TextCursorInput size={16} /> Text</button></div>
     </div>}
-    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Centra soggetto" title={`Ricentra l’inquadratura su ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Ripristina posizione iniziale" title={`Riporta ${selectedSubject.name} alla posizione della scena iniziale`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
+    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Center subject" title={`Recenter the frame on ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Restore starting position" title={`Return ${selectedSubject.name} to its position at the start of the scene`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
   </div>;
 }

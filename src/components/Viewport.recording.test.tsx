@@ -56,7 +56,7 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     render(<ScreenAssetImage source="asset-mancante.png" name="Bozza" />);
     fireEvent.error(screen.getByRole('img', { name: 'Bozza' }));
     expect(screen.queryByRole('img', { name: 'Bozza' })).not.toBeInTheDocument();
-    expect(screen.getByTitle('Immagine non disponibile: Bozza')).toBeInTheDocument();
+    expect(screen.getByTitle('Image unavailable: Bozza')).toBeInTheDocument();
   });
 
   it('usa un solo renderer WebGL per generare tutte le miniature', () => {
@@ -71,10 +71,10 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
 
   it('mantiene visibili i controlli esterni anche senza una selezione', () => {
     render(<Viewport />);
-    expect(screen.getByLabelText('Strumento trasformazione')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sposta' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Ruota' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Scala' })).toBeDisabled();
+    expect(screen.getByLabelText('Transform tool')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Scale' })).toBeDisabled();
   });
 
   it('salva la posa base modificata col trackpad anche quando REC è spento', () => {
@@ -113,11 +113,11 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
   it('salva una rotazione trackpad della camera quando REC è acceso', () => {
     const { container } = render(<><Viewport /><Timeline /></>);
     const scene = useEditor.getState().project.cameraCuts[0];
-    fireEvent.click(screen.getByRole('button', { name: 'Registra movimenti' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record motion' }));
     act(() => useEditor.getState().setFrame(scene.frame + 12));
     fireEvent.wheel(container.querySelector('.canvas-stage')!, { deltaX: 0, deltaY: 28, deltaMode: 0 });
     act(() => vi.advanceTimersByTime(400));
-    fireEvent.click(screen.getByRole('button', { name: 'Ferma registrazione movimento' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop motion recording' }));
     const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
     expect(camera.keyframes.some((key) => key.property === 'rotation' && key.purpose === 'motion' && key.frame === scene.frame + 12)).toBe(true);
   });
@@ -152,8 +152,8 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     const scenes = useEditor.getState().project.cameraCuts;
     const scene = scenes[sceneNumber - 1];
     const before = structuredClone(useEditor.getState().project);
-    fireEvent.click(screen.getByTitle(`Scena ${sceneNumber}`));
-    fireEvent.click(screen.getByRole('button', { name: 'Registra movimenti' }));
+    fireEvent.click(screen.getByTitle(`Scene ${sceneNumber}`));
+    fireEvent.click(screen.getByRole('button', { name: 'Record motion' }));
     act(() => {
       useEditor.getState().setFrame(scene.frame + 16);
       useEditor.getState().setPlaying(!paused);
@@ -167,7 +167,7 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     }
     fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
     const finalFrame = useEditor.getState().currentFrame;
-    fireEvent.click(screen.getByRole('button', { name: 'Ferma registrazione movimento' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop motion recording' }));
 
     const project = useEditor.getState().project;
     const camera = project.objects.find((object) => object.id === scene.cameraId)!;
@@ -183,7 +183,7 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
       expect(evaluateTransform(updated, other.frame + 20)).toEqual(evaluateTransform(original, other.frame + 20));
       expect(updated.keyframes.filter((key) => key.purpose === 'motion')).toEqual(original.keyframes.filter((key) => key.purpose === 'motion'));
     }
-    expect(screen.getByTitle(`Movimento camera · Scena ${sceneNumber} · trascina i bordi per cambiare velocità`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Motion camera · Scene ${sceneNumber} · drag the edges to change speed`)).toBeInTheDocument();
   });
 });
 
@@ -192,7 +192,7 @@ describe('controlli della vista libera', () => {
 
   it('usa automaticamente WASD per la visuale o per l’elemento selezionato', () => {
     render(<Viewport />);
-    expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove la visuale');
+    expect(screen.getByLabelText('Blender-style camera controls')).toHaveTextContent('moves the view');
     act(() => useEditor.getState().addObject('cube'));
     const cube = useEditor.getState().project.objects.find((object) => object.kind === 'cube')!;
     const before = evaluateTransform(cube, 1).position;
@@ -201,7 +201,7 @@ describe('controlli della vista libera', () => {
     fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
     const updated = useEditor.getState().project.objects.find((object) => object.id === cube.id)!;
     expect(evaluateTransform(updated, 1).position).not.toEqual(before);
-    expect(screen.getByLabelText('Comandi camera stile Blender')).toHaveTextContent('muove Cubo 1');
+    expect(screen.getByLabelText('Blender-style camera controls')).toHaveTextContent('moves Cube 1');
   });
 
   it('muove e salva con WASD anche la camera selezionata fuori da REC', () => {
@@ -234,10 +234,10 @@ describe('controlli della vista libera', () => {
 
   it('permette di nascondere e mostrare le traiettorie', () => {
     render(<Viewport />);
-    const hide = screen.getByRole('button', { name: 'Nascondi traiettorie movimento' });
+    const hide = screen.getByRole('button', { name: 'Hide motion paths' });
     expect(hide).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(hide);
-    const show = screen.getByRole('button', { name: 'Mostra traiettorie movimento' });
+    const show = screen.getByRole('button', { name: 'Show motion paths' });
     expect(show).toHaveAttribute('aria-pressed', 'false');
     expect(window.localStorage.getItem('scene-show-motion-paths')).toBe('false');
   });
@@ -265,12 +265,12 @@ describe('controlli della vista libera', () => {
 
   it('mostra solo la miniatura camera e permette di ridurla', () => {
     render(<Viewport />);
-    expect(screen.queryByRole('button', { name: 'Frame della ripresa' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Camera · Scena/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Riduci anteprima camera' }));
-    expect(screen.queryByRole('button', { name: "Apri l'anteprima della camera" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Espandi anteprima camera' }));
-    expect(screen.getByRole('button', { name: "Apri l'anteprima della camera" })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Shot frame' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Camera · Scene/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse camera preview' }));
+    expect(screen.queryByRole('button', { name: "Open camera preview" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand camera preview' }));
+    expect(screen.getByRole('button', { name: "Open camera preview" })).toBeInTheDocument();
   });
 });
 
@@ -286,7 +286,7 @@ describe('azioni rapide sul soggetto', () => {
       useEditor.getState().setCameraView(true);
     });
     render(<Viewport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Ripristina posizione iniziale' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore starting position' }));
     const state = useEditor.getState();
     const object = state.project.objects.find((item) => item.id === state.selectedId)!;
     expect(evaluateTransform(object, state.currentFrame).position).toEqual([2, 1, 1]);

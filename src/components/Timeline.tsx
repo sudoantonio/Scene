@@ -210,7 +210,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
   const noteBadge = (selection: TrackSelection, className = '') => {
     const note = findTrackComment(selection);
     if (!note) return null;
-    return <span className={`timeline-comment-badge ${className}`} title={note.text} aria-label={`Modifica commento: ${note.text}`} role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); openComment(selection); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openComment(selection); } }}><MessageCircle size={11} /></span>;
+    return <span className={`timeline-comment-badge ${className}`} title={note.text} aria-label={`Edit comment: ${note.text}`} role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); openComment(selection); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openComment(selection); } }}><MessageCircle size={11} /></span>;
   };
   const zoomTimelineFromWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (!event.ctrlKey && !event.metaKey) return;
@@ -313,33 +313,33 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       const motionEnd = preview?.end ?? storedMotionEnd;
       const active = selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === scene.id;
       const width = Math.max(0.2, ((motionEnd - motionStart) / Math.max(1, end - start + 1)) * 100);
-      return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${camera ? 'camera-motion-segment' : ''} ${preview ? 'resizing' : ''} ${active ? 'selected-block' : ''}`} style={{ left: left(motionStart), width: `${width}%` }} title={`Movimento ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scena'} · trascina i bordi per cambiare velocità`} onClick={(event) => {
+      return [<button key={`${motionObject.id}-${scene.id}-movement`} className={`recorded-motion-segment ${camera ? 'camera-motion-segment' : ''} ${preview ? 'resizing' : ''} ${active ? 'selected-block' : ''}`} style={{ left: left(motionStart), width: `${width}%` }} title={`Motion ${camera ? 'camera' : motionObject.name} · ${scene.name ?? 'Scene'} · drag the edges to change speed`} onClick={(event) => {
         event.stopPropagation();
         if (frame < scene.frame || frame >= sceneEnd) setFrame(firstFrame);
         if (motionObject.kind !== 'camera') select(motionObject.id);
         selectMotion({ objectId: motionObject.id, sceneId: scene.id });
         window.dispatchEvent(new CustomEvent('abaco:edit-motion'));
-        setSelectedTrack({ scope: camera ? 'framing' : 'object', sceneId: scene.id, objectId: camera ? undefined : motionObject.id, label: `Movimento ${camera ? 'camera' : motionObject.name}` });
+        setSelectedTrack({ scope: camera ? 'framing' : 'object', sceneId: scene.id, objectId: camera ? undefined : motionObject.id, label: `Motion ${camera ? 'camera' : motionObject.name}` });
         setDeleteTarget({ kind: 'motion', objectId: motionObject.id, sceneId: scene.id });
         setCommentDraft(undefined);
         setTransitionDraft(undefined);
       }}>
-        <span className="motion-resize-handle start" role="separator" aria-label="Ridimensiona inizio movimento" title="Trascina per ridimensionare l’inizio" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} />
-        <span className="motion-clip-caption"><MoveRight className="timeline-motion-icon" size={11} /><span>Movimento</span><small>{realPoints.length} punti</small></span>
-        <span className="motion-key-ticks">{realPoints.map((key, index) => <span key={key.id} role="button" tabIndex={0} title={`Seleziona il punto al frame ${key.frame}`} aria-label={`Punto movimento al frame ${key.frame}`} data-edge={index === 0 ? 'start' : index === realPoints.length - 1 ? 'end' : undefined} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); select(motionObject.kind === 'camera' ? undefined : motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); select(motionObject.kind === 'camera' ? undefined : motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span>
-        <span className="motion-resize-handle end" role="separator" aria-label="Ridimensiona fine movimento" title="Trascina per ridimensionare la fine" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} />
+        <span className="motion-resize-handle start" role="separator" aria-label="Resize motion start" title="Drag to resize the start" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'start', event)} />
+        <span className="motion-clip-caption"><MoveRight className="timeline-motion-icon" size={11} /><span>Motion</span><small>{realPoints.length} points</small></span>
+        <span className="motion-key-ticks">{realPoints.map((key, index) => <span key={key.id} role="button" tabIndex={0} title={`Select the point at frame ${key.frame}`} aria-label={`Motion point at frame ${key.frame}`} data-edge={index === 0 ? 'start' : index === realPoints.length - 1 ? 'end' : undefined} className={`motion-key-tick ${deleteTarget?.kind === 'keyframe' && deleteTarget.keyframeId === key.id ? 'selected' : ''}`} style={{ left: `${((key.frame - firstFrame) / Math.max(1, lastMotionFrame - firstFrame)) * 100}%` }} onClick={(event) => { event.stopPropagation(); if (motionPointDragged.current) return; setPlaying(false); select(motionObject.kind === 'camera' ? undefined : motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setPlaying(false); select(motionObject.kind === 'camera' ? undefined : motionObject.id); selectMotion({ objectId: motionObject.id, sceneId: scene.id, keyframeId: key.id }); setDeleteTarget({ kind: 'keyframe', objectId: motionObject.id, keyframeId: key.id }); setFrame(key.frame); }} onPointerDown={(event) => beginMoveMotionPoint(motionObject, scene.id, scene.frame, sceneEnd, key.id, key.frame, event)} />)}</span>
+        <span className="motion-resize-handle end" role="separator" aria-label="Resize motion end" title="Drag to resize the end" onPointerDown={(event) => beginResizeMotion(motionObject, scene.id, scene.frame, sceneEnd, firstFrame, storedMotionEnd, 'end', event)} />
       </button>];
     });
     if (!clips.length) return null;
-    return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy">{camera ? <Video size={13} /> : <MoveRight size={13} />}Movimento {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
+    return <Fragment key={`${camera ? 'camera' : object!.id}-motion-track`}><div className={`track-label movement-label ${camera ? 'camera-movement-label' : ''}`}><span className="movement-hierarchy">{camera ? <Video size={13} /> : <MoveRight size={13} />}Motion {camera ? 'camera' : ''}</span></div><div className={`track movement-track ${camera ? 'camera-movement-track' : ''}`} onClick={seek}>{clips}<i style={{ left: left(frame) }} /></div></Fragment>;
   };
   const transitionMarkers = scenes.slice(1).map((scene, index) => {
     const from = scenes[index];
     const note = project.comments.find((comment) => comment.kind === 'transition' && comment.fromSceneId === from.id && comment.toSceneId === scene.id);
-    return <button key={`transition-${scene.id}`} className={`transition-marker ${note ? 'has-note' : ''}`} style={{ left: left(scene.frame) }} title={note?.text ?? 'Aggiungi una nota alla transizione'} onClick={(event) => {
+    return <button key={`transition-${scene.id}`} className={`transition-marker ${note ? 'has-note' : ''}`} style={{ left: left(scene.frame) }} title={note?.text ?? 'Add a transition note'} onClick={(event) => {
       event.stopPropagation();
       setCommentDraft(undefined);
-      setTransitionDraft({ fromId: from.id, toId: scene.id, label: `${from.name ?? `Scena ${index + 1}`} → ${scene.name ?? `Scena ${index + 2}`}`, text: note?.text ?? '' });
+      setTransitionDraft({ fromId: from.id, toId: scene.id, label: `${from.name ?? `Scene ${index + 1}`} → ${scene.name ?? `Scene ${index + 2}`}`, text: note?.text ?? '' });
     }}>{note ? <MessageCircle size={11} /> : <Plus size={12} />}</button>;
   });
   useEffect(() => {
@@ -350,7 +350,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       select(undefined);
       setSelectedTimelineObjectIds(new Set());
       setFrame(scene.frame);
-      setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' });
+      setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scene' });
       setDeleteTarget({ kind: 'scene', sceneId: scene.id });
       setCommentDraft(undefined);
       setTransitionDraft(undefined);
@@ -420,18 +420,18 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
     <header className="timeline-toolbar">
       {collapsed && <div className="timeline-mini-row">
         <div className="collapsed-scene-row">
-          <div className="collapsed-scene-overview" role="group" aria-label="Timeline ridotta delle scene">
+          <div className="collapsed-scene-overview" role="group" aria-label="Collapsed scene timeline">
             <div className="collapsed-scene-content" style={{ width: `${Math.max(800, Math.round(durationSeconds * timelineZoom))}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
               {scenes.map((scene, index) => {
               const nextFrame = scenes[index + 1]?.frame ?? end + 1;
               const stripLeft = ((scene.frame - start) / project.settings.fps) * timelineZoom;
               const stripWidth = ((nextFrame - scene.frame) / project.settings.fps) * timelineZoom;
-              return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scena ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={`Anteprima ${scene.name ?? `Scena ${index + 1}`}`} style={{ left: `${stripLeft}px`, width: `${stripWidth}px`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
+              return <button key={scene.id} type="button" className={`collapsed-scene-segment ${activeSceneIndex === index ? 'active' : ''}`} aria-label={`${scene.name ?? `Scene ${index + 1}`} · frame ${scene.frame}-${nextFrame - 1}`} title={`Preview ${scene.name ?? `Scene ${index + 1}`}`} style={{ left: `${stripLeft}px`, width: `${stripWidth}px`, backgroundImage: sceneThumbnails[scene.id] ? `linear-gradient(rgba(20,20,20,.18), rgba(20,20,20,.18)), url(${sceneThumbnails[scene.id]})` : undefined }} onClick={(event) => { event.stopPropagation(); setFrame(frameInsideBlock(event, scene.frame, nextFrame)); }}><span>{index + 1}</span></button>;
               })}
               <i className="collapsed-scene-playhead" style={{ left: `${((frame - start) / project.settings.fps) * timelineZoom}px` }} />
             </div>
           </div>
-          <button type="button" className="collapsed-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla timeline ridotta" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={13} /></button>
+          <button type="button" className="collapsed-add-scene" title="Add a new scene" aria-label="Add scene from collapsed timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={15} /></button>
         </div>
       </div>}
       <div className="timeline-control-row">
@@ -440,53 +440,53 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
       </div>
       <div className="timeline-center-stack">
         <div className="transport timeline-transport">
-          <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Taglia la clip al cursore" aria-label="Taglia la clip al cursore"><Scissors size={15} /></button>
-          <button className="icon" title="Vai all'inizio" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
-          <button className="icon" title="Frame precedente" aria-label="Frame precedente" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
+          <button className="split-button icon" disabled={!canSplit} onClick={splitScene} title="Split clip at playhead" aria-label="Split clip at playhead"><Scissors size={15} /></button>
+          <button className="icon" title="Go to start" onClick={() => setFrame(start)}><ChevronsLeft size={16} /></button>
+          <button className="icon" title="Previous frame" aria-label="Previous frame" onClick={() => setFrame(frame - 1)}><ChevronLeft size={17} /></button>
           <button className="play" onClick={() => setPlaying(!playing)}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
-          <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Ferma registrazione · ${recordingSession.touchedObjectIds.length} soggetti mossi` : 'Registra movimenti di camera e oggetti'} aria-label={recordingSession ? 'Ferma registrazione movimento' : 'Registra movimenti'} onClick={toggleRecording}><i /></button>
-          <button className="icon" title="Frame successivo" aria-label="Frame successivo" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
-          <button className="icon" title="Vai alla fine" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
+          <button className={`timeline-record ${recordingSession ? 'active' : ''}`} disabled={!activeScene} title={recordingSession ? `Stop recording · ${recordingSession.touchedObjectIds.length} moved subjects` : 'Record camera and object motion'} aria-label={recordingSession ? 'Stop motion recording' : 'Record motion'} onClick={toggleRecording}><i /></button>
+          <button className="icon" title="Next frame" aria-label="Next frame" onClick={() => setFrame(frame + 1)}><ChevronRight size={17} /></button>
+          <button className="icon" title="Go to end" onClick={() => setFrame(end)}><ChevronsRight size={16} /></button>
         </div>
       </div>
-      <div className="timeline-actions"><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon" title={collapsed ? 'Apri timeline' : 'Riduci timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
+      <div className="timeline-actions"><span className="duration">{durationSeconds.toFixed(1)} s</span><button className="icon timeline-toggle" title={collapsed ? 'Open timeline' : 'Collapse timeline'} aria-label={collapsed ? 'Open timeline' : 'Collapse timeline'} onClick={onToggleCollapse}>{collapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}</button></div>
       </div>
     </header>
-    {commentDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommentDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Commento ${commentDraft.label}`}>
-      <div className="comment-popover-head"><span title={commentDraft.label}>Commento · {commentDraft.label}</span><button className="icon" title="Chiudi" onClick={() => setCommentDraft(undefined)}><X size={14} /></button></div>
+    {commentDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommentDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Comment ${commentDraft.label}`}>
+      <div className="comment-popover-head"><span title={commentDraft.label}>Comment · {commentDraft.label}</span><button className="icon" title="Close" onClick={() => setCommentDraft(undefined)}><X size={14} /></button></div>
       <DirectionInput value={commentDraft.text} scope={commentDraft.scope} onChange={text => setCommentDraft({ ...commentDraft, text })} onSave={saveComment} onClose={() => setCommentDraft(undefined)} />
-      <div className="comment-popover-actions">{findTrackComment(commentDraft) && <button className="subtle danger" onClick={removeComment}><Trash2 size={13} /> Elimina</button>}<button className="subtle" onClick={() => setCommentDraft(undefined)}>Annulla</button><button className="primary" disabled={!commentDraft.text.trim()} onClick={saveComment}><Check size={14} /> Salva</button></div>
+      <div className="comment-popover-actions">{findTrackComment(commentDraft) && <button className="subtle danger" onClick={removeComment}><Trash2 size={13} /> Delete</button>}<button className="subtle" onClick={() => setCommentDraft(undefined)}>Cancel</button><button className="primary" disabled={!commentDraft.text.trim()} onClick={saveComment}><Check size={14} /> Save</button></div>
     </div></div>}
-    {transitionDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransitionDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Transizione ${transitionDraft.label}`}>
-      <div className="comment-popover-head"><span title={transitionDraft.label}>Transizione · {transitionDraft.label}</span><button className="icon" title="Chiudi" onClick={() => setTransitionDraft(undefined)}><X size={14} /></button></div>
-      <textarea autoFocus placeholder="Descrivi la transizione" value={transitionDraft.text} onChange={(event) => setTransitionDraft({ ...transitionDraft, text: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveTransition(); if (event.key === 'Escape') setTransitionDraft(undefined); }} />
-      <div className="comment-popover-actions"><button className="subtle" onClick={() => setTransitionDraft(undefined)}>Annulla</button><button className="primary" disabled={!transitionDraft.text.trim()} onClick={saveTransition}><Check size={14} /> Salva</button></div>
+    {transitionDraft && <div className="timeline-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransitionDraft(undefined); }}><div className="timeline-comment-popover" role="dialog" aria-modal="true" aria-label={`Transition ${transitionDraft.label}`}>
+      <div className="comment-popover-head"><span title={transitionDraft.label}>Transition · {transitionDraft.label}</span><button className="icon" title="Close" onClick={() => setTransitionDraft(undefined)}><X size={14} /></button></div>
+      <textarea autoFocus placeholder="Describe the transition" value={transitionDraft.text} onChange={(event) => setTransitionDraft({ ...transitionDraft, text: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveTransition(); if (event.key === 'Escape') setTransitionDraft(undefined); }} />
+      <div className="comment-popover-actions"><button className="subtle" onClick={() => setTransitionDraft(undefined)}>Cancel</button><button className="primary" disabled={!transitionDraft.text.trim()} onClick={saveTransition}><Check size={14} /> Save</button></div>
     </div></div>}
     <div className="timeline-scroll" onClick={seekFromEmptyTimeline} onWheelCapture={zoomTimelineFromWheel} style={{ '--timeline-content-width': `${Math.round(durationSeconds * timelineZoom)}px`, '--timeline-second-width': `${timelineZoom}px` } as React.CSSProperties}>
-      <div className="ruler-label">Tempo</div>
+      <div className="ruler-label">Time</div>
       <div className="ruler timeline-ruler" onClick={seek}>{rulerSeconds.map((second) => <span key={second} style={{ left: left(start + second * project.settings.fps) }}>{formatRulerTime(second)}</span>)}<i style={{ left: left(frame) }} /></div>
-      <div className="track-label scene-label locked-label"><b><Video size={12} /> Scene</b><LockKeyhole size={12} /></div>
-      <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scena' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
+      <div className="track-label scene-label locked-label"><b><Video size={12} /> Scenes</b><LockKeyhole size={12} /></div>
+      <div className="track scene-track" onClick={(event) => { seek(event); const rect = event.currentTarget.getBoundingClientRect(); const clickedFrame = start + ((event.clientX - rect.left) / rect.width) * (end - start); const scene = scenes.filter((item) => item.frame <= clickedFrame).at(-1) ?? scenes[0]; if (scene) { select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack({ scope: 'scene', sceneId: scene.id, label: scene.name ?? 'Scene' }); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); } }}>{scenes.map((scene, index) => {
         const nextFrame = scenes[index + 1]?.frame ?? end + 1;
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
-        const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scena ${index + 1}` };
+        const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scene ${index + 1}` };
         return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }}>
-          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scena ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(isSelectedTrack(sceneSelection) ? scene.frame : frameInsideBlock(event, scene.frame, nextFrame)); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
-            <span className="clip-title"><span className="clip-title-text">{scene.name ?? `Scena ${index + 1}`}</span>{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
+          <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `linear-gradient(90deg,rgba(20,22,22,.1),rgba(20,22,22,.02)),url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scene ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(isSelectedTrack(sceneSelection) ? scene.frame : frameInsideBlock(event, scene.frame, nextFrame)); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
+            <span className="clip-title"><span className="clip-title-text">{scene.name ?? `Scene ${index + 1}`}</span>{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
           </button>
           <span className="clip-resize-handle" onPointerDown={(event) => beginResize(index, event)} />
         </div>;
-      })}{transitionMarkers}<button className="timeline-add-scene" title="Aggiungi una nuova scena" aria-label="Aggiungi scena dalla timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={16} /></button><i style={{ left: left(frame) }} /></div>
+      })}{transitionMarkers}<button className="timeline-add-scene" title="Add a new scene" aria-label="Add scene from timeline" onClick={(event) => { event.stopPropagation(); addShot(); }}><Plus size={16} /></button><i style={{ left: left(frame) }} /></div>
       {renderMotionTrack(undefined, true)}
       {timelineObjects.map((object) => { const displayName = object.name; const objectVisible = evaluateProperty(object, 'visibility', frame) as boolean; const audioRange = object.kind === 'audio' ? objectPresenceRange(object, start, end + 1) : undefined; return <Fragment key={object.id}><div className={`track-pair object-row ${selectedTimelineObjectIds.has(object.id) || selectedId === object.id ? 'active' : ''}`}>
         <div className="track-label timeline-object-label" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/abaco-object', object.id); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData('text/abaco-object'); if (sourceId) reorderObjects(sourceId, object.id); }}>
-          <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={(event) => { selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scena'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Nascondi' : 'Mostra'} aria-label={objectVisible ? `Nascondi ${displayName}` : `Mostra ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Elimina" aria-label={`Elimina ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
+          <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={(event) => { selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scene'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scene'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Hide' : 'Show'} aria-label={objectVisible ? `Hide ${displayName}` : `Show ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Delete" aria-label={`Delete ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
         </div>
         <div className="track presence-track" onClick={seek}>
           {object.kind === 'audio' ? audioRange && <button className={`presence-segment audio-layer ${selectedId === object.id ? 'selected-block' : ''}`} style={{ left: left(audioRange[0]), width: `${((audioRange[1] - audioRange[0]) / Math.max(1, end - start + 1)) * 100}%` }} title={`${displayName} · ${(object.audio.duration).toFixed(1)} s`} onClick={(event) => { event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); setTransitionDraft(undefined); setCommentDraft(undefined); }}><AudioWaveform values={object.audio.waveform} /><span className="audio-clip-label"><Music2 size={11} />{displayName}</span></button> : scenes.map((scene, index) => {
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
-            const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scena ${index + 1}`}` };
+            const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scene ${index + 1}`}` };
             if (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id)) return null;
             const storedRange = objectPresenceRange(object, scene.frame, clipEnd);
             const preview = presencePreview?.objectId === object.id && presencePreview.sceneId === scene.id ? presencePreview : undefined;
@@ -495,7 +495,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
             const width = ((range[1] - range[0]) / Math.max(1, end - start + 1)) * 100;
             return <button key={`${object.id}-${scene.id}`} className={`presence-segment ${object.kind === 'text' && object.screenSpace ? 'text-layer' : object.screenSpace ? 'image-layer' : ''} ${preview ? 'resizing' : ''} ${isSelectedTrack(selection) ? 'selected-block' : ''}`} style={{ left: left(range[0]), width: `${width}%` }} title={`${displayName} · frame ${range[0]}–${range[1] - 1}`} onClick={(event) => {
               event.stopPropagation(); setFrame(isSelectedTrack(selection) ? scene.frame : frameInsideBlock(event, range[0], range[1])); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'segment', objectId: object.id, sceneId: scene.id }); setTransitionDraft(undefined); setCommentDraft(undefined); setSelectedTrack(selection);
-            }}><span className="presence-resize-handle start" role="separator" aria-label="Ridimensiona inizio elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Presente</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Ridimensiona fine elemento" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
+            }}><span className="presence-resize-handle start" role="separator" aria-label="Resize element start" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Present</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Resize element end" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
           })}
           <i style={{ left: left(frame) }} />
         </div>

@@ -28,7 +28,7 @@ describe('Punti e maniglie del movimento', () => {
 
   it('aggiunge una scena direttamente dalla timeline', () => {
     render(<Timeline />);
-    const addScene = screen.getByRole('button', { name: 'Aggiungi scena dalla timeline' });
+    const addScene = screen.getByRole('button', { name: 'Add scene from timeline' });
     expect(addScene.closest('.scene-track')).not.toBeNull();
     fireEvent.click(addScene);
     expect(useEditor.getState().project.cameraCuts).toHaveLength(2);
@@ -46,7 +46,7 @@ describe('Punti e maniglie del movimento', () => {
 
   it('al secondo clic su una scena torna al suo inizio', () => {
     const { container } = render(<Timeline />);
-    const scene = container.querySelector<HTMLButtonElement>('.scene-image[title="Scena 1"]')!;
+    const scene = container.querySelector<HTMLButtonElement>('.scene-image[title="Scene 1"]')!;
     vi.spyOn(scene, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
     fireEvent.click(scene, { clientX: 360 });
     expect(useEditor.getState().currentFrame).toBe(37);
@@ -57,7 +57,7 @@ describe('Punti e maniglie del movimento', () => {
   it('al secondo clic sul rettangolo di un elemento torna all’inizio della scena', () => {
     useEditor.getState().addObject('cube');
     render(<Timeline />);
-    const segment = screen.getByTitle(/Cubo 1 · frame/);
+    const segment = screen.getByTitle(/Cube 1 · frame/);
     vi.spyOn(segment, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
     fireEvent.click(segment, { clientX: 360 });
     expect(useEditor.getState().currentFrame).toBe(37);
@@ -68,7 +68,7 @@ describe('Punti e maniglie del movimento', () => {
   it.each([1, 72])('il punto al frame %s seleziona quel fotogramma senza ridimensionare', (frame) => {
     useEditor.setState({ cameraView: true });
     render(<Timeline />);
-    const point = screen.getByRole('button', { name: `Punto movimento al frame ${frame}` });
+    const point = screen.getByRole('button', { name: `Motion point at frame ${frame}` });
     expect(point).toHaveAttribute('data-edge', frame === 1 ? 'start' : 'end');
     fireEvent.pointerDown(point, { clientX: 100 });
     fireEvent.pointerUp(window, { clientX: 100 });
@@ -81,12 +81,12 @@ describe('Punti e maniglie del movimento', () => {
     const { container } = render(<Timeline />);
     const track = container.querySelector('.movement-track')!;
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 720, width: 720 } as DOMRect);
-    const first = screen.getByRole('button', { name: 'Punto movimento al frame 1' });
+    const first = screen.getByRole('button', { name: 'Motion point at frame 1' });
     fireEvent.pointerDown(first, { pointerId: 1, clientX: 100 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 180 });
     fireEvent.pointerCancel(window, { pointerId: 1, clientX: 180 });
     expect(motionFrames()).toEqual([1, 36, 72]);
-    const middle = screen.getByRole('button', { name: 'Punto movimento al frame 36' });
+    const middle = screen.getByRole('button', { name: 'Motion point at frame 36' });
     fireEvent.pointerDown(middle, { pointerId: 2, clientX: 300 });
     fireEvent.pointerMove(window, { pointerId: 2, clientX: 400 });
     fireEvent.pointerUp(window, { pointerId: 2, clientX: 400 });
@@ -99,11 +99,11 @@ describe('Punti e maniglie del movimento', () => {
   it('seleziona una barra e un punto senza cambiare la modalità della vista', () => {
     useEditor.setState({ cameraView: true });
     render(<Timeline />);
-    const cameraMotion = screen.getByTitle(/Movimento camera/);
+    const cameraMotion = screen.getByTitle(/Motion camera/);
     expect(cameraMotion).toHaveClass('camera-motion-segment');
     fireEvent.click(cameraMotion);
     expect(useEditor.getState().cameraView).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Motion point at frame 36' }));
     expect(useEditor.getState().cameraView).toBe(true);
     expect(useEditor.getState().currentFrame).toBe(36);
   });
@@ -112,7 +112,7 @@ describe('Punti e maniglie del movimento', () => {
     useEditor.getState().addObject('cube');
     const selectedBefore = useEditor.getState().selectedId;
     render(<Timeline />);
-    fireEvent.click(screen.getByRole('button', { name: 'Punto movimento al frame 36' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Motion point at frame 36' }));
     expect(useEditor.getState().currentFrame).toBe(36);
     expect(selectedBefore).toBeTruthy();
     expect(useEditor.getState().selectedId).toBeUndefined();
@@ -122,7 +122,7 @@ describe('Punti e maniglie del movimento', () => {
   it('a timeline chiusa mostra tutte le scene nella barra cumulativa', () => {
     useEditor.getState().addShot();
     const { container } = render(<Timeline collapsed />);
-    const overview = screen.getByRole('group', { name: 'Timeline ridotta delle scene' });
+    const overview = screen.getByRole('group', { name: 'Collapsed scene timeline' });
     expect(overview).toBeVisible();
     const segments = container.querySelectorAll('.collapsed-scene-segment');
     expect(segments).toHaveLength(2);
@@ -130,22 +130,22 @@ describe('Punti e maniglie del movimento', () => {
     expect(segments[1]).toHaveStyle({ left: '405px', width: '405px' });
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
     expect(container.querySelector('.collapsed-scene-content')).toHaveStyle({ '--timeline-second-width': '135px' });
-    expect(screen.queryByRole('button', { name: 'Elimina blocco selezionato' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete selected block' })).not.toBeInTheDocument();
     expect(screen.queryByTitle('Inquadratura a schermo intero')).not.toBeInTheDocument();
     expect(container.querySelector('.timeline-camera-zoom')).not.toBeInTheDocument();
-    expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Registra movimenti' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Aggiungi scena dalla timeline ridotta' }));
+    expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Record motion' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add scene from collapsed timeline' }));
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
   });
 
   it('a timeline aperta non mostra la barra ridotta delle scene', () => {
     render(<Timeline />);
-    expect(screen.queryByRole('group', { name: 'Timeline ridotta delle scene' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Collapsed scene timeline' })).not.toBeInTheDocument();
   });
 
   it('trascinare un punto sposta solo quel punto e non riscala gli altri tempi', () => {
     render(<Timeline />);
-    const point = screen.getByRole('button', { name: 'Punto movimento al frame 1' });
+    const point = screen.getByRole('button', { name: 'Motion point at frame 1' });
     const track = point.closest('.movement-track')!;
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
     fireEvent.pointerDown(point, { clientX: 0 });
@@ -158,7 +158,7 @@ describe('Punti e maniglie del movimento', () => {
 
   it('la maniglia resta indipendente e ridimensiona l’intero movimento', () => {
     render(<Timeline />);
-    const handle = screen.getByRole('separator', { name: 'Ridimensiona fine movimento' });
+    const handle = screen.getByRole('separator', { name: 'Resize motion end' });
     expect(handle.closest('.motion-key-ticks')).toBeNull();
     vi.spyOn(handle.closest('.movement-track')!, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
     fireEvent.pointerDown(handle, { clientX: 720 });

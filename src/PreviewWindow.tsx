@@ -14,7 +14,7 @@ function CameraOutput({ state }: { state: PreviewState }) {
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const scene = scenes.filter((item) => item.frame <= frame).at(-1) ?? scenes[0];
   const camera = project.objects.find((object) => object.id === scene?.cameraId && object.kind === 'camera');
-  if (!scene || !camera) return <div className="preview-empty">Nessuna inquadratura disponibile</div>;
+  if (!scene || !camera) return <div className="preview-empty">No camera view available</div>;
   const aspect = project.settings.resolutionX / project.settings.resolutionY;
   const lightingStyle = { neutral: { ambient: .72, key: 1.7 }, soft: { ambient: 1.05, key: .9 }, warm: { ambient: .68, key: 1.75 }, dramatic: { ambient: .22, key: 2.7 } }[scene.lighting.preset];
   const angle = THREE.MathUtils.degToRad(scene.lighting.direction);
@@ -41,7 +41,7 @@ function CameraOutput({ state }: { state: PreviewState }) {
 export default function PreviewWindow() {
   const [state, setState] = useState<PreviewState | null>(null);
   useEffect(() => {
-    document.title = 'Inquadratura — Scene';
+    document.title = 'Camera Preview — Scene';
     let active = true;
     let receivedState = false;
     let latestFrame: number | undefined;
@@ -60,6 +60,6 @@ export default function PreviewWindow() {
     return () => { active = false; removeState?.(); removeFrame?.(); };
   }, []);
   return <main className={`preview-monitor theme-${state?.theme ?? 'dark'}`}>
-    {state ? <CameraOutput state={state} /> : <div className="preview-empty">In attesa dell’inquadratura…</div>}
+    {state ? <CameraOutput state={state} /> : <div className="preview-empty">Waiting for camera view…</div>}
   </main>;
 }

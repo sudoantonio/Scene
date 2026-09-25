@@ -17,7 +17,7 @@ export const composeDirection = (presets: DirectionPreset[], text: string) => {
   return badges && text ? `${badges} ${text}` : badges || text;
 };
 
-export default function DirectionInput({ value, onChange, scope, onSave, onClose, label = 'Indicazioni di regia' }: {
+export default function DirectionInput({ value, onChange, scope, onSave, onClose, label = 'Direction notes' }: {
   value: string; onChange(text: string): void; scope: TimelineCommentScope; label?: string; onSave(): void; onClose(): void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -70,32 +70,32 @@ export default function DirectionInput({ value, onChange, scope, onSave, onClose
   };
   return <div className="direction-input">
     {!!emotions.length && <div className="direction-group">
-      <small>{emotions.length > 1 ? 'Progressione emotiva' : 'Emozione'}</small>
-      <div className="direction-badges emotion-sequence" aria-label="Progressione emotiva">
+      <small>{emotions.length > 1 ? 'Emotional progression' : 'Emotion'}</small>
+      <div className="direction-badges emotion-sequence" aria-label="Emotional progression">
         {emotions.map((preset, index) => <span className="direction-sequence-item" key={preset.id}>
           {index > 0 && <span className="direction-arrow" aria-hidden="true">→</span>}
           <span className={`direction-badge ${preset.category}`}>
             <span>{preset.label}</span>
             {emotions.length > 1 && <span className="direction-order-controls">
-              <button type="button" disabled={index === 0} aria-label={`Sposta prima ${preset.label}`} title="Sposta prima" onClick={() => moveEmotion(preset.id, -1)}>‹</button>
-              <button type="button" disabled={index === emotions.length - 1} aria-label={`Sposta dopo ${preset.label}`} title="Sposta dopo" onClick={() => moveEmotion(preset.id, 1)}>›</button>
+              <button type="button" disabled={index === 0} aria-label={`Move ${preset.label} earlier`} title="Move earlier" onClick={() => moveEmotion(preset.id, -1)}>‹</button>
+              <button type="button" disabled={index === emotions.length - 1} aria-label={`Move ${preset.label} later`} title="Move later" onClick={() => moveEmotion(preset.id, 1)}>›</button>
             </span>}
-            <button type="button" aria-label={`Rimuovi ${preset.label}`} title={`Rimuovi ${preset.label}`} onClick={() => remove(preset.id)}>×</button>
+            <button type="button" aria-label={`Remove ${preset.label}`} title={`Remove ${preset.label}`} onClick={() => remove(preset.id)}>×</button>
           </span>
         </span>)}
       </div>
     </div>}
     {!!actions.length && <div className="direction-group">
-      <small>{scope === 'framing' ? 'Camera' : 'Azioni'}</small>
-      <div className="direction-badges" aria-label={scope === 'framing' ? 'Preset camera' : 'Azioni selezionate'}>
+      <small>{scope === 'framing' ? 'Camera' : 'Actions'}</small>
+      <div className="direction-badges" aria-label={scope === 'framing' ? 'Camera presets' : 'Selected actions'}>
         {actions.map((preset) => <span className={`direction-badge ${preset.category}`} key={preset.id}>
           <span>{preset.label}</span>
-          <button type="button" aria-label={`Rimuovi ${preset.label}`} title={`Rimuovi ${preset.label}`} onClick={() => remove(preset.id)}>×</button>
+          <button type="button" aria-label={`Remove ${preset.label}`} title={`Remove ${preset.label}`} onClick={() => remove(preset.id)}>×</button>
         </span>)}
       </div>
     </div>}
     <textarea ref={ref} autoFocus aria-label={label} aria-controls={match ? listId : undefined} aria-expanded={!!match} aria-autocomplete={scope === 'scene' ? undefined : 'list'} aria-activedescendant={match && choices.length ? `${listId}-${active}` : undefined}
-      placeholder={scope === 'scene' ? 'Descrivi cosa succede nella scena…' : 'Scrivi / per aggiungere emozioni o movimenti…'} value={text}
+      placeholder={scope === 'scene' ? 'Describe what happens in the scene…' : 'Type / to add emotions or motions…'} value={text}
       onChange={e => {
         const nextText = e.target.value;
         const inline = resolvePresets(nextText, scope).filter((preset) => !selectedIds.has(preset.id));
@@ -103,10 +103,10 @@ export default function DirectionInput({ value, onChange, scope, onSave, onClose
         updateQuery(nextText, e.target.selectionStart);
       }}
       onClick={e => updateQuery(text, e.currentTarget.selectionStart)} onKeyDown={keyboard} onKeyUp={e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateQuery(text, e.currentTarget.selectionStart); }} />
-    {match && <div className="preset-menu" role="listbox" id={listId} aria-label="Preset di regia">
-      {choices.length ? choices.map((p, i) => <button type="button" role="option" aria-selected={i === active} id={`${listId}-${i}`} key={p.id} className={i === active ? 'active' : ''} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => choose(p.id)}><span>{p.label}</span>{' '}<small>{p.category === 'emotion' ? 'Emozione' : p.category === 'camera' ? 'Camera' : 'Movimento'}</small></button>) : <p>Nessun preset trovato. Continua con una descrizione libera.</p>}
+    {match && <div className="preset-menu" role="listbox" id={listId} aria-label="Direction presets">
+      {choices.length ? choices.map((p, i) => <button type="button" role="option" aria-selected={i === active} id={`${listId}-${i}`} key={p.id} className={i === active ? 'active' : ''} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => choose(p.id)}><span>{p.label}</span>{' '}<small>{p.category === 'emotion' ? 'Emotion' : p.category === 'camera' ? 'Camera' : 'Motion'}</small></button>) : <p>No presets found. Continue with a freeform description.</p>}
     </div>}
-    {scope !== 'scene' && <small className="direction-hint">/ aggiunge un preset. Più emozioni formano una progressione nell’ordine mostrato; usa le frecce per riordinarle. Descrivi nel testo soltanto eventuali emozioni simultanee.</small>}
+    {scope !== 'scene' && <small className="direction-hint">/ adds a preset. Multiple emotions create a progression in the order shown; use the arrows to reorder them. Use the text only for emotions that happen at the same time.</small>}
   </div>;
 }
 
@@ -116,7 +116,7 @@ export function DirectionPreview({ value, scope }: { value: string; scope: Timel
   const actions = presets.filter((preset) => preset.category !== 'emotion');
   const text = visibleDirectionText(value, scope);
   return <span className="direction-preview">
-    {!!presets.length && <span className="direction-badges" aria-label="Preset salvati">
+    {!!presets.length && <span className="direction-badges" aria-label="Saved presets">
       {emotions.map((preset, index) => <span className="direction-sequence-item" key={preset.id}>{index > 0 && <span className="direction-arrow" aria-hidden="true">→</span>}<span className={`direction-badge ${preset.category}`}>{preset.label}</span></span>)}
       {actions.map((preset) => <span className={`direction-badge ${preset.category}`} key={preset.id}>{preset.label}</span>)}
     </span>}

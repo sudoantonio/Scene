@@ -13,7 +13,7 @@ import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
 import headerLogo from './assets/abaco-scene-header.png';
 
-const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Esportazione diretta senza modifiche AI.', assumptions: [], warnings: [], operations: [] });
+const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Direct export without AI changes.', assumptions: [], warnings: [], operations: [] });
 const initialLayout = () => {
   try {
     const saved = JSON.parse(localStorage.getItem('abaco-layout-v1') ?? '{}');
@@ -56,7 +56,7 @@ export default function App() {
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   const notify = (type: 'ok' | 'error' | 'info', text: string) => { setMessage({ type, text }); window.setTimeout(() => setMessage(undefined), 6500); };
-  const requireDesktop = () => { if (!window.abaco) { notify('error', 'Questa funzione richiede l’app desktop Electron.'); return false; } return true; };
+  const requireDesktop = () => { if (!window.abaco) { notify('error', 'This feature requires the Electron desktop app.'); return false; } return true; };
 
   const save = async (path = projectPath) => {
     if (!requireDesktop()) return null;
@@ -77,32 +77,32 @@ export default function App() {
   };
   const open = async () => {
     if (!requireDesktop()) return;
-    if (useEditor.getState().dirty && !window.confirm('Il progetto contiene modifiche non salvate. Aprire comunque un altro progetto?')) return;
+    if (useEditor.getState().dirty && !window.confirm('The project has unsaved changes. Open another project anyway?')) return;
     try {
       const result = await window.abaco!.openProject();
-      if (result) { loadProject(result.project, result.path); notify('ok', `Aperto ${result.project.name}`); }
-    } catch (error) { notify('error', error instanceof Error ? error.message : 'Impossibile aprire il progetto.'); }
+      if (result) { loadProject(result.project, result.path); notify('ok', `Opened ${result.project.name}`); }
+    } catch (error) { notify('error', error instanceof Error ? error.message : 'Could not open the project.'); }
   };
   const createNew = () => {
-    if (!dirty || window.confirm('Il progetto contiene modifiche non salvate. Creare comunque un nuovo progetto?')) newProject();
+    if (!dirty || window.confirm('The project has unsaved changes. Create a new project anyway?')) newProject();
   };
   const generate = async () => {
     if (!requireDesktop()) return;
     try {
-      setBusy(true); notify('info', 'Preparo scena, commenti e fotogrammi per Astra…');
+      setBusy(true); notify('info', 'Preparing the scene, notes, and frames for Astra…');
       const saved = await save();
       if (!saved) return;
       const current = saved.project;
       if (!current.comments.some((comment) => comment.status === 'pending')) {
         const output = await window.abaco!.buildBlender(current, emptyPlan(), saved.path);
-        notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
+        notify('ok', `Folder ${output.version} exported to ${output.directory}. It contains the project, assets, and Blender file${output.audioPath ? ', plus a separate WAV audio track' : ''}.`);
         return;
       }
       const frames = [useEditor.getState().currentFrame, ...current.comments.filter((comment) => comment.status === 'pending').flatMap((comment) => [comment.startFrame, comment.endFrame]), ...current.cameraCuts.map((cut) => cut.frame)];
       const sheet = await captureContactSheet(frames);
       const response = await window.abaco!.generatePlan(current, sheet);
       if (useEditor.getState().project !== current) {
-        notify('error', 'Il progetto è cambiato durante la generazione. Genera di nuovo il piano sul progetto aggiornato.');
+        notify('error', 'The project changed during generation. Generate the plan again from the updated project.');
         return;
       }
       planProjectRef.current = current;
@@ -114,7 +114,7 @@ export default function App() {
     if (!plan || !projectPath || !window.abaco) return;
     if (useEditor.getState().project !== planProjectRef.current) {
       setPlan(undefined);
-      notify('error', 'Il progetto è cambiato dopo la generazione. Genera di nuovo il piano prima di applicarlo.');
+      notify('error', 'The project changed after generation. Generate the plan again before applying it.');
       return;
     }
     try {
@@ -123,12 +123,12 @@ export default function App() {
       const output = await window.abaco.buildBlender(next, plan, projectPath);
       if (useEditor.getState().project !== planProjectRef.current) {
         setPlan(undefined);
-        notify('info', `Esportazione creata in ${output.directory}. Il progetto è stato modificato nel frattempo: il piano non è stato applicato alle nuove modifiche.`);
+        notify('info', `Export created in ${output.directory}. The project changed in the meantime, so the plan was not applied to the new changes.`);
         return;
       }
       acceptPlan(plan);
       await save(projectPath);
-      setPlan(undefined); notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
+      setPlan(undefined); notify('ok', `Folder ${output.version} exported to ${output.directory}. It contains the project, assets, and Blender file${output.audioPath ? ', plus a separate WAV audio track' : ''}.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
@@ -139,7 +139,7 @@ export default function App() {
       const saved = await save();
       if (!saved) return;
       const output = await window.abaco!.buildBlender(saved.project, emptyPlan(), saved.path);
-      notify('ok', `Cartella ${output.version} esportata: ${output.directory}. Contiene progetto, asset, file Blender${output.audioPath ? ' e traccia audio WAV separata' : ''}.`);
+      notify('ok', `Folder ${output.version} exported to ${output.directory}. It contains the project, assets, and Blender file${output.audioPath ? ', plus a separate WAV audio track' : ''}.`);
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
@@ -186,7 +186,7 @@ export default function App() {
 
   useEffect(() => {
     if (!dirty || !projectPath || !window.abaco) return;
-    const timer = window.setTimeout(() => { void save(projectPath).catch((error) => notify('error', error instanceof Error ? error.message : 'Salvataggio automatico non riuscito.')); }, 900);
+    const timer = window.setTimeout(() => { void save(projectPath).catch((error) => notify('error', error instanceof Error ? error.message : 'Autosave failed.')); }, 900);
     return () => window.clearTimeout(timer);
   }, [dirty, project, projectPath, markSaved]);
 
@@ -224,7 +224,7 @@ export default function App() {
   useEffect(() => window.abaco?.onMenuCommand((command) => {
     if (command === 'new') createNew();
     else if (command === 'open') open();
-    else if (command === 'save') void save().catch((error) => notify('error', error instanceof Error ? error.message : 'Salvataggio non riuscito.'));
+    else if (command === 'save') void save().catch((error) => notify('error', error instanceof Error ? error.message : 'Save failed.'));
     else if (command === 'undo') undo();
     else if (command === 'redo') redo();
     else if (command === 'export-astra') generate();
@@ -255,20 +255,20 @@ export default function App() {
     <AudioPlayback />
     <div className="slim-headbar">
       <img className="headbar-logo" src={headerLogo} alt="Scene" draggable={false} />
-      <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Aggiungi</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+      <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
       <div className={`headbar-history ${collapsed.right ? 'with-panel-toggle' : ''}`}>
-        <button type="button" aria-label="Indietro" title="Indietro · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={14} /></button>
-        <button type="button" aria-label="Avanti" title="Avanti · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={14} /></button>
+        <button type="button" aria-label="Undo" title="Undo · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={14} /></button>
+        <button type="button" aria-label="Redo" title="Redo · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={14} /></button>
       </div>
-      {collapsed.right && <button className="headbar-inspector-open" aria-label="Apri pannello laterale" title="Apri pannelli" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
+      {collapsed.right && <button className="headbar-inspector-open" aria-label="Open side panel" title="Open panels" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>
     <main ref={workspaceRef} className={`workspace ${collapsed.right ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
       <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
-      {!collapsed.right && <><div className="panel-resizer vertical" title="Ridimensiona pannello destro" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
+      {!collapsed.right && <><div className="panel-resizer vertical" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
     </main>
-    <div className="panel-resizer horizontal" title="Ridimensiona timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
+    <div className="panel-resizer horizontal" title="Resize timeline" onPointerDown={(event) => { if (!collapsed.timeline) beginResize('timeline', event); }} />
     <Timeline collapsed={collapsed.timeline} onToggleCollapse={() => setCollapsed((value) => ({ ...value, timeline: !value.timeline }))} />
-    {message && <div className={`toast ${message.type}`}>{message.type === 'error' ? 'Errore' : message.type === 'ok' ? 'Completato' : 'In corso'}<span>{message.text}</span></div>}
+    {message && <div className={`toast ${message.type}`}>{message.type === 'error' ? 'Error' : message.type === 'ok' ? 'Done' : 'Working'}<span>{message.text}</span></div>}
     {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     {plan && <PlanReview plan={plan} busy={busy} onClose={() => setPlan(undefined)} onApprove={approve} />}
   </div>;

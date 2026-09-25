@@ -6,10 +6,10 @@ import { useEditor } from '../store/editor';
 type LightingPreset = LightingSettings['preset'];
 
 const presets: Array<{ id: LightingPreset; label: string; settings: LightingSettings }> = [
-  { id: 'neutral', label: 'Neutra', settings: { preset: 'neutral', intensity: 1, direction: 45, elevation: 45, color: '#ffffff' } },
-  { id: 'soft', label: 'Morbida', settings: { preset: 'soft', intensity: .75, direction: 30, elevation: 60, color: '#fff1dc' } },
-  { id: 'warm', label: 'Calda', settings: { preset: 'warm', intensity: 1.1, direction: 50, elevation: 35, color: '#ffc98f' } },
-  { id: 'dramatic', label: 'Drammatica', settings: { preset: 'dramatic', intensity: 1.35, direction: -65, elevation: 18, color: '#ffd0b5' } },
+  { id: 'neutral', label: 'Neutral', settings: { preset: 'neutral', intensity: 1, direction: 45, elevation: 45, color: '#ffffff' } },
+  { id: 'soft', label: 'Soft', settings: { preset: 'soft', intensity: .75, direction: 30, elevation: 60, color: '#fff1dc' } },
+  { id: 'warm', label: 'Warm', settings: { preset: 'warm', intensity: 1.1, direction: 50, elevation: 35, color: '#ffc98f' } },
+  { id: 'dramatic', label: 'Dramatic', settings: { preset: 'dramatic', intensity: 1.35, direction: -65, elevation: 18, color: '#ffd0b5' } },
 ];
 
 export default function LightingPanel() {
@@ -48,13 +48,13 @@ export default function LightingPanel() {
   };
   return <div className="lighting-panel">
     <section>
-      <div className="section-heading"><h2>Luce</h2></div>
+      <div className="section-heading"><h2>Lighting</h2></div>
       <div className="lighting-presets">{presets.map((preset) => <button key={preset.id} className={lighting.preset === preset.id ? 'active' : ''} onClick={() => updateLighting(preset.settings)}><i style={{ background: preset.settings.color }} />{preset.label}</button>)}</div>
     </section>
     <section>
-      <label className="size-control"><div><span>Intensità</span><strong>{Math.round(lighting.intensity * 100)}%</strong></div><input type="range" min="0" max="2" step="0.05" value={lighting.intensity} onChange={(event) => updateLighting({ intensity: Number(event.target.value) })} /></label>
-      <div className="lighting-direction"><span>Direzione</span><div ref={ballRef} className="light-direction-ball" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPreview(positionFromPointer(event)); }} onPointerMove={moveLight} onPointerUp={finishLight} onPointerCancel={() => setPreview(undefined)}><i className="light-orbit orbit-x" /><i className="light-orbit orbit-y" /><b style={knobStyle} /></div><small>{Math.round(direction)}° · {Math.round(elevation)}°</small></div>
-      <div className="lighting-color"><span><Palette size={13} /> Colore</span><label className="color-picker" title="Colore della luce"><input aria-label="Colore della luce" type="color" value={lighting.color} onChange={(event) => updateLighting({ color: event.target.value })} /><i style={{ background: lighting.color }} /></label></div>
+      <label className="size-control"><div><span>Intensity</span><strong>{Math.round(lighting.intensity * 100)}%</strong></div><input type="range" min="0" max="2" step="0.05" value={lighting.intensity} onChange={(event) => updateLighting({ intensity: Number(event.target.value) })} /></label>
+      <div className="lighting-direction"><span>Direction</span><div ref={ballRef} className="light-direction-ball" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPreview(positionFromPointer(event)); }} onPointerMove={moveLight} onPointerUp={finishLight} onPointerCancel={() => setPreview(undefined)}><i className="light-orbit orbit-x" /><i className="light-orbit orbit-y" /><b style={knobStyle} /></div><small>{Math.round(direction)}° · {Math.round(elevation)}°</small></div>
+      <div className="lighting-color"><span><Palette size={13} /> Color</span><label className="color-picker" title="Light color"><input aria-label="Light color" type="color" value={lighting.color} onChange={(event) => updateLighting({ color: event.target.value })} /><i style={{ background: lighting.color }} /></label></div>
     </section>
   </div>;
 }
