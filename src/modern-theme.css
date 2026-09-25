@@ -742,6 +742,20 @@ body:has(.app-shell.theme-light) #root,
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
 .app-shell .jev-composer-expand:hover { background: var(--ui-raised); }
+.app-shell .jev-floating-composer.anchored.compact { width: auto; }
+.app-shell .jev-floating-composer.anchored.compact .jev-composer-expand {
+  min-width: 0;
+  height: 27px;
+  padding: 0 11px;
+  color: var(--ui-text);
+  background: rgba(35,35,35,.94);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  font-size: 10px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.22);
+}
+.app-shell .jev-floating-composer.anchored.compact .jev-composer-expand:hover { background: var(--ui-raised); }
+.app-shell .jev-floating-composer.anchored .jev-composer-close { display: none; }
 
 /* Input contestuale: etichetta modello leggibile e azione realmente circolare. */
 .app-shell .jev-floating-composer.anchored .jev-composer-input {

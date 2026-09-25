@@ -2104,6 +2104,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 }
 .jev-floating-composer.anchored.anchor-left { transform: translate(calc(-100% - 14px), -50%); }
 .jev-floating-composer.anchored .jev-composer-input {
+  position: relative;
   height: auto;
   min-height: 68px;
   padding: 5px 6px;
@@ -2112,9 +2113,24 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   column-gap: 4px;
   row-gap: 2px;
   align-items: end;
-  border-radius: 14px;
+  border-radius: 18px;
   box-shadow: 0 8px 24px rgba(0,0,0,.32);
 }
+.jev-floating-composer.anchored .jev-composer-close {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: rgba(220,220,220,.52);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+.jev-floating-composer.anchored .jev-composer-close:hover { color: #eee; background: rgba(255,255,255,.1); }
 .jev-floating-composer.anchored .decision-engine-switch {
   grid-column: 1;
   grid-row: 2;
@@ -2129,6 +2145,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
   min-height: 30px;
   max-height: 120px;
   padding: 5px 4px;
+  padding-right: 18px;
   line-height: 18px;
   overflow-x: hidden;
   resize: none;

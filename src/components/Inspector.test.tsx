@@ -11,6 +11,7 @@ beforeEach(() => {
   useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedMotion: undefined, recordingSession: undefined, recordingMotion: undefined, past: [], future: [], dirty: false, isPlaying: false, cameraView: false, jevStroke: { active: false, points: [] } });
 });
 afterEach(() => { cleanup(); delete window.abaco; });
+const openAiAgent = () => fireEvent.click(screen.getByRole('button', { name: 'AI agent' }));
 
 describe('Pannelli contestuali', () => {
   it('nasconde l’input AI finché non viene selezionato un soggetto', () => {
@@ -21,9 +22,19 @@ describe('Pannelli contestuali', () => {
     expect(screen.queryByRole('region', { name: 'Jev main panel' })).not.toBeInTheDocument();
   });
 
+  it('mostra il pulsante AI agent e apre l’input solo dopo il clic', () => {
+    useEditor.getState().addObject('cube');
+    render(<JevFloatingComposer />);
+    expect(screen.getByRole('button', { name: 'AI agent' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Jev action' })).not.toBeInTheDocument();
+    openAiAgent();
+    expect(screen.getByRole('textbox', { name: 'Jev action' })).toBeInTheDocument();
+  });
+
   it('aumenta l’altezza dell’input quando il testo occupa più righe', () => {
     useEditor.getState().addObject('cube');
     render(<JevFloatingComposer />);
+    openAiAgent();
     const input = screen.getByRole('textbox', { name: 'Jev action' });
     Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 84 });
     fireEvent.change(input, { target: { value: 'Il soggetto entra da sinistra, si ferma al centro e poi guarda verso la camera.' } });
@@ -40,6 +51,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
+    openAiAgent();
     fireEvent.click(screen.getByText('Direction · 1 motion'));
     fireEvent.click(screen.getByRole('button', { name: /camera indietro/ }));
     const input = screen.getByRole('textbox', { name: 'Jev action' });
@@ -59,6 +71,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockRejectedValue(new Error('test'));
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
+    openAiAgent();
     expect(screen.queryByRole('combobox', { name: 'Request type' })).not.toBeInTheDocument();
     const input = screen.getByRole('textbox', { name: 'Jev action' });
     fireEvent.change(input, { target: { value: 'poi si allontana' } });
@@ -73,6 +86,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Jev', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Jev', commentIds: [] }] } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
+    openAiAgent();
     const input = screen.getByRole('textbox', { name: 'Jev action' });
     expect(input).toHaveAttribute('placeholder', expect.stringContaining('Cube 1'));
     fireEvent.change(input, { target: { value: 'vai a destra' } });
@@ -88,6 +102,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Jev camera', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId: camera.id, frame: 1, property: 'position', value: { vector: [0, -10, 7], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Jev', commentIds: [] }] } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
+    openAiAgent();
     act(() => useEditor.getState().setJevStrokePoints([[.1, .5], [.9, .5]]));
     const input = screen.getByRole('textbox', { name: 'Jev action' });
     expect(input).toHaveAttribute('placeholder', expect.stringContaining(camera.name));
@@ -102,6 +117,7 @@ describe('Pannelli contestuali', () => {
     const generateJevAction = vi.fn().mockResolvedValue({ blenderPlan: { schemaVersion: 'BlenderPlanV1', summary: 'Laya', assumptions: [], warnings: [], operations: [{ id: crypto.randomUUID(), type: 'set_keyframe', objectId, frame: 1, property: 'position', value: { vector: [0, 0, 0], boolean: null, text: null, number: null }, interpolation: 'linear', rationale: 'Laya', commentIds: [] }] }, performance: { engine: 'laya', totalMs: 180, decisionMs: 120, modelLoadMs: 0, warm: true } });
     window.abaco = { generateJevAction } as unknown as NonNullable<Window['abaco']>;
     render(<JevFloatingComposer />);
+    openAiAgent();
     fireEvent.change(screen.getByRole('combobox', { name: 'Action model' }), { target: { value: 'laya' } });
     const input = screen.getByRole('textbox', { name: 'Laya action' });
     fireEvent.change(input, { target: { value: 'vai avanti' } });
@@ -115,6 +131,7 @@ describe('Pannelli contestuali', () => {
   it('attiva il disegno dal solo input senza cambiare la vista', () => {
     useEditor.getState().addObject('cube');
     render(<JevFloatingComposer />);
+    openAiAgent();
     fireEvent.click(screen.getByRole('button', { name: 'Draw path' }));
     expect(useEditor.getState().cameraView).toBe(false);
     expect(useEditor.getState().jevStroke.active).toBe(true);
