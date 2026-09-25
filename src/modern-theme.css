@@ -868,6 +868,9 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark .timeline:not(.collapsed) .scene-image {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+  background-position: left center !important;
+  background-repeat: repeat-x !important;
+  background-size: var(--timeline-thumbnail-width, 135px) 100% !important;
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .presence-segment {
   color: #e2f4e8;
@@ -898,4 +901,28 @@ body:has(.app-shell.theme-light) #root,
 }
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-control-row :is(.icon, .subtle):hover {
   background: var(--timeline-open-raised) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll {
+  row-gap: 4px;
+  background: var(--timeline-open-panel) !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .ruler-label {
+  border-radius: 8px 0 0 8px !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-ruler {
+  border-radius: 0 8px 8px 0 !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track-label {
+  background: #292929 !important;
+  border-radius: 8px 0 0 8px !important;
+  border-bottom: 0 !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track {
+  background: #292929 !important;
+  border-radius: 0 8px 8px 0 !important;
+  border-bottom: 0 !important;
+}
+.app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track-label,
+.app-shell.theme-dark .timeline:not(.collapsed) .track-pair.active .track {
+  background: #343434 !important;
 }
