@@ -278,8 +278,10 @@
 .app-shell .view-toggle > span { font-size: 10px; font-weight: 500; }
 .app-shell .viewport-tools { padding: 3px; gap: 3px; }
 .app-shell .viewport-group-tools { min-height: 31px; padding: 3px 4px 3px 9px; display: flex; align-items: center; gap: 8px; color: var(--ui-muted); background: var(--ui-surface); border: 1px solid var(--ui-edge); border-radius: 8px; font-size: 10px; }
-.app-shell .viewport-group-tools button { min-height: 25px; padding: 0 8px; display: flex; align-items: center; gap: 5px; color: #242016; background: #d8ab35; border: 0; border-radius: 5px; font-size: 10px; font-weight: 600; }
-.app-shell .viewport-group-tools button:hover { background: #e7bf50; }
+.app-shell .viewport-group-tools button { min-height: 25px; padding: 0 8px; display: flex; align-items: center; gap: 5px; color: var(--ui-text); background: #383838; border: 0; border-radius: 5px; font-size: 10px; font-weight: 600; }
+.app-shell .viewport-group-tools button:hover { background: #5a5a5a; }
+.app-shell .viewport-group-tools .group-action { color: #242016; background: #d8ab35; }
+.app-shell .viewport-group-tools .group-action:hover { background: #e7bf50; }
 .app-shell .viewport-selection-tool { width: 32px; height: 32px; display: grid; place-items: center; color: var(--ui-text); background: var(--ui-surface); border: 1px solid var(--ui-edge); border-radius: 8px; }
 .app-shell .viewport-selection-tool:hover, .app-shell .viewport-selection-tool.active { color: #211b0e; background: #d8ab35; border-color: #d8ab35; }
 .app-shell .viewport-tools button:disabled,

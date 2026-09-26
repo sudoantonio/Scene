@@ -82,7 +82,9 @@ export const SceneObjectSchema = z.object({
     fadeIn: z.number().finite().nonnegative().default(0),
     fadeOut: z.number().finite().nonnegative().default(0),
     waveform: z.array(z.number().finite().min(0).max(1)).max(256).default([]),
-  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] }),
+    captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string() })).default([]),
+    showCaptions: z.boolean().default(true),
+  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], showCaptions: true }),
   screenSpace: z.boolean().default(false),
   sceneIds: z.array(z.string().uuid()).default([]),
   screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
@@ -282,7 +284,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
     visible: true, transform, text: 'Text', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
     asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 },
-    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [] },
+    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], showCaptions: true },
     screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }

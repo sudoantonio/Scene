@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { ArrowLeft, Box, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, MousePointer2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Ungroup, Video } from 'lucide-react';
+import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, MousePointer2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
@@ -11,6 +11,7 @@ import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta, controllerPose, controllerWorldDelta } from '../domain/controller-pose';
 import { controllerMotionPaths } from '../domain/controller-motion-path';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
+import { objectPresenceRange } from '../domain/presence';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import headerLogo from '../assets/abaco-scene-header.png';
@@ -535,12 +536,11 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   };
   const startDirectDrag = (event: ThreeEvent<PointerEvent>) => {
     if (!interactionEnabled) return;
-    if ((multiSelectMode || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey) && event.button === 0) {
+    if ((multiSelectMode || event.nativeEvent.shiftKey || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey) && event.button === 0) {
       event.stopPropagation(); toggleSelection(object.id); return;
     }
-    // Shift riserva sempre il gesto alla vista, anche sopra un oggetto.
-    // I gesti touch vengono lasciati a OrbitControls, che riconosce le due dita.
-    if (event.button !== 0 || event.nativeEvent.shiftKey || event.nativeEvent.pointerType === 'touch' || !ref.current || gizmoDragging.current) return;
+    // Touch gestures remain available to OrbitControls.
+    if (event.button !== 0 || event.nativeEvent.pointerType === 'touch' || !ref.current || gizmoDragging.current) return;
     // Reserve the gesture even if an object is closer than the overlaid arrow.
     if (hitsTransformHandle(objectControls.current, event.ray)) return;
     // Se il gizmo e l'oggetto sono sovrapposti, soltanto l'intersezione piu'
@@ -892,7 +892,9 @@ export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[
 
 function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneObject[]; frame: number; width: number; height: number }) {
   const select = useEditor((state) => state.select);
+  const toggleSelection = useEditor((state) => state.toggleSelection);
   const selectedId = useEditor((state) => state.selectedId);
+  const selectedIds = useEditor((state) => state.selectedIds);
   const setTransform = useEditor((state) => state.setTransform);
   const [interaction, setInteraction] = useState<{ id: string; mode: 'move' | 'resize' | 'rotate'; x: number; y: number; centerX: number; centerY: number; distance: number; angle: number; transform: Transform }>();
   const [preview, setPreview] = useState<{ id: string; transform: Transform }>();
@@ -936,6 +938,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', finish); window.removeEventListener('blur', finish); };
   }, [height, interaction, setTransform, width]);
   const begin = (event: ReactPointerEvent<HTMLElement>, object: SceneObject, mode: 'move' | 'resize' | 'rotate') => {
+    if (mode === 'move' && (event.shiftKey || event.metaKey || event.ctrlKey)) { event.preventDefault(); event.stopPropagation(); toggleSelection(object.id); return; }
     event.preventDefault(); event.stopPropagation(); select(object.id);
     const layer = (event.currentTarget.closest('.screen-space-layer') ?? event.currentTarget) as HTMLElement;
     const rect = layer.getBoundingClientRect();
@@ -950,7 +953,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       const transform = preview?.id === object.id ? preview.transform : evaluateTransform(object, frame);
       const crop = object.screenCrop;
       const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
-      const selected = selectedId === object.id;
+      const selected = selectedIds.includes(object.id) || selectedId === object.id;
       return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
         <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
         {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Rotate layer" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Resize layer" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
@@ -1168,9 +1171,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const selectedIds = useEditor((state) => state.selectedIds);
   const multiSelectMode = useEditor((state) => state.multiSelectMode);
   const setMultiSelectMode = useEditor((state) => state.setMultiSelectMode);
+  const setSelection = useEditor((state) => state.setSelection);
   const groups = useEditor((state) => state.project.groups);
   const groupSelection = useEditor((state) => state.groupSelection);
   const ungroupSelection = useEditor((state) => state.ungroupSelection);
+  const copySelection = useEditor((state) => state.copySelection);
+  const pasteSelection = useEditor((state) => state.pasteSelection);
+  const duplicateSelection = useEditor((state) => state.duplicateSelection);
+  const deleteSelection = useEditor((state) => state.deleteSelection);
   const gizmoMode = useEditor((state) => state.gizmoMode);
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const cameraView = useEditor((state) => state.cameraView);
@@ -1190,6 +1198,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cameraCommitTimer = useRef<number | undefined>(undefined);
   const pendingCameraCommit = useRef<{ projectId: string; sceneId: string; frame: number; position: Vec3; rotation: Vec3; target: Vec3 } | undefined>(undefined);
   const shiftPressed = useRef(false);
+  const marqueeStart = useRef<{ x: number; y: number; ids: string[]; pointerId: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
   useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
@@ -1233,7 +1243,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const selectedGroup = groups.find((group) => group.memberIds.length === selectedIds.length && group.memberIds.every((id) => selectedIds.includes(id)));
   const canGroup = selectedIds.length > 1 && !selectedGroup && selectedIds.every((id) => {
     const object = objects.find((candidate) => candidate.id === id);
-    return object && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light') && !object.screenSpace && !groups.some((group) => group.memberIds.includes(id));
+    return object && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light') && object.screenSpace === objects.find((candidate) => candidate.id === selectedIds[0])?.screenSpace && !groups.some((group) => group.memberIds.includes(id));
   });
   const selectedTransformable = selectedObject && selectedObject.kind !== 'audio' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
     ? selectedObject : undefined;
@@ -1259,6 +1269,15 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const height = width / aspect;
     return { width, height, heightRatio: height / viewportSize.height };
   }, [aspect, cameraView, viewportSize]);
+  const visibleCaption = cameraView ? objects.filter((object) => object.kind === 'audio' && object.audio.showCaptions).flatMap((object) => {
+    const range = objectPresenceRange(object, settings.frameStart, settings.frameEnd + 1);
+    if (!range || frame < range[0] || frame >= range[1]) return [];
+    const elapsed = (frame - range[0]) / settings.fps;
+    const sourceEnd = object.audio.trimEnd > object.audio.trimStart ? object.audio.trimEnd : object.audio.duration;
+    const length = Math.max(.01, sourceEnd - object.audio.trimStart);
+    const time = object.audio.trimStart + (object.audio.loop ? elapsed % length : elapsed);
+    return object.audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => caption.text);
+  }).join(' ') : '';
 
   const flushPendingCameraCommit = () => {
     const pending = pendingCameraCommit.current;
@@ -1662,13 +1681,61 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
   }, [cameraView]);
 
+  const marqueePoint = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const bounds = stageRef.current!.getBoundingClientRect();
+    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  };
+  const beginMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !(event.shiftKey || shiftPressed.current) || !stageRef.current || useEditor.getState().jevStroke.active) return;
+    const point = marqueePoint(event);
+    marqueeStart.current = { ...point, ids: [...selectedIds], pointerId: event.pointerId };
+    stageRef.current.setPointerCapture(event.pointerId);
+  };
+  const moveMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = marqueeStart.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const point = marqueePoint(event);
+    if (!marquee && Math.hypot(point.x - start.x, point.y - start.y) < 5) return;
+    setMarquee({ x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width: Math.abs(point.x - start.x), height: Math.abs(point.y - start.y) });
+  };
+  const finishMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = marqueeStart.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    marqueeStart.current = null;
+    if (stageRef.current?.hasPointerCapture(event.pointerId)) stageRef.current.releasePointerCapture(event.pointerId);
+    const point = marqueePoint(event);
+    setMarquee(null);
+    if (Math.hypot(point.x - start.x, point.y - start.y) < 5) return;
+    const box = { left: Math.min(start.x, point.x), right: Math.max(start.x, point.x), top: Math.min(start.y, point.y), bottom: Math.max(start.y, point.y) };
+    const bounds = stageRef.current!.getBoundingClientRect();
+    const camera = cameraView ? shotOrbitRef.current?.object : orbitRef.current?.object;
+    if (!camera) return;
+    camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+    const found = objects.filter((object) => {
+      if (object.kind === 'audio' || object.kind.includes('light') || object.kind === 'camera' || !evaluateProperty(object, 'visibility', frame)) return false;
+      let x: number, y: number;
+      if (object.screenSpace && cameraView && cameraFrame) {
+        const position = evaluateTransform(object, frame).position;
+        x = (bounds.width - cameraFrame.width) / 2 + (position[0] + 1) * cameraFrame.width / 2;
+        y = (bounds.height - cameraFrame.height) / 2 + (1 - position[2]) * cameraFrame.height / 2;
+      } else {
+        const projected = new THREE.Vector3(...evaluateTransform(object, frame).position).project(camera);
+        if (projected.z < -1 || projected.z > 1) return false;
+        x = (projected.x + 1) * bounds.width / 2;
+        y = (1 - projected.y) * bounds.height / 2;
+      }
+      return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+    }).map((object) => object.id);
+    setSelection([...new Set([...start.ids, ...found])]);
+  };
+
   return <div ref={viewportRef} tabIndex={-1} onPointerDownCapture={(event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
-    <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad}>
+    <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
     <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
-      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => { if (!multiSelectMode) select(undefined); }}>
+      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => { if (!multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
@@ -1687,8 +1754,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
     </Canvas>
+    {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
+    {cameraView && cameraFrame && visibleCaption && <div className="viewport-subtitle" style={{ width: cameraFrame.width, bottom: `calc(50% - ${cameraFrame.height / 2}px + 5%)` }}>{visibleCaption}</div>}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
@@ -1711,8 +1780,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       </div>
     </div>}
     <div className="viewport-top-right">
-      {!cameraView && <button className={`viewport-selection-tool ${multiSelectMode ? 'active' : ''}`} type="button" aria-label="Select multiple elements" aria-pressed={multiSelectMode} title="Select multiple elements · or ⌘/Ctrl-click" onClick={() => setMultiSelectMode(!multiSelectMode)}><MousePointer2 size={15} /></button>}
-      {(canGroup || selectedGroup) && <div className="viewport-group-tools"><span>{selectedIds.length} selected</span><button type="button" aria-label={selectedGroup ? 'Ungroup elements' : 'Group elements'} title={selectedGroup ? 'Ungroup elements' : 'Group elements'} onClick={selectedGroup ? ungroupSelection : groupSelection}>{selectedGroup ? <Ungroup size={15} /> : <Group size={15} />}{selectedGroup ? 'Ungroup' : 'Group'}</button></div>}
+      {!cameraView && <button className={`viewport-selection-tool ${multiSelectMode ? 'active' : ''}`} type="button" aria-label="Select multiple elements" aria-pressed={multiSelectMode} title="Select multiple elements · Shift-click or Shift-drag" onClick={() => setMultiSelectMode(!multiSelectMode)}><MousePointer2 size={15} /></button>}
+      {selectedIds.some((id) => objects.some((object) => object.id === id && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light'))) && <div className="viewport-group-tools"><span>{selectedIds.length} selected</span>
+        <button type="button" aria-label="Copy elements" title="Copy · ⌘/Ctrl+C" onClick={copySelection}><Copy size={13} /></button>
+        <button type="button" aria-label="Paste elements" title="Paste · ⌘/Ctrl+V" onClick={pasteSelection}>Paste</button>
+        <button type="button" aria-label="Duplicate elements" title="Duplicate · ⌘/Ctrl+D" onClick={duplicateSelection}>Duplicate</button>
+        <button type="button" aria-label="Delete elements" title="Delete" onClick={deleteSelection}><Trash2 size={13} /></button>
+        {(canGroup || selectedGroup) && <button className="group-action" type="button" aria-label={selectedGroup ? 'Ungroup elements' : 'Group elements'} title={selectedGroup ? 'Ungroup elements' : 'Group elements'} onClick={selectedGroup ? ungroupSelection : groupSelection}>{selectedGroup ? <Ungroup size={13} /> : <Group size={13} />}{selectedGroup ? 'Ungroup' : 'Group'}</button>}
+      </div>}
       {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Transform tool">{([
         ['translate', 'Move', Move3d],
         ['rotate', 'Rotate', Rotate3d],

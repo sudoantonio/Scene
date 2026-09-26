@@ -48,9 +48,14 @@ type EditorState = {
   select(id?: string): void;
   selectMember(id: string): void;
   toggleSelection(id: string): void;
+  setSelection(ids: string[]): void;
   setMultiSelectMode(value: boolean): void;
   groupSelection(): void;
   ungroupSelection(): void;
+  copySelection(): void;
+  pasteSelection(): string[];
+  duplicateSelection(): string[];
+  deleteSelection(): void;
   setFrame(frame: number): void;
   setPlaying(value: boolean): void;
   selectMotion(selection?: { objectId: string; sceneId: string; keyframeId?: string }): void;
@@ -363,6 +368,9 @@ const syncScopedCommentRanges = (project: AbacoProject) => {
 };
 
 export const useEditor = create<EditorState>((set, get) => {
+  let copiedObjects: SceneObject[] = [];
+  let copiedGroups: AbacoProject['groups'] = [];
+  let pasteCount = 0;
   const commit = (project: AbacoProject) => set((state) => {
     const validIds = new Set(project.objects.map((object) => object.id));
     project.groups = project.groups.map((group) => ({ ...group, memberIds: group.memberIds.filter((id) => validIds.has(id)) })).filter((group) => group.memberIds.length >= 2);
@@ -392,12 +400,18 @@ export const useEditor = create<EditorState>((set, get) => {
       const selectedIds = state.selectedIds.includes(id) ? state.selectedIds.filter((candidate) => candidate !== id) : [...state.selectedIds, id];
       return { selectedIds, selectedId: selectedIds.includes(state.selectedId ?? '') ? state.selectedId : selectedIds.at(-1), selectedMotion: undefined };
     }),
+    setSelection: (ids) => set((state) => {
+      const valid = new Set(state.project.objects.map((object) => object.id));
+      const selectedIds = [...new Set(ids)].filter((id) => valid.has(id));
+      return { selectedIds, selectedId: selectedIds.at(-1), selectedMotion: undefined };
+    }),
     setMultiSelectMode: (multiSelectMode) => set({ multiSelectMode }),
     groupSelection: () => {
       const state = get();
       const ids = [...new Set(state.selectedIds)];
       if (ids.length < 2 || ids.some((id) => state.project.groups.some((group) => group.memberIds.includes(id)))) return;
-      if (ids.some((id) => { const object = state.project.objects.find((candidate) => candidate.id === id); return !object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light') || object.screenSpace; })) return;
+      const members = ids.map((id) => state.project.objects.find((candidate) => candidate.id === id));
+      if (members.some((object) => !object || object.kind === 'camera' || object.kind === 'audio' || object.kind.includes('light')) || members.some((object) => object?.screenSpace !== members[0]?.screenSpace)) return;
       const next = snapshot(state.project);
       next.groups.push({ id: crypto.randomUUID(), name: `Group ${next.groups.length + 1}`, memberIds: ids });
       commit(next);
@@ -410,6 +424,68 @@ export const useEditor = create<EditorState>((set, get) => {
       const next = snapshot(state.project);
       next.groups = next.groups.filter((candidate) => candidate.id !== group.id);
       commit(next);
+    },
+    copySelection: () => {
+      const state = get();
+      const ids = new Set(state.selectedIds);
+      copiedObjects = state.project.objects.filter((object) => ids.has(object.id) && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light')).map((object) => {
+        const copy = structuredClone(object);
+        copy.transform = evaluateTransform(object, state.currentFrame);
+        copy.text = evaluateProperty(object, 'text', state.currentFrame) as string;
+        return copy;
+      });
+      copiedGroups = state.project.groups.filter((group) => group.memberIds.every((id) => ids.has(id))).map((group) => structuredClone(group));
+      pasteCount = 0;
+    },
+    pasteSelection: () => {
+      if (!copiedObjects.length) return [];
+      const state = get();
+      const next = snapshot(state.project);
+      const scene = next.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= state.currentFrame);
+      if (!scene) return [];
+      const created: string[] = [];
+      const remap = new Map<string, string>();
+      const offset = .35 * ++pasteCount;
+      for (const source of copiedObjects) {
+        const copy = structuredClone(source);
+        copy.id = crypto.randomUUID();
+        remap.set(source.id, copy.id);
+        copy.name = `${source.name} copy`;
+        copy.transform.position = [source.transform.position[0] + offset, source.transform.position[1] + offset, source.transform.position[2]];
+        copy.sceneNotes = [];
+        copy.keyframes = [];
+        putKey(copy, scene.frame, 'position', copy.transform.position);
+        putKey(copy, scene.frame, 'rotation', copy.transform.rotation);
+        putKey(copy, scene.frame, 'scale', copy.transform.scale);
+        if (copy.kind === 'text') putKey(copy, scene.frame, 'text', copy.text, 'constant');
+        makeObjectLocalToScene(next, copy, scene.id);
+        next.objects.push(copy);
+        created.push(copy.id);
+      }
+      for (const group of copiedGroups) {
+        const memberIds = group.memberIds.map((id) => remap.get(id)).filter((id): id is string => !!id);
+        if (memberIds.length >= 2) next.groups.push({ id: crypto.randomUUID(), name: `${group.name} copy`, memberIds });
+      }
+      commit(next);
+      set({ selectedId: created.at(-1), selectedIds: created, selectedMotion: undefined, gizmoMode: 'translate' });
+      return created;
+    },
+    duplicateSelection: () => {
+      get().copySelection();
+      return get().pasteSelection();
+    },
+    deleteSelection: () => {
+      const state = get();
+      const ids = new Set(state.selectedIds.filter((id) => state.project.objects.some((object) => object.id === id && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light'))));
+      if (!ids.size) return;
+      const next = snapshot(state.project);
+      next.objects = next.objects.filter((object) => !ids.has(object.id));
+      next.comments = next.comments.flatMap((comment) => {
+        const targetIds = comment.targetIds.filter((id) => !ids.has(id));
+        return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
+      });
+      commit(next);
+      set({ selectedId: undefined, selectedIds: [], selectedMotion: undefined });
     },
     setFrame: (frame) => {
       const before = get();
@@ -1126,7 +1202,7 @@ export const useEditor = create<EditorState>((set, get) => {
         const next = snapshot(state.project);
         const anchor = next.objects.find((item) => item.id === id);
         if (!anchor) return;
-        const members = next.objects.filter((item) => state.selectedIds.includes(item.id) && item.kind !== 'camera' && item.kind !== 'audio' && !item.kind.includes('light') && !item.screenSpace);
+        const members = next.objects.filter((item) => state.selectedIds.includes(item.id) && item.kind !== 'camera' && item.kind !== 'audio' && !item.kind.includes('light') && item.screenSpace === anchor.screenSpace);
         if (members.length !== state.selectedIds.length) return;
         moveGroupMembers(members, evaluateTransform(anchor, state.currentFrame), transform);
         commit(next);

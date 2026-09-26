@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('abaco', {
   loadAsset: (path: string) => ipcRenderer.invoke('asset:load', path),
   loadModel: (path: string) => ipcRenderer.invoke('model:load', path),
   chooseAudio: () => ipcRenderer.invoke('audio:choose'),
+  transcribeAudio: (sourcePath: string, language: 'it-IT' | 'en-US') => ipcRenderer.invoke('audio:transcribe', { sourcePath, language }),
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),

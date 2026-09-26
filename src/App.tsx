@@ -234,7 +234,22 @@ export default function App() {
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      const editor = useEditor.getState();
+      const selectedCanvasObjects = editor.selectedIds.some((id) => editor.project.objects.some((object) => object.id === id && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light')));
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+        if (editor.pasteSelection().length) event.preventDefault();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && selectedCanvasObjects) {
+        const key = event.key.toLowerCase();
+        if (key === 'c') { event.preventDefault(); editor.copySelection(); return; }
+        if (key === 'd') { event.preventDefault(); editor.duplicateSelection(); return; }
+        if (key === 'g') { event.preventDefault(); if (event.shiftKey) editor.ungroupSelection(); else editor.groupSelection(); return; }
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedCanvasObjects && !editor.selectedMotion) {
+        event.preventDefault(); editor.deleteSelection(); return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) redo(); else undo();

@@ -466,6 +466,36 @@ ipcMain.handle('audio:choose', async () => {
   return { sourcePath, name: path.basename(sourcePath, path.extname(sourcePath)) };
 });
 
+ipcMain.handle('audio:transcribe', async (_event, payload: { sourcePath: string; language: 'it-IT' | 'en-US' }) => {
+  if (process.platform !== 'darwin') throw new Error('Local transcription is currently available on macOS.');
+  if (!['it-IT', 'en-US'].includes(payload.language)) throw new Error('Unsupported transcription language.');
+  const sourcePath = path.resolve(payload.sourcePath);
+  if (!await fileExists(sourcePath) || !mediaMimeTypes[path.extname(sourcePath).toLowerCase()]) throw new Error('The imported audio file is unavailable.');
+  const binary = app.isPackaged ? path.join(process.resourcesPath, 'scene-local-speech') : path.join(app.getAppPath(), 'build', 'scene-local-speech');
+  if (!await fileExists(binary)) {
+    if (app.isPackaged) throw new Error('The local transcription helper is missing from Scene.');
+    await fs.mkdir(path.dirname(binary), { recursive: true });
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('clang', ['-fobjc-arc', '-framework', 'Foundation', '-framework', 'Speech', '-framework', 'AVFoundation', path.join(app.getAppPath(), 'electron', 'local-speech.m'), '-o', binary]);
+      let error = '';
+      child.stderr.on('data', (chunk) => { error += chunk.toString(); });
+      child.on('error', reject);
+      child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Could not prepare local transcription. ${error}`)));
+    });
+  }
+  const output = await new Promise<string>((resolve, reject) => {
+    const child = spawn(binary, [sourcePath, payload.language], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    const timeout = setTimeout(() => child.kill(), 610_000);
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => { clearTimeout(timeout); reject(error); });
+    child.on('close', (code) => { clearTimeout(timeout); code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || 'Local transcription failed.')); });
+  });
+  const result = JSON.parse(output) as { captions?: Array<{ start: number; end: number; text: string }> };
+  return (result.captions ?? []).filter((caption) => Number.isFinite(caption.start) && Number.isFinite(caption.end) && caption.end >= caption.start && typeof caption.text === 'string');
+});
+
 ipcMain.handle('blendAsset:choose', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openFile'], title: 'Add a character or Blender asset',

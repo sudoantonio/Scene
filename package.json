@@ -12,10 +12,11 @@
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build:renderer": "tsc -b && vite build",
     "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron --external @receptron/laya",
+    "build:speech": "mkdir -p build && clang -fobjc-arc -framework Foundation -framework Speech -framework AVFoundation electron/local-speech.m -o build/scene-local-speech",
     "build": "npm run build:renderer && npm run build:electron",
     "test": "vitest run",
     "package:linux": "npm run build && electron-builder --linux AppImage",
-    "package:mac": "npm run build && electron-builder --mac zip --arm64",
+    "package:mac": "npm run build && npm run build:speech && electron-builder --mac zip --arm64",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -75,7 +76,9 @@
       "target": "zip",
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.png",
-      "artifactName": "Scene-${version}-mac-${arch}.${ext}"
+      "artifactName": "Scene-${version}-mac-${arch}.${ext}",
+      "extraResources": [{ "from": "build/scene-local-speech", "to": "scene-local-speech" }],
+      "extendInfo": { "NSSpeechRecognitionUsageDescription": "Scene transcribes imported audio locally to create subtitles." }
     }
   }
 }
