@@ -67,16 +67,27 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): Uint8Ar
   return bytes;
 }
 export function editedCaptions(project: AbacoProject) {
+  const fps = project.settings.fps;
   return project.objects.filter(o => o.kind === 'audio' && o.audio.showCaptions).flatMap(object => audioClips(project, object).flatMap(clip => {
     const length = clip.sourceEnd - clip.sourceStart;
-    const duration = (clip.endFrameExclusive - clip.startFrame) / project.settings.fps;
+    const duration = (clip.endFrameExclusive - clip.startFrame) / fps;
     const repeats = clip.loop ? Math.ceil(duration / length) : 1;
     return Array.from({ length: repeats }, (_, repeat) => object.audio.captions.flatMap(c => {
       const from = Math.max(c.start, clip.sourceStart), to = Math.min(c.end, clip.sourceEnd);
       const localStart = repeat * length + from - clip.sourceStart, localEnd = Math.min(duration, repeat * length + to - clip.sourceStart);
       if (to <= from || localEnd <= localStart) return [];
-      const offset = (clip.startFrame - project.settings.frameStart) / project.settings.fps;
-      return [{ start: offset + localStart, end: offset + localEnd, text: c.text }];
+      const startFrame = clip.startFrame + Math.ceil(localStart * fps - 1e-9);
+      const endFrameExclusive = Math.min(clip.endFrameExclusive, clip.startFrame + Math.ceil(localEnd * fps - 1e-9));
+      if (endFrameExclusive <= startFrame) return [];
+      const offset = (clip.startFrame - project.settings.frameStart) / fps;
+      return [{
+        start: offset + localStart, end: offset + localEnd,
+        startFrame, endFrameExclusive,
+        text: c.text, captionId: c.id, audioObjectId: object.id, audioName: object.name,
+        sourceStartSeconds: from, sourceEndSeconds: from + localEnd - localStart,
+        position: c.position ?? object.audio.captionStyle.position,
+        style: { color: object.audio.captionStyle.color, fontFamily: object.audio.captionStyle.fontFamily, size: object.audio.captionStyle.size },
+      }];
     })).flat();
   })).sort((a, b) => a.start - b.start);
 }

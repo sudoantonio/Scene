@@ -41,6 +41,27 @@ describe('Portable AI folder',()=>{
   const o=createSceneObject('audio',1);o.asset.sourcePath='/missing/audio.wav';p.objects.push(o);
   await expect(writeAiBundle(p,root)).rejects.toThrow('File mancante');expect((await fs.readdir(root)).some(n=>n.endsWith('.tmp'))).toBe(false);expect(await fs.stat(first.directory)).toBeTruthy();
  });
+ it('exports subtitle text at the edited audio position for the AI and SRT',async()=>{
+  const root=await temp(),p=createProject();p.settings.fps=10;p.settings.frameEnd=40;
+  const audio=createSceneObject('audio',1);audio.asset.sourcePath=path.join(root,'voice.wav');
+  audio.audio={...audio.audio,duration:4,trimStart:1,trimEnd:2,captions:[{id:crypto.randomUUID(),start:1.2,end:1.6,text:'Listen now',position:[.45,.9]}]};
+  audio.visible=false;
+  audio.keyframes=[{id:crypto.randomUUID(),frame:11,property:'visibility',value:true,interpolation:'constant',source:'user',commentIds:[]},{id:crypto.randomUUID(),frame:21,property:'visibility',value:false,interpolation:'constant',source:'user',commentIds:[]}];
+  p.objects.push(audio);
+  const wav=encodeWav([new Float32Array(48000*4),new Float32Array(48000*4)],48000);
+  await fs.writeFile(audio.asset.sourcePath,wav);
+  const media:EditedMedia={projectId:p.id,updatedAt:p.updatedAt,audioMix:wav,audioClips:[],croppedImages:[],overlays:[]};
+  const out=await writeAiBundle(p,root,path.join(root,'source.json'),undefined,media);
+  const timeline=JSON.parse(await fs.readFile(path.join(out.directory,'SOTTOTITOLI_TIMELINE.json'),'utf8'));
+  expect(timeline).toMatchObject({timeBase:'seconds_from_video_start',fps:10,frameStart:1,audioMix:'media/AUDIO_MONTATO.wav'});
+  expect(timeline.captions).toHaveLength(1);
+  expect(timeline.captions[0]).toMatchObject({start:1.2,end:1.6,startFrame:13,endFrameExclusive:17,text:'Listen now',position:[.45,.9],sourceStartSeconds:1.2,sourceEndSeconds:1.6});
+  expect(await fs.readFile(path.join(out.directory,'media/SOTTOTITOLI_MONTATI.srt'),'utf8')).toContain('00:00:01,200 --> 00:00:01,600');
+  expect(await fs.readFile(path.join(out.directory,'TRASCRIZIONI.md'),'utf8')).toContain('1.200–1.600 s');
+  expect(await fs.readFile(path.join(out.directory,'LEGGIMI.md'),'utf8')).toContain('SOTTOTITOLI_TIMELINE.json');
+  const mounted=JSON.parse(await fs.readFile(path.join(out.directory,'MEDIA_MONTATI.json'),'utf8'));
+  expect(mounted.subtitlesTimeline).toBe('SOTTOTITOLI_TIMELINE.json');
+ });
  it('rebases nested OBJ materials and textures rather than flattening broken references',async()=>{
   const root=await temp();await fs.mkdir(path.join(root,'material/texture'),{recursive:true});await fs.writeFile(path.join(root,'model.obj'),'mtllib material/mat.mtl\nv 0 0 0');await fs.writeFile(path.join(root,'material/mat.mtl'),'newmtl a\nmap_Kd texture/diffuse.png');await fs.writeFile(path.join(root,'material/texture/diffuse.png'),'texture');
   const p=createProject();p.cameraCuts[0].background={kind:'model',path:path.join(root,'model.obj'),name:'model'};

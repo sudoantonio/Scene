@@ -16,7 +16,7 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
 
 ## Download
 
-For Apple Silicon Macs, [download Scene 0.59.4 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.4/Scene-0.59.4-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow. The Mac app is not yet signed or notarized; on first launch, if macOS blocks it, right-click `Scene.app` and choose **Open**.
+For Apple Silicon Macs, [download Scene 0.59.5 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.5/Scene-0.59.5-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow. The Mac app is not yet signed or notarized; on first launch, if macOS blocks it, right-click `Scene.app` and choose **Open**.
 
 ## Why Scene exists
 
@@ -42,7 +42,8 @@ Scene is still an early-stage project and is intentionally focused. It was creat
 - import audio tracks, display their waveforms, and adjust volume;
 - preview the animatic directly in the editor;
 - export versioned Blender projects and a separate WAV audio track;
-- save portable projects with their assets collected alongside the scene data.
+- save portable projects with their assets collected alongside the scene data;
+- export subtitles at their final video seconds and frames alongside the mounted audio, in SRT and JSON for AI handoff.
 
 ## Workflow
 

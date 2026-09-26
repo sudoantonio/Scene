@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 import { createProject,createSceneObject } from './schema';
-import { audioClips,audioStateAt,renderAudioClip,encodeWav,captionsSrt,visibilityIntervals } from './media-timeline';
+import { audioClips,audioStateAt,renderAudioClip,encodeWav,captionsSrt,editedCaptions,visibilityIntervals } from './media-timeline';
 import { useEditor } from '../store/editor';
 function fixture(){
  const p=createProject();p.settings.fps=10;p.settings.frameEnd=40;
@@ -28,6 +28,17 @@ describe('Mounted media',()=>{
  it('clips subtitles to the trimmed audio and rebases them to timeline time',()=>{
   const {p,o}=fixture();o.audio.captions=[{id:crypto.randomUUID(),start:0,end:.5,text:'removed'},{id:crypto.randomUUID(),start:.8,end:1.5,text:'visible'}];
   expect(captionsSrt(p)).not.toContain('removed');expect(captionsSrt(p)).toContain('00:00:01,000 --> 00:00:01,500');
+ });
+ it('exports repeated subtitles at video seconds and frames after trimming and moving the audio',()=>{
+  const {p,o}=fixture();
+  o.keyframes[1].frame=31;o.audio.loop=true;
+  const caption={id:crypto.randomUUID(),start:1.25,end:1.75,text:'Look here',position:[.4,.9] as [number,number]};
+  o.audio.captions=[caption];
+  const cues=editedCaptions(p);
+  expect(cues).toHaveLength(2);
+  expect(cues.map(c=>[c.start,c.end,c.startFrame,c.endFrameExclusive])).toEqual([[1.25,1.75,14,19],[2.25,2.75,24,29]]);
+  expect(cues[0]).toMatchObject({captionId:caption.id,audioObjectId:o.id,text:'Look here',position:[.4,.9],sourceStartSeconds:1.25,sourceEndSeconds:1.75});
+  expect(captionsSrt(p)).toContain('00:00:02,250 --> 00:00:02,750');
  });
  it('respects multiple visibility windows and shot membership',()=>{
   const {p,o}=fixture();o.keyframes.push({id:crypto.randomUUID(),frame:31,property:'visibility',value:true,interpolation:'constant',source:'user',commentIds:[]});
