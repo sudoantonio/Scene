@@ -1801,17 +1801,22 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .audio-caption-actions label { display: inline-flex; align-items: center; gap: 5px; }
 .audio-caption-actions button { padding: 5px 7px; color: var(--text); background: #383838; border: 1px solid #535353; border-radius: 6px; }
 .audio-caption-list { display: grid; gap: 7px; max-height: 280px; overflow: auto; }
-.audio-caption-row { padding: 7px; background: #282828; border-radius: 8px; }
-.audio-caption-row > div { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; color: var(--muted); }
-.audio-caption-row input { width: 72px; min-width: 0; padding: 4px; font-size: 10px; }
-.audio-caption-row textarea { width: 100%; min-height: 42px; padding: 6px; resize: vertical; font-size: 11px; }
+.audio-caption-row { padding: 0 0 8px; background: transparent; border-bottom: 1px solid var(--ui-edge, #414141); }
+.audio-caption-combined { padding: 5px 8px 3px; background: var(--ui-subsection, #292929); border: 1px solid var(--ui-edge, #484848); border-radius: 8px; }
+.audio-caption-times { min-height: 21px; display: flex; align-items: center; gap: 5px; color: var(--ui-muted, #999); font-size: 10px; }
+.audio-caption-row input { width: 59px; min-width: 0; padding: 1px 0; color: var(--ui-muted, #aaa); background: transparent; border: 0; font-size: 10px; font-variant-numeric: tabular-nums; }
+.audio-caption-row input:focus { outline: 0; box-shadow: none; }
+.audio-caption-row textarea { width: 100%; min-height: 34px; max-height: 90px; padding: 3px 0 4px; color: var(--ui-text, #eee); background: transparent; border: 0; resize: vertical; font-size: 11px; line-height: 1.4; }
+.audio-caption-row textarea:focus { outline: 0; box-shadow: none; }
+.audio-caption-split { min-height: 23px; margin-top: 4px; padding: 0 7px; display: inline-flex; align-items: center; gap: 5px; color: var(--ui-muted, #aaa); background: var(--ui-raised, #383838); border: 1px solid var(--ui-edge, #484848); border-radius: 5px; font-size: 9px; }
+.audio-caption-split:hover { color: var(--ui-text, #eee); background: var(--ui-hover, #4a4a4a); }
 .viewport-subtitle { position: absolute; z-index: 20; left: 50%; transform: translateX(-50%); padding: 0 7%; color: white; font-size: clamp(16px, 2vw, 32px); font-weight: 700; line-height: 1.3; text-align: center; text-shadow: 0 2px 4px #000, 0 0 12px #000; pointer-events: none; }
 .audio-waveform { position: absolute; z-index: 0; inset: 4px 7px; width: calc(100% - 14px); height: calc(100% - 8px); overflow: visible; opacity: .62; }
 .audio-waveform rect { fill: #f0d36f; }
 .audio-clip-label { position: relative; z-index: 1; max-width: 55%; padding: 2px 5px; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; color: #fff4cb; background: rgba(53,42,13,.72); border-radius: 3px; text-overflow: ellipsis; white-space: nowrap; }
 .subtitle-track-label { padding-left: 31px; color: #d8bee8; }
 .subtitle-track.subtitles-hidden { opacity: .45; }
-.subtitle-segment { position: absolute; z-index: 2; top: 4px; bottom: 4px; min-width: 2px; padding: 0 7px; overflow: hidden; color: #f4e8f8; background: #684879; border: 1px solid #a781b9; border-radius: 5px; text-align: left; font-size: 10px; cursor: pointer; }
+.subtitle-segment { position: absolute; z-index: 2; top: 4px; bottom: 4px; min-width: 2px; padding: 0 7px; overflow: hidden; color: #f4e8f8; background: #684879; border: 1px solid #a781b9; border-radius: 0; text-align: left; font-size: 10px; cursor: pointer; }
 .subtitle-segment span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subtitle-segment:hover { background: #785789; border-color: #c39bd4; }
 .theme-light .subtitle-segment { color: #4f345f; background: #dfcae9; border-color: #a985bb; }

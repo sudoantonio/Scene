@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Captions, Download, Volume2 } from 'lucide-react';
+import { Captions, Download, Scissors, Volume2 } from 'lucide-react';
 import { objectPresenceRange } from '../domain/presence';
 import { useEditor } from '../store/editor';
 
@@ -20,12 +20,30 @@ export default function AudioPanel() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [textCursor, setTextCursor] = useState<{ captionId: string; offset: number }>();
   useEffect(() => window.abaco?.onTranscriptionProgress?.(({ received, total }) => setProgress(total > 0 ? Math.min(100, Math.round(received / total * 100)) : 0)), []);
   if (!selected) return null;
   const editCaption = (id: string, patch: Partial<(typeof selected.audio.captions)[number]>) => {
     const latest = useEditor.getState().project.objects.find((item) => item.id === selected.id && item.kind === 'audio');
     if (!latest) return;
     updateObject(selected.id, { audio: { ...latest.audio, captions: latest.audio.captions.map((caption) => caption.id === id ? { ...caption, ...patch } : caption) } });
+  };
+  const splitCaptionAtCursor = (id: string, cursorOffset = textCursor?.offset) => {
+    const latest = useEditor.getState().project.objects.find((item) => item.id === selected.id && item.kind === 'audio');
+    const caption = latest?.kind === 'audio' ? latest.audio.captions.find((item) => item.id === id) : undefined;
+    if (!latest || latest.kind !== 'audio' || !caption || cursorOffset === undefined) return;
+    const offset = Math.max(0, Math.min(caption.text.length, cursorOffset));
+    const before = caption.text.slice(0, offset).trimEnd();
+    const after = caption.text.slice(offset).trimStart();
+    if (!before || !after || caption.end <= caption.start) return;
+    const splitTime = caption.start + (caption.end - caption.start) * offset / caption.text.length;
+    if (splitTime <= caption.start || splitTime >= caption.end) return;
+    const second = { ...caption, id: crypto.randomUUID(), start: splitTime, text: after };
+    const captions = latest.audio.captions.flatMap((item) => item.id === id
+      ? [{ ...item, end: splitTime, text: before }, second]
+      : [item]).sort((a, b) => a.start - b.start);
+    updateObject(selected.id, { audio: { ...latest.audio, captions } });
+    setTextCursor(undefined);
   };
   const transcribe = async () => {
     if (!window.abaco) { setError('Local transcription is available in the desktop app.'); return; }
@@ -52,7 +70,7 @@ export default function AudioPanel() {
     {error && <p className="audio-transcribe-error" role="alert">{error}</p>}
     {selected.audio.captions.length > 0 && <>
       <div className="audio-caption-actions"><label><input type="checkbox" checked={selected.audio.showCaptions} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, showCaptions: event.target.checked } })} /> Show subtitles</label><button type="button" onClick={downloadSrt}><Download size={13} /> Export SRT</button></div>
-      <div className="audio-caption-list">{selected.audio.captions.map((caption) => <div className="audio-caption-row" key={caption.id}><div><input aria-label="Subtitle start" type="number" min="0" step="0.1" value={Number(caption.start.toFixed(2))} onChange={(event) => editCaption(caption.id, { start: Math.max(0, Number(event.target.value)) })} /><span>–</span><input aria-label="Subtitle end" type="number" min="0" step="0.1" value={Number(caption.end.toFixed(2))} onChange={(event) => editCaption(caption.id, { end: Math.max(0, Number(event.target.value)) })} /></div><textarea aria-label="Subtitle text" value={caption.text} onChange={(event) => editCaption(caption.id, { text: event.target.value })} /></div>)}</div>
+      <div className="audio-caption-list">{selected.audio.captions.map((caption) => <div className="audio-caption-row" key={caption.id}><div className="audio-caption-combined"><div className="audio-caption-times"><input aria-label="Subtitle start" type="number" min="0" step="0.01" value={Number(caption.start.toFixed(2))} onChange={(event) => editCaption(caption.id, { start: Math.max(0, Number(event.target.value)) })} /><span>–</span><input aria-label="Subtitle end" type="number" min="0" step="0.01" value={Number(caption.end.toFixed(2))} onChange={(event) => editCaption(caption.id, { end: Math.max(0, Number(event.target.value)) })} /></div><textarea aria-label="Subtitle text" value={caption.text} onChange={(event) => editCaption(caption.id, { text: event.target.value })} onSelect={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyUp={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); splitCaptionAtCursor(caption.id, event.currentTarget.selectionStart); } }} /></div>{textCursor?.captionId === caption.id && textCursor.offset > 0 && textCursor.offset < caption.text.length && <button className="audio-caption-split" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => splitCaptionAtCursor(caption.id)}><Scissors size={12} /> Split at cursor</button>}</div>)}</div>
     </>}
   </section>;
 }

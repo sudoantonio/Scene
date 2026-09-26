@@ -1,4 +1,4 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, KeyRound, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, Route, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2, X } from 'lucide-react';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2, X } from 'lucide-react';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -11,8 +11,6 @@ import BackgroundPanel from './BackgroundPanel';
 import InspectorGroup from './InspectorGroup';
 
 type InspectorPanel = 'edit' | 'scene' | 'light';
-const motionNames = { constant: 'Cut', bezier: 'Smooth', linear: 'Linear' } as const;
-
 function NumberField({ value, onChange, label, name }: { value: number; onChange(value: number): void; label: string; name: string }) {
   return <label className="number-field"><span>{label}</span><input aria-label={name} type="number" step="0.1" value={Number(value.toFixed(3))} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
@@ -32,11 +30,6 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const replaceObject = useEditor((state) => state.replaceObject);
   const setTransform = useEditor((state) => state.setTransform);
   const alignObjectToGround = useEditor((state) => state.alignObjectToGround);
-  const selectedMotion = useEditor((state) => state.selectedMotion);
-  const startMotion = useEditor((state) => state.startMotion);
-  const keyPose = useEditor((state) => state.keyPose);
-  const setTransitionMode = useEditor((state) => state.setTransitionMode);
-  const setMotionPointHold = useEditor((state) => state.setMotionPointHold);
   const setCameraFraming = useEditor((state) => state.setCameraFraming);
   const resetFraming = useEditor((state) => state.resetFraming);
   const removeSelected = useEditor((state) => state.removeSelected);
@@ -46,27 +39,12 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1));
   const activeScene = scenes[sceneIndex] ?? scenes[0];
-  const activeSceneEnd = scenes[sceneIndex + 1]?.frame ?? project.settings.frameEnd + 1;
   const camera = project.objects.find((item) => item.id === activeScene?.cameraId && item.kind === 'camera');
   const cameraTransform = camera ? evaluateTransform(camera, frame) : undefined;
   const positionValues = transform && cameraView && cameraTransform && !object?.screenSpace ? toCameraSpace(transform.position, cameraTransform) : transform?.position;
   const positionControls: Array<[string, 0 | 1 | 2, number, number]> = object?.screenSpace
     ? [['Horizontal', 0, -1.6, 1.6], ['Vertical', 2, -1.6, 1.6]]
     : [['Horizontal', 0, -20, 20], ['Depth', 1, -20, 20], ['Height', 2, -5, 20]];
-  const motionObject = selectedAudio ? undefined : object ?? camera;
-  const motionMode = motionObject && activeScene
-    ? motionObject.keyframes.filter((key) => key.property === 'position' && key.frame >= activeScene.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0]?.interpolation ?? 'constant'
-    : 'constant';
-  const motionActive = Boolean(motionObject && activeScene && selectedMotion?.objectId === motionObject.id && selectedMotion.sceneId === activeScene.id);
-  const selectedMotionPoint = motionActive ? motionObject?.keyframes.find((key) => key.property === 'position' && key.purpose === 'motion' && key.frame === frame) : undefined;
-  const nextMotionPoint = selectedMotionPoint ? motionObject?.keyframes.filter((key) => key.property === 'position' && key.purpose === 'motion' && key.frame > selectedMotionPoint.frame && key.frame < activeSceneEnd).sort((a, b) => a.frame - b.frame)[0] : undefined;
-  const maximumHoldFrames = selectedMotionPoint && nextMotionPoint ? Math.max(0, nextMotionPoint.frame - selectedMotionPoint.frame - 1) : 0;
-  const createMotionHere = () => {
-    if (!motionObject || !activeScene) return;
-    if (!motionActive) startMotion(motionObject.id, activeScene.id);
-    keyPose(motionObject.id);
-  };
-
   const changeTransform = (property: keyof Transform, value: Vec3) => object && transform && setTransform(object.id, { ...transform, [property]: value });
   const changeTransformAxis = (property: 'position' | 'rotation', axis: 0 | 1 | 2, value: number) => {
     if (!transform) return;
@@ -113,17 +91,6 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
     } catch (error) { window.alert(error instanceof Error ? error.message : 'Blender replacement failed.'); }
   };
 
-  const motionControls = motionObject && activeScene && <InspectorGroup title="Motion" icon={<Route size={13} />} variant="secondary">
-    <div className="inspector-motion-action"><span>{object ? object.name : 'Camera'}<small>{activeScene.name ?? 'Scene'}</small></span><button className="motion-create" onClick={createMotionHere}><KeyRound size={13} /> Create here</button></div>
-    <label className="motion-mode-field"><span>Interpolation</span><select disabled={!motionActive} aria-label={`Motion type for ${object ? object.name : 'camera'}`} value={motionMode} onChange={(event) => setTransitionMode(motionObject.id, activeScene.id, event.target.value as keyof typeof motionNames)}>{(['constant', 'bezier', 'linear'] as const).map((mode) => <option key={mode} value={mode}>{motionNames[mode]}</option>)}</select></label>
-    {selectedMotionPoint && nextMotionPoint && <div className="motion-point-hold">
-      <label><span>Hold at point</span><strong>{((selectedMotionPoint.holdFrames ?? 0) / project.settings.fps).toFixed(2)} s</strong><input aria-label="Point hold duration" type="range" min="0" max={maximumHoldFrames} step="1" value={Math.min(maximumHoldFrames, selectedMotionPoint.holdFrames ?? 0)} onChange={(event) => setMotionPointHold(motionObject.id, selectedMotionPoint.id, Number(event.target.value))} /></label>
-      <button className="subtle compact" disabled={!selectedMotionPoint.holdFrames} onClick={() => setMotionPointHold(motionObject.id, selectedMotionPoint.id, 0)}>No hold</button>
-      <small>0.00 s passes through the point without stopping.</small>
-    </div>}
-    {motionActive && !selectedMotionPoint && <p className="inspector-help">Select a point in the timeline to adjust its hold.</p>}
-    {!motionActive && <p className="inspector-help">Select a motion in the timeline or create a point here.</p>}
-  </InspectorGroup>;
   if (collapsed) return <aside className="inspector panel-collapsed"><button title="Open panel" aria-label="Open right panel" onClick={onToggleCollapse}><PanelRightOpen size={16} /></button></aside>;
   return <aside className={`inspector simple-inspector ${floating ? 'floating-inspector' : ''}`}>
     {floating ? <header className="floating-inspector-header"><strong>{panel === 'edit' ? 'Edit' : panel === 'scene' ? 'Scenography' : 'Lighting'}</strong><button className="icon" aria-label="Close controls" title="Close" onClick={onClose}><X size={15} /></button></header> : <nav className="right-tabs" aria-label="Right panel sections"><button className="inspector-collapse-tab" title="Collapse panel" aria-label="Collapse right panel" onClick={onToggleCollapse}><PanelRightClose size={15} /></button>{([
@@ -157,7 +124,6 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </div></InspectorGroup>
         <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary"><div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div><div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Crop" icon={<Crop size={13} />} variant="secondary"><div className="camera-sliders">{(['Top', 'Right', 'Bottom', 'Left'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Crop ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
-        {motionControls}
         <InspectorGroup title="Advanced values" icon={<Braces size={13} />} variant="secondary">
           <VectorFields label="Position" value={transform.position} onChange={(value) => changeTransform('position', value)} />
           <VectorFields label="Rotation°" value={transform.rotation} onChange={(value) => changeTransform('rotation', value)} />
@@ -165,7 +131,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         </InspectorGroup>
       </section> : <div className="camera-edit-panel"><header className="inspector-context"><strong>Camera</strong><span>{activeScene?.name ?? 'Scene'}</span></header>{activeScene && cameraTransform && <InspectorGroup title="Framing" icon={<Frame size={13} />} variant="primary" defaultOpen><div className="camera-sliders"><label><span>Distance</span><strong>{activeScene.framing.distance.toFixed(1)} m</strong><input aria-label="Zoom camera" type="range" min="0.5" max="30" step="0.1" value={Math.min(30, activeScene.framing.distance)} onChange={(event) => setCameraZoom(Number(event.target.value))} /></label>{([
         ['Horizontal', 0, -20, 20], ['Depth', 1, -20, 20], ['Height', 2, -5, 20],
-      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={Math.min(min, cameraTransform.position[axis])} max={Math.max(max, cameraTransform.position[axis])} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div><button className="subtle camera-reset" onClick={resetFraming}><RefreshCw size={12} /> Reset camera</button></InspectorGroup>}{motionControls}</div>}
+      ] as const).map(([label, axis, min, max]) => <label key={label}><span>{label}</span><strong>{cameraTransform.position[axis].toFixed(1)} m</strong><input aria-label={`${label} camera`} type="range" min={Math.min(min, cameraTransform.position[axis])} max={Math.max(max, cameraTransform.position[axis])} step="0.1" value={cameraTransform.position[axis]} onChange={(event) => moveCameraAxis(axis, Number(event.target.value))} /></label>)}</div><button className="subtle camera-reset" onClick={resetFraming}><RefreshCw size={12} /> Reset camera</button></InspectorGroup>}</div>}
 
     </>}
     </div>

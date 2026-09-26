@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, MousePointer2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
+import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
 import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
@@ -1170,7 +1170,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const selectedId = useEditor((state) => state.selectedId);
   const selectedIds = useEditor((state) => state.selectedIds);
   const multiSelectMode = useEditor((state) => state.multiSelectMode);
-  const setMultiSelectMode = useEditor((state) => state.setMultiSelectMode);
   const setSelection = useEditor((state) => state.setSelection);
   const groups = useEditor((state) => state.project.groups);
   const groupSelection = useEditor((state) => state.groupSelection);
@@ -1184,6 +1183,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cameraView = useEditor((state) => state.cameraView);
   const setCameraView = useEditor((state) => state.setCameraView);
   const [cameraHintVisible, setCameraHintVisible] = useState(true);
+  const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number } | null>(null);
   const [showMotionPaths, setShowMotionPaths] = useState(() => window.localStorage.getItem('scene-show-motion-paths') !== 'false');
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
@@ -1246,6 +1246,22 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const object = objects.find((candidate) => candidate.id === id);
     return object && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light') && object.screenSpace === objects.find((candidate) => candidate.id === selectedIds[0])?.screenSpace && !groups.some((group) => group.memberIds.includes(id));
   });
+  const openSelectionMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 2 || selectedIds.length < 2 || cameraView || (event.target as HTMLElement).closest('button, input, textarea, select')) return;
+    event.preventDefault();
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    setSelectionMenu({
+      x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 210)),
+      y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 240)),
+    });
+  };
+  useEffect(() => {
+    if (!selectionMenu) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setSelectionMenu(null); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [selectionMenu]);
   const selectedTransformable = selectedObject && selectedObject.kind !== 'audio' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
     ? selectedObject : undefined;
   const selectedSubject = selectedObject && selectedObject.kind !== 'audio' && selectedObject.kind !== 'camera' && !selectedObject.kind.includes('light') && evaluateProperty(selectedObject, 'visibility', frame)
@@ -1749,8 +1765,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     setSelection([...new Set([...start.ids, ...found])]);
   };
 
-  return <div ref={viewportRef} tabIndex={-1} onPointerDownCapture={(event) => {
+  return <div ref={viewportRef} tabIndex={-1} onContextMenu={openSelectionMenu} onPointerDownCapture={(event) => {
     const target = event.target as HTMLElement;
+    if (selectionMenu && !target.closest('.viewport-selection-menu')) setSelectionMenu(null);
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
@@ -1800,20 +1817,20 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       </div>
     </div>}
     <div className="viewport-top-right">
-      {!cameraView && <button className={`viewport-selection-tool ${multiSelectMode ? 'active' : ''}`} type="button" aria-label="Select multiple elements" aria-pressed={multiSelectMode} title="Select multiple elements · Shift-click or Shift-drag" onClick={() => setMultiSelectMode(!multiSelectMode)}><MousePointer2 size={15} /></button>}
-      {selectedIds.some((id) => objects.some((object) => object.id === id && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light'))) && <div className="viewport-group-tools"><span>{selectedIds.length} selected</span>
-        <button type="button" aria-label="Copy elements" title="Copy · ⌘/Ctrl+C" onClick={copySelection}><Copy size={13} /></button>
-        <button type="button" aria-label="Paste elements" title="Paste · ⌘/Ctrl+V" onClick={pasteSelection}>Paste</button>
-        <button type="button" aria-label="Duplicate elements" title="Duplicate · ⌘/Ctrl+D" onClick={duplicateSelection}>Duplicate</button>
-        <button type="button" aria-label="Delete elements" title="Delete" onClick={deleteSelection}><Trash2 size={13} /></button>
-        {(canGroup || selectedGroup) && <button className="group-action" type="button" aria-label={selectedGroup ? 'Ungroup elements' : 'Group elements'} title={selectedGroup ? 'Ungroup elements' : 'Group elements'} onClick={selectedGroup ? ungroupSelection : groupSelection}>{selectedGroup ? <Ungroup size={13} /> : <Group size={13} />}{selectedGroup ? 'Ungroup' : 'Group'}</button>}
-      </div>}
       {(cameraView || selectedTransformable) && <div className="viewport-tools" aria-label="Transform tool">{([
         ['translate', 'Move', Move3d],
         ['rotate', 'Rotate', Rotate3d],
         ['scale', 'Scale', Scaling],
       ] as const).map(([mode, label, Icon]) => <button key={mode} disabled={!selectedTransformable} title={selectedTransformable ? label : `Select an element to use ${label.toLowerCase()}`} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
     </div>
+    {selectionMenu && selectedIds.length > 1 && <div className="viewport-selection-menu" role="menu" aria-label="Selected elements actions" style={{ left: selectionMenu.x, top: selectionMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <span>{selectedIds.length} elements</span>
+      <button role="menuitem" onClick={() => { copySelection(); setSelectionMenu(null); }}><Copy size={13} />Copy</button>
+      <button role="menuitem" onClick={() => { pasteSelection(); setSelectionMenu(null); }}><Plus size={13} />Paste</button>
+      <button role="menuitem" onClick={() => { duplicateSelection(); setSelectionMenu(null); }}>Duplicate</button>
+      <button role="menuitem" onClick={() => { deleteSelection(); setSelectionMenu(null); }}><Trash2 size={13} />Delete</button>
+      {(canGroup || selectedGroup) && <button role="menuitem" className="group-action" onClick={() => { selectedGroup ? ungroupSelection() : groupSelection(); setSelectionMenu(null); }}>{selectedGroup ? <Ungroup size={13} /> : <Group size={13} />}{selectedGroup ? 'Ungroup' : 'Group'}</button>}
+    </div>}
     <div className="viewport-bottom-right">
       <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Hide motion paths' : 'Show motion paths'} title={showMotionPaths ? 'Hide paths' : 'Show paths'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
     </div>
@@ -1831,6 +1848,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <p>Add a shape or text, then drag it directly in the workspace.</p>
       <div><button className="primary" onClick={() => addObject('cube')}><Plus size={16} /> Shape</button><button className="secondary" onClick={() => addObject('text')}><TextCursorInput size={16} /> Text</button></div>
     </div>}
-    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Center subject" title={`Recenter the frame on ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Restore starting position" title={`Return ${selectedSubject.name} to its position at the start of the scene`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
+    {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Center" title={`Center the frame on ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /><span>Center</span></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Restore starting position" title={`Return ${selectedSubject.name} to its position at the start of the scene`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
   </div>;
 }
