@@ -26,6 +26,29 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().project.settings.frameEnd).toBeGreaterThan(72);
   });
 
+  it('taglia l’audio dalle maniglie della timeline e mostra solo la forma d’onda rimasta', () => {
+    useEditor.getState().addAudio({ sourcePath: '/sound.wav', name: 'Voice', duration: 5, waveform: [.1, .2, .3, .4, .5, .6, .7, .8, .9, 1] });
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const { container } = render(<Timeline />);
+    const track = container.querySelector('.presence-track')!;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
+    const initial = container.querySelectorAll('.audio-waveform rect').length;
+    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Trim audio start' }), { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 220 });
+    fireEvent.pointerUp(window, { clientX: 220 });
+    let changed = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
+    expect(changed.audio.trimStart).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.audio-waveform rect').length).toBeLessThan(initial);
+    const startAfterTrim = changed.audio.trimStart;
+    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Trim audio end' }), { button: 0, clientX: 600 });
+    fireEvent.pointerMove(window, { clientX: 550 });
+    fireEvent.pointerUp(window, { clientX: 550 });
+    changed = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
+    expect(changed.audio.trimEnd).toBeLessThan(5);
+    expect(changed.audio.trimStart).toBe(startAfterTrim);
+    expect(changed.audio.trimEnd).toBeGreaterThan(changed.audio.trimStart);
+  });
+
   it('mostra ogni sottotitolo come blocco temporizzato sulla stessa riga', () => {
     useEditor.getState().addAudio({ sourcePath: '/speech.wav', name: 'Dialogo', duration: 5, waveform: [.2, .8] });
     const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
@@ -43,6 +66,30 @@ describe('Punti e maniglie del movimento', () => {
     expect(Number.parseFloat(clips[1].style.left)).toBeGreaterThan(Number.parseFloat(clips[0].style.left));
     fireEvent.click(clips[1]);
     expect(useEditor.getState().currentFrame).toBe(Math.round(20 + 1.5 * useEditor.getState().project.settings.fps));
+  });
+
+  it('modifica inizio e fine del sottotitolo trascinando i bordi nella timeline', () => {
+    useEditor.getState().addAudio({ sourcePath: '/speech.wav', name: 'Dialogo', duration: 5, waveform: [] });
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const caption = { id: crypto.randomUUID(), start: .5, end: 1.5, text: 'Frase' };
+    useEditor.getState().updateObject(audio.id, { audio: { ...audio.audio, captions: [caption] } });
+    const { container } = render(<Timeline />);
+    const track = container.querySelector('.subtitle-track')!;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
+    const startHandle = container.querySelector('.subtitle-resize-handle.start')!;
+    fireEvent.pointerDown(startHandle, { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 148 });
+    fireEvent.pointerUp(window, { clientX: 148 });
+    const moved = useEditor.getState().project.objects.find((object) => object.id === audio.id)!.audio.captions[0];
+    expect(moved.start).toBeGreaterThan(caption.start);
+    expect(moved.end).toBe(caption.end);
+    const endHandle = container.querySelector('.subtitle-resize-handle.end')!;
+    fireEvent.pointerDown(endHandle, { button: 0, clientX: 200 });
+    fireEvent.pointerMove(window, { clientX: 152 });
+    fireEvent.pointerUp(window, { clientX: 152 });
+    const shortened = useEditor.getState().project.objects.find((object) => object.id === audio.id)!.audio.captions[0];
+    expect(shortened.end).toBeLessThan(caption.end);
+    expect(shortened.end).toBeGreaterThan(shortened.start);
   });
 
   it('aggiunge una scena direttamente dalla timeline', () => {

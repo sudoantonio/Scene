@@ -8,7 +8,9 @@ export function controllerOffset(asset: SceneObject['asset'], name: string, fram
   const after = keys.find((key) => key.frame >= frame) ?? keys[keys.length - 1];
   if (frame <= startFrame && keys[0].frame > startFrame) return [0, 0, 0];
   if (before.frame === after.frame) return [...before.offset];
-  const t = (frame - before.frame) / (after.frame - before.frame);
+  const progress = (frame - before.frame) / (after.frame - before.frame);
+  const mode = 'interpolation' in before ? before.interpolation : 'linear';
+  const t = mode === 'constant' ? 0 : mode === 'bezier' ? progress * progress * (3 - 2 * progress) : progress;
   return before.offset.map((value, axis) => value + (after.offset[axis] - value) * t) as Vec3;
 }
 

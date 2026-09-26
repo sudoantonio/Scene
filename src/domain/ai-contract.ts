@@ -11,10 +11,11 @@ export const blenderPlanJsonSchema = {
         type: 'object', additionalProperties: false,
         properties: {
           id: { type: 'string' },
-          type: { type: 'string', enum: ['set_keyframe', 'set_camera_cut'] },
+          type: { type: 'string', enum: ['set_keyframe', 'set_camera_cut', 'set_controller_pose'] },
           objectId: { type: 'string' },
+          controllerName: { type: ['string', 'null'] },
           frame: { type: 'integer' },
-          property: { type: 'string', enum: ['position', 'rotation', 'scale', 'visibility', 'text', 'lens', 'camera_cut'] },
+          property: { type: 'string', enum: ['position', 'rotation', 'scale', 'visibility', 'text', 'lens', 'camera_cut', 'controller_pose'] },
           value: {
             type: 'object', additionalProperties: false,
             properties: {
@@ -29,7 +30,7 @@ export const blenderPlanJsonSchema = {
           rationale: { type: 'string' },
           commentIds: { type: 'array', items: { type: 'string' } },
         },
-        required: ['id', 'type', 'objectId', 'frame', 'property', 'value', 'interpolation', 'rationale', 'commentIds'],
+        required: ['id', 'type', 'objectId', 'controllerName', 'frame', 'property', 'value', 'interpolation', 'rationale', 'commentIds'],
       },
     },
   },
@@ -40,6 +41,6 @@ export const ASTRA_INSTRUCTIONS = `Sei il regista tecnico di Abaco Animatic. Ric
 
 Leggi animationBrief, animationStandard.content se presente e i prompt completi in comments[].presets. I nomi /preset sono abbreviazioni delle istruzioni complete. Il testo esplicito di regia ha precedenza sui preset. Non dichiarare realizzate azioni che lo schema non consente. Se lo standard richiede domande prima di animare e nel progetto non risultano risposte, restituisci operations vuoto e poni le domande in warnings; non costruire un piano di animazione al loro posto.
 
-Trasforma soltanto i commenti pending in un piano di animazione essenziale e leggibile. Le coordinate già fornite sono autorevoli. Non inventare oggetti, UUID, file, texture o codice. Non eliminare nulla. Puoi proporre keyframe di position, rotation, scale, visibility, text e lens sugli oggetti esistenti, oppure tagli verso camere esistenti.
+Trasforma soltanto i commenti pending in un piano di animazione essenziale e leggibile. Conserva i vincoli espliciti; le coordinate del proxy illustrano la composizione e non definiscono da sole la recitazione. Leggi performance e durationExplicit per distinguere suggerimenti e durate richieste. Non inventare oggetti, UUID, file, texture o codice. Non eliminare nulla. Puoi proporre keyframe di position, rotation, scale, visibility, text e lens sugli oggetti esistenti, oppure tagli verso camere esistenti. Puoi usare set_controller_pose con property controller_pose, controllerName esattamente presente in asset.controllers e value.vector come offset nel sistema locale del controllo. Per gli altri tipi controllerName è null. Scegli i controlli appropriati e verifica worldBasis; non scalare l’intero personaggio per simulare compressioni che devono lasciare fermi i piedi. Le pose possibili sono limitate ai controlli esportati: segnala ciò che richiede una lavorazione del rig in Blender.
 
-Mantieni i movimenti economici: prepara, esegui, assesta, lascia una tenuta. Evita keyframe ridondanti. Ogni operazione deve citare almeno un commentId che la giustifica. Usa frame compresi nel progetto. Per ogni value valorizza un solo campo coerente e imposta gli altri a null. Le scale devono essere strettamente positive. Restituisci esclusivamente BlenderPlanV1 conforme allo schema.`;
+Costruisci pose contrastate coerenti con lo standard e con l’intenzione della singola azione. Progetta separatamente preparazione, scatto, recupero e tenuta quando pertinenti. Scegli l’interpolazione fase per fase; non smussare globalmente tutti i controlli. Non usare lo stesso gesto per emozioni diverse. Evita keyframe ridondanti. Ogni operazione deve citare almeno un commentId che la giustifica. Usa frame compresi nel progetto. Per ogni value valorizza un solo campo coerente e imposta gli altri a null. Le scale devono essere strettamente positive. Restituisci esclusivamente BlenderPlanV1 conforme allo schema.`;

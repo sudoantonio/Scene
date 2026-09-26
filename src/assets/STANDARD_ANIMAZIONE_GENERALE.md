@@ -88,9 +88,7 @@ Attendere la risposta per la parte interessata, proseguendo con le parti indipen
 
 ### Preset e documento allegato al progetto
 
-I preset di emozione, azione e camera contengono descrizioni esecutive riutilizzabili; non sostituiscono la narrazione della scena e non autorizzano a riempire una descrizione narrativa vuota. Leggere sia il nome visibile sia il prompt completo incluso nell’export. Più emozioni selezionate sullo stesso personaggio formano, per impostazione predefinita, una progressione di beat nell’ordine mostrato. Non mediarle in un’unica posa: ogni passaggio deve modificare in modo riconoscibile postura, silhouette, sguardo e qualità del movimento. Sovrapporre due emozioni soltanto quando il testo libero dichiara esplicitamente la compresenza e stabilisce quale guida la recitazione. I preset di movimento descrivono azioni da collocare dentro questi beat.
-
-Prima della rifinitura confrontare le pose principali e un’anteprima a velocità reale con l’eventuale riferimento approvato. Se emozioni e ritmo risultano più deboli, riprogettare pose e tempi prima di aggiungere dettagli. Accelerare soltanto curve già esistenti non equivale a rendere la recitazione più incalzante.
+I preset di emozione, azione e camera contengono descrizioni esecutive riutilizzabili; non sostituiscono la narrazione della scena e non autorizzano a riempire una descrizione narrativa vuota. Leggere sia il nome visibile sia il prompt completo incluso nell’export. Preset multipli possono combinare emozione e movimento; se descrivono stati incompatibili nello stesso intervallo e il testo non ne chiarisce la successione, risolvere il punto nel confronto iniziale.
 
 Lo standard incorporato nel progetto è una copia del documento allegato al momento del salvataggio: usarne il contenuto, senza supporre che un percorso locale contenga sempre una versione accessibile o identica. Le richieste esplicite dell’utente e le risposte di regia hanno precedenza sui preset e sulle indicazioni generali di questo documento.
 
@@ -316,3 +314,18 @@ Consegnare il progetto Blender modificabile e gli output richiesti, con nomi chi
 Distinguere sempre fra verifica tecnica, valutazione visiva e approvazione artistica. Riportare soltanto i controlli effettivamente svolti; l’adozione di questo standard non implica l’approvazione automatica delle animazioni prodotte.
 
 L’approvazione esplicita dell’utente per una versione stabilisce un riferimento artistico valido per le lavorazioni successive. Non richiedere nuovamente conferma del registro cartoon già approvato. Questa approvazione non autorizza a dichiarare eseguite verifiche tecniche o visive non svolte e non approva automaticamente ogni futura animazione.
+
+
+## 12. Dallo storyboard alla recitazione finale
+
+Versione 2026-09-26.1. Il JSON di Scene è una consegna di regia: i movimenti del proxy illustrano percorsi e tempi e non costituiscono automaticamente la recitazione finale. Leggere anche animationHandoff, directionPlans e le indicazioni di continuità delle scene.
+
+Per ogni accento importante costruire pose chiaramente distinte di preparazione (quando motivata), massimo slancio e arrivo. Verificare la silhouette in camera prima dei dettagli. Quando lo stile richiede elasticità, rendere visibili compressione e allungamento attraverso i controlli appropriati, senza trascinare gli appoggi. Conservare identità, volume percepito e attacchi.
+
+Distinguere lo stesso movimento secondo la sua intenzione: un salto di gioia può aprirsi verso lo stimolo, mentre un sobbalzo impaurito può arretrare e proteggersi. Derivare la scelta dalla regia, senza imporre questi esempi a tutte le azioni.
+
+Progettare separatamente anticipazione, scatto, sospensione, contatto, recupero e tenuta. Non sommare meccanicamente durate predefinite. Il riferimento di 3–5 fotogrammi riguarda un accento breve, non l’intero salto o l’intera camminata. Convertire i riferimenti a 24 fps quando cambia la frequenza. Non applicare una smussatura automatica globale a tutti i controlli. Alternare pause brevi e tenute narrative secondo la lettura.
+
+Rispettare durata e sincronizzazioni esplicite. Le durate suggerite possono essere adattate per migliorare la recitazione mantenendo energia, confini della scena e narrazione; annotare gli adattamenti rilevanti. Le coordinate del proxy sono indicative salvo vincolo esplicito.
+
+Prima della rifinitura completa, produrre brevi prove dei passaggi rappresentativi e confrontare pose e ritmo con il riferimento artistico disponibile. Verificare a velocità reale quando gli strumenti lo consentono; dichiarare separatamente le verifiche tecniche e l’eventuale valutazione del movimento ancora mancante. Un progetto Blender valido o un video correttamente esportato non dimostrano da soli la qualità della recitazione.

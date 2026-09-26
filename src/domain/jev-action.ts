@@ -1096,7 +1096,7 @@ export function resolveMotionSpec(
           : answers.path.choice === 'smooth' ? 'smooth'
             : translation.some(Boolean) || rotation.some(Boolean) ? 'linear' : 'hold';
   return MotionSpecSchema.parse({
-    version: 1, space, translation, rotation, distanceMeters, rotationDegrees, durationSeconds, path, referenceId,
+    version: 1, space, translation, rotation, distanceMeters, rotationDegrees, durationSeconds, path, referenceId, energy: Math.max(0, Math.min(4, answers.energy.score)),
     framing: framingIntent(input.instruction, answers),
     constraints: { lookAtReference, maintainAltitude, maintainDistance },
   });

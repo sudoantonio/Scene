@@ -17,10 +17,18 @@ describe('Local audio subtitles', () => {
     render(<AudioPanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Transcribe locally' }));
     await waitFor(() => expect(screen.getByLabelText('Subtitle text')).toHaveValue('Hello world'));
+    expect(screen.queryByLabelText('Subtitle start')).toBeNull();
+    expect(screen.queryByLabelText('Subtitle end')).toBeNull();
+    expect(screen.queryByText('Trim source audio (seconds)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Subtitle font'), { target: { value: 'georgia' } });
+    fireEvent.change(screen.getByLabelText('Subtitle color'), { target: { value: '#ffd966' } });
+    expect(screen.getByRole('button', { name: 'Export SRT' })).toBeEnabled();
+    expect(screen.getByLabelText('Transcription language')).toHaveValue('it-IT');
     expect(transcribeAudio).toHaveBeenCalledWith('/voice.wav', 'it-IT');
     fireEvent.change(screen.getByLabelText('Subtitle text'), { target: { value: 'Ciao mondo' } });
     const audio = ProjectSchema.parse(useEditor.getState().project).objects.find((object) => object.kind === 'audio')!;
     expect(audio.audio.captions[0].text).toBe('Ciao mondo');
     expect(audio.audio.captions[0].start).toBe(.2);
+    expect(audio.audio.captionStyle).toMatchObject({ fontFamily: 'georgia', color: '#ffd966' });
   });
 });

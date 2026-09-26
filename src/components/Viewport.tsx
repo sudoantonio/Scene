@@ -1,3 +1,5 @@
+import { audioStateAt } from '../domain/media-timeline';
+import { fontCss } from '../domain/text-style';
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
@@ -290,8 +292,9 @@ function CharacterHandle({ object, controller, previewOffset, onPreviewOffset, o
         window.addEventListener('pointercancel', cancelHandler);
         window.addEventListener('blur', blurHandler);
       }} onPointerUp={(event) => { event.stopPropagation(); finish(event.pointerId, true); }} onPointerCancel={(event) => { event.stopPropagation(); finish(event.pointerId, false); }}>
-      <sphereGeometry args={[hovered || drag.current ? .12 : .095, 16, 12]} />
-      <meshBasicMaterial color={hovered || drag.current ? '#ffe085' : '#f4bd3d'} depthTest={false} />
+      <sphereGeometry args={[hovered || drag.current ? .045 : .032, 12, 8]} />
+      <meshBasicMaterial color={hovered || drag.current ? '#ffe085' : '#f4bd3d'} transparent opacity={hovered || drag.current ? .95 : .72} depthTest={false} depthWrite={false} />
+      <mesh><sphereGeometry args={[.12, 10, 8]} /><meshBasicMaterial colorWrite={false} depthWrite={false} /></mesh>
     </mesh>
     {hovered && <Html center distanceFactor={8} position={[position[0], position[1], position[2] + .23]} style={{ pointerEvents: 'none' }}><span className="character-handle-label">{name}</span></Html>}
   </group>;
@@ -396,6 +399,25 @@ function CameraVisual({ object }: { object: SceneObject }) {
   </group>;
 }
 
+const loaded3DFonts = new Map<string, string>();
+function Styled3DText({ object, visible }: { object: SceneObject; visible: boolean }) {
+  const [font, setFont] = useState<string | undefined>(loaded3DFonts.get(object.fontFamily));
+  useEffect(() => {
+    if (object.fontFamily === 'system') { setFont(undefined); return; }
+    const cached = loaded3DFonts.get(object.fontFamily);
+    if (cached) { setFont(cached); return; }
+    setFont(undefined);
+    let cancelled = false;
+    void window.abaco?.loadFont(object.fontFamily).then((loaded) => {
+      if (!loaded) return;
+      loaded3DFonts.set(object.fontFamily, loaded);
+      if (!cancelled) setFont(loaded);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [object.fontFamily]);
+  return <Text visible={visible} color={object.color} font={font} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
+}
+
 function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneObject; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
@@ -404,7 +426,7 @@ function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneO
     case 'cylinder': return <mesh castShadow>{material}<cylinderGeometry args={[1, 1, 2, 32]} /></mesh>;
     case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
     case 'plane': return <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
-    case 'text': return <Text visible={!hideText} color={object.color} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
+    case 'text': return <Styled3DText object={object} visible={!hideText} />;
     case 'blend_asset': return <BlendAssetVisual object={object} onDragChange={onDragChange} />;
     case 'camera': return <CameraVisual object={object} />;
     case 'area_light': return <mesh><circleGeometry args={[.7, 28]} /><meshBasicMaterial color={object.color} side={THREE.DoubleSide} /></mesh>;
@@ -756,7 +778,7 @@ function ThumbnailEmitter({ projectId, sceneId, revision, objects, frame, onCapt
             if (object.kind === 'text') {
               const lines = String(evaluateProperty(object, 'text', frame)).split('\n');
               const fontSize = 34 * scale;
-              context.font = `650 ${fontSize}px system-ui, sans-serif`;
+              context.font = `650 ${fontSize}px ${fontCss(object.fontFamily)}`;
               context.textAlign = 'center';
               context.textBaseline = 'middle';
               context.fillStyle = object.color;
@@ -798,7 +820,7 @@ export function ThumbnailItem({ object, frame }: { object: SceneObject; frame: n
 
 const thumbnailRevision = (scene: CameraCut, objects: SceneObject[]) => {
   const frame = scene.frame;
-  return `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${object.kind}:${object.color}:${object.screenSpace}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${object.screenCrop.join(',')}`).join('|')}`;
+  return `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${object.kind}:${object.color}:${object.fontFamily}:${object.screenSpace}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${object.screenCrop.join(',')}`).join('|')}`;
 };
 
 function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCaptured }: { projectId: string; scene: CameraCut; objects: SceneObject[]; aspect: number; dark: boolean; onCaptured(): void }) {
@@ -884,7 +906,7 @@ export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[
         '--layer-scale': String(Math.max(.1, transform.scale[0])),
       } as CSSProperties;
       return <div key={object.id} className="preview-screen-layer" style={style}><div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>
-        {object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}
+        {object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}
       </div></div>;
     })}
   </div>;
@@ -938,6 +960,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', finish); window.removeEventListener('blur', finish); };
   }, [height, interaction, setTransform, width]);
   const begin = (event: ReactPointerEvent<HTMLElement>, object: SceneObject, mode: 'move' | 'resize' | 'rotate') => {
+    if (event.button !== 0) return;
     if (mode === 'move' && (event.shiftKey || event.metaKey || event.ctrlKey)) { event.preventDefault(); event.stopPropagation(); toggleSelection(object.id); return; }
     event.preventDefault(); event.stopPropagation(); select(object.id);
     const layer = (event.currentTarget.closest('.screen-space-layer') ?? event.currentTarget) as HTMLElement;
@@ -955,7 +978,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
       const selected = selectedIds.includes(object.id) || selectedId === object.id;
       return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
-        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
+        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
         {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Rotate layer" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Resize layer" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
       </div>;
     })}
@@ -1247,7 +1270,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     return object && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light') && object.screenSpace === objects.find((candidate) => candidate.id === selectedIds[0])?.screenSpace && !groups.some((group) => group.memberIds.includes(id));
   });
   const openSelectionMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 2 || selectedIds.length < 2 || cameraView || (event.target as HTMLElement).closest('button, input, textarea, select')) return;
+    if (!selectedIds.length || (event.target as HTMLElement).closest('.viewport-selection-menu, button, input, textarea, select')) return;
     event.preventDefault();
     const bounds = viewportRef.current?.getBoundingClientRect();
     if (!bounds) return;
@@ -1286,15 +1309,12 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const height = width / aspect;
     return { width, height, heightRatio: height / viewportSize.height };
   }, [aspect, cameraView, viewportSize]);
-  const visibleCaption = cameraView ? objects.filter((object) => object.kind === 'audio' && object.audio.showCaptions).flatMap((object) => {
-    const range = objectPresenceRange(object, settings.frameStart, settings.frameEnd + 1);
-    if (!range || frame < range[0] || frame >= range[1]) return [];
-    const elapsed = (frame - range[0]) / settings.fps;
-    const sourceEnd = object.audio.trimEnd > object.audio.trimStart ? object.audio.trimEnd : object.audio.duration;
-    const length = Math.max(.01, sourceEnd - object.audio.trimStart);
-    const time = object.audio.trimStart + (object.audio.loop ? elapsed % length : elapsed);
-    return object.audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => caption.text);
-  }).join(' ') : '';
+  const visibleCaptions = cameraView ? objects.filter((object) => object.kind === 'audio' && object.audio.showCaptions).flatMap((object) => {
+    const state = audioStateAt(useEditor.getState().project, object, frame);
+    if (!state) return [];
+    const time = state.sourceTime;
+    return object.audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, text: caption.text, style: object.audio.captionStyle }));
+  }) : [];
 
   const flushPendingCameraCommit = () => {
     const pending = pendingCameraCommit.current;
@@ -1772,7 +1792,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
     <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
-      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={() => { if (!multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
+      onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={(event) => { if (event.button === 0 && !multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
@@ -1785,7 +1805,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {showMotionPaths && visibleMotionPaths.map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {showMotionPaths && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {showMotionPaths && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
@@ -1794,7 +1814,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
-    {cameraView && cameraFrame && visibleCaption && <div className="viewport-subtitle" style={{ width: cameraFrame.width, bottom: `calc(50% - ${cameraFrame.height / 2}px + 5%)` }}>{visibleCaption}</div>}
+    {cameraView && cameraFrame && visibleCaptions.length > 0 && <div className="viewport-subtitle" style={{ width: cameraFrame.width, bottom: `calc(50% - ${cameraFrame.height / 2}px + 5%)` }}>{visibleCaptions.map((caption, index) => <span key={caption.id} style={{ color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `${caption.style.size}em` }}>{index > 0 ? ' ' : ''}{caption.text}</span>)}</div>}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
@@ -1823,8 +1843,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
         ['scale', 'Scale', Scaling],
       ] as const).map(([mode, label, Icon]) => <button key={mode} disabled={!selectedTransformable} title={selectedTransformable ? label : `Select an element to use ${label.toLowerCase()}`} aria-label={label} className={gizmoMode === mode ? 'active' : ''} onClick={() => setGizmoMode(mode)}><Icon size={15} /></button>)}</div>}
     </div>
-    {selectionMenu && selectedIds.length > 1 && <div className="viewport-selection-menu" role="menu" aria-label="Selected elements actions" style={{ left: selectionMenu.x, top: selectionMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
-      <span>{selectedIds.length} elements</span>
+    {selectionMenu && selectedIds.length > 0 && <div className="viewport-selection-menu" role="menu" aria-label="Selected elements actions" style={{ left: selectionMenu.x, top: selectionMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <span>{selectedIds.length === 1 ? selectedObject?.name ?? '1 element' : `${selectedIds.length} elements`}</span>
       <button role="menuitem" onClick={() => { copySelection(); setSelectionMenu(null); }}><Copy size={13} />Copy</button>
       <button role="menuitem" onClick={() => { pasteSelection(); setSelectionMenu(null); }}><Plus size={13} />Paste</button>
       <button role="menuitem" onClick={() => { duplicateSelection(); setSelectionMenu(null); }}>Duplicate</button>

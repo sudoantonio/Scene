@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { objectPresenceRange } from '../domain/presence';
+import { audioStateAt } from '../domain/media-timeline';
 import { inspectAudio } from '../domain/audio';
 import { useEditor } from '../store/editor';
 
@@ -28,10 +28,10 @@ export default function AudioPlayback() {
           const element = new Audio(source);
           element.preload = 'auto';
           players.current.set(sound.id, { element, sourcePath: sound.asset.sourcePath });
-          if (!sound.audio.waveform.length) {
+          if (sound.audio.waveform.length < Math.min(8192, Math.max(120, Math.ceil(sound.audio.duration * 60)))) {
             const analysis = await inspectAudio(source);
             const latest = useEditor.getState().project.objects.find((object) => object.id === sound.id && object.kind === 'audio');
-            if (latest) useEditor.getState().updateObject(sound.id, { audio: { ...latest.audio, duration: analysis.duration, trimEnd: analysis.duration, waveform: analysis.waveform } });
+            if (latest) useEditor.getState().updateObject(sound.id, { audio: { ...latest.audio, duration: analysis.duration, trimEnd: latest.audio.trimEnd > latest.audio.trimStart ? latest.audio.trimEnd : analysis.duration, waveform: analysis.waveform } });
           }
         } catch { /* il pannello mantiene visibile l'asset mancante */ }
       })();
@@ -43,18 +43,10 @@ export default function AudioPlayback() {
     for (const sound of sounds) {
       const element = players.current.get(sound.id)?.element;
       if (!element) continue;
-      const range = objectPresenceRange(sound, project.settings.frameStart, project.settings.frameEnd + 1);
-      if (!range || sound.audio.muted) { element.pause(); continue; }
-      const clipElapsed = Math.max(0, (frame - range[0]) / project.settings.fps);
-      const sourceEnd = sound.audio.trimEnd > sound.audio.trimStart ? sound.audio.trimEnd : sound.audio.duration || element.duration;
-      const sourceLength = Math.max(.01, sourceEnd - sound.audio.trimStart);
-      const playableElapsed = sound.audio.loop ? clipElapsed % sourceLength : clipElapsed;
-      if (!sound.audio.loop && playableElapsed >= sourceLength) { element.pause(); continue; }
-      const expected = sound.audio.trimStart + playableElapsed;
-      const clipDuration = Math.max(.01, (range[1] - range[0]) / project.settings.fps);
-      const fadeIn = sound.audio.fadeIn ? Math.min(1, clipElapsed / sound.audio.fadeIn) : 1;
-      const fadeOut = sound.audio.fadeOut ? Math.min(1, Math.max(0, clipDuration - clipElapsed) / sound.audio.fadeOut) : 1;
-      element.volume = Math.max(0, Math.min(1, sound.audio.volume * fadeIn * fadeOut));
+      const state = audioStateAt(project, sound, frame, Number.isFinite(element.duration) ? element.duration : sound.audio.duration);
+      if (!state) { element.pause(); continue; }
+      const expected = state.sourceTime;
+      element.volume = Math.max(0, Math.min(1, state.gain));
       if (!playing || Math.abs(element.currentTime - expected) > .18) {
         try { element.currentTime = expected; } catch { /* metadata non ancora pronta */ }
       }

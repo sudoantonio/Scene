@@ -27,6 +27,11 @@
     "src/domain/direction-presets.ts",
     "src/domain/jev-action.ts",
     "src/domain/direction-planner.ts",
-    "src/domain/laya-runtime.ts"
+    "src/domain/laya-runtime.ts",
+    "src/domain/direction-integrity.ts",
+    "src/domain/bundled-animation-standard.ts",
+    "src/domain/media-timeline.ts",
+    "src/domain/edited-media.ts",
+    "src/domain/text-style.ts"
   ]
 }

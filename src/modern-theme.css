@@ -990,13 +990,13 @@ body:has(.app-shell.theme-light) #root,
   background: var(--timeline-open-panel) !important;
   position: relative;
 }
-.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll::after {
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll > :is(.timeline-ruler, .track)::after {
   content: '';
   position: absolute;
-  z-index: 9999;
-  top: 5px;
+  z-index: 1;
+  top: 0;
   bottom: 0;
-  left: calc(180px + var(--timeline-playhead-x, 0px));
+  left: var(--timeline-playhead-x, 0px);
   width: 2px;
   background: #f0c547;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .22), 0 0 5px rgba(240, 197, 71, .32);
@@ -1005,6 +1005,52 @@ body:has(.app-shell.theme-light) #root,
 .app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll > :is(.timeline-ruler, .track) > i {
   display: none !important;
 }
+.app-shell .timeline.collapsed .collapsed-scene-overview { background: #262626; }
+.app-shell .timeline.collapsed .collapsed-scene-segment {
+  border-left: 2px solid rgba(255,255,255,.86) !important;
+  border-right: 2px solid rgba(0,0,0,.95) !important;
+  box-shadow: inset 2px 0 rgba(0,0,0,.65), inset -2px 0 rgba(255,255,255,.18);
+}
+.app-shell .timeline.collapsed .collapsed-scene-segment:nth-child(even) { filter: brightness(.82); }
+.app-shell .timeline.collapsed .collapsed-scene-playhead { width: 3px; }
+.app-shell .timeline.collapsed .collapsed-scene-playhead::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid #f2c340;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 1px 1px #171717);
+}
+.app-shell .audio-clip-label { max-width: min(220px, 35%); min-width: 0; }
+.app-shell .audio-clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .audio-clip-label svg { flex: none; }
+.app-shell .audio-trim-handle { position: absolute; z-index: 5; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.app-shell .audio-trim-handle.start { left: 0; }
+.app-shell .audio-trim-handle.end { right: 0; }
+.app-shell .audio-trim-handle::after { content: ''; position: absolute; top: 35%; bottom: 35%; left: 3px; width: 2px; border-radius: 1px; background: #f3d47a; opacity: .72; }
+.app-shell .audio-trim-handle:hover::after { opacity: 1; }
+.app-shell .align-ground { display: flex; justify-content: center; align-items: center; gap: 7px; width: 100%; min-height: 32px; margin-top: 12px; padding: 6px 9px; color: var(--ui-text); background: var(--ui-primary) !important; border: 1px solid var(--ui-edge) !important; border-radius: 7px !important; font-size: 11px; }
+.app-shell .align-ground:hover { background: var(--ui-hover) !important; }
+.app-shell .text-font-control,
+.app-shell .caption-style-editor label { display: grid; gap: 5px; color: var(--ui-muted); font-size: 10px; }
+.app-shell .text-font-control { margin-top: 13px; }
+.app-shell .text-font-control select,
+.app-shell .caption-style-editor select { min-width: 0; width: 100%; height: 29px; padding: 4px 8px; color: var(--ui-text); background: var(--ui-raised); border: 1px solid var(--ui-edge); border-radius: 6px; }
+.app-shell .caption-style-editor { display: grid; grid-template-columns: minmax(0,1fr) 45px minmax(0,.8fr); gap: 8px; margin: 9px 0 13px; align-items: end; }
+.app-shell .caption-color-control input { width: 100%; height: 29px; padding: 3px; background: var(--ui-raised); border: 1px solid var(--ui-edge); border-radius: 6px; cursor: pointer; }
+.app-shell .audio-range input[type='range'] { appearance: none; -webkit-appearance: none; height: 2px; min-height: 2px; padding: 0; border: 0; border-radius: 2px; background: var(--ui-edge); cursor: pointer; }
+.app-shell .audio-range input[type='range']::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--ui-text); }
+.app-shell .headbar-history button { width: 33px; height: 30px; }
+.app-shell .timeline:not(.collapsed) .scene-track .timeline-add-scene { top: 4px; bottom: 4px; width: 28px; height: auto; min-height: 0; color: #1c1605 !important; background: #e6b52d !important; border: 1px solid #f0c957 !important; border-radius: 2px !important; }
+.app-shell .timeline:not(.collapsed) .scene-track .timeline-add-scene:hover { background: #f2c547 !important; }
+.app-shell .timeline:not(.collapsed) .timeline-toolbar { border-bottom: 0 !important; box-shadow: none !important; }
+.app-shell .timeline:not(.collapsed) .timeline-scroll { border-top: 0 !important; border-radius: 0 !important; }
+.app-shell .timeline:not(.collapsed) :is(.ruler-label, .timeline-ruler) { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 .app-shell .timeline.collapsed .collapsed-scene-segment {
   background-position: left center !important;
   background-repeat: repeat-x !important;
@@ -1127,3 +1173,38 @@ body:has(.app-shell.theme-light) #root,
   background: var(--timeline-open-panel) !important;
 }
 .character-handle-label { display: inline-block; padding: 5px 8px; border-radius: 9px; background: #232323; color: #f4f4f4; font-size: 11px; white-space: nowrap; box-shadow: 0 4px 12px #0008; }
+
+.scene-action-continuity { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 11px; margin: 8px 0; }
+.scene-action-continuity select { max-width: 100%; font: inherit; padding: 4px 6px; border-radius: 5px; }
+
+.slim-export-ai { border: 1px solid #45454b; background: #242428; color: #eee; border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+
+/* Subtitle editing keeps one outlined text card and square timeline clips. */
+.app-shell .subtitle-segment { display: flex; align-items: center; padding: 0 2px; border-radius: 0 !important; }
+.app-shell .subtitle-segment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .subtitle-resize-handle { position: relative; flex: none; width: 7px; height: 100%; display: block; cursor: ew-resize; touch-action: none; opacity: .42; }
+.app-shell .subtitle-resize-handle::after { content: ''; position: absolute; top: calc(50% - 5px); left: 3px; width: 1px; height: 10px; background: currentColor; }
+.app-shell .subtitle-resize-handle.start { margin-right: 2px; }
+.app-shell .subtitle-resize-handle.end { margin-left: 2px; }
+.app-shell .subtitle-segment:hover .subtitle-resize-handle { opacity: .9; }
+.app-shell .audio-caption-row textarea { border: 0 !important; outline: 0 !important; background: transparent !important; box-shadow: none !important; }
+.app-shell .audio-range input[type='range'] { -webkit-appearance: none; appearance: none; min-height: 16px; height: 16px; padding: 0; background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.app-shell .audio-range input[type='range']::-webkit-slider-runnable-track { height: 2px; background: #777b79; border: 0; border-radius: 2px; }
+.app-shell .audio-range input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px; background: #c8c9c6; border: 0; border-radius: 50%; }
+.app-shell .audio-range input[type='range']:focus { outline: 0; box-shadow: none !important; }
+.slim-export-ai:disabled { opacity: .5; cursor: wait; }
+
+.audio-trim-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; font-size: 11px; }
+.audio-trim-controls strong { width: 100%; }
+.audio-trim-controls label { display: flex; align-items: center; gap: 5px; }
+.audio-trim-controls input { width: 76px; }
+
+/* The time ruler joins the transport row without an enclosing rule. */
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-toolbar { border: 0 !important; box-shadow: none !important; }
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll { padding-top: 0 !important; border: 0 !important; border-radius: 0 !important; }
+.app-shell.theme-dark .timeline:not(.collapsed) :is(.ruler-label, .timeline-ruler) {
+  background-color: var(--timeline-open-panel) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}

@@ -93,7 +93,7 @@ Scene is experimental and under active development. Its current feature set is i
 
 ## License
 
-Scene is released under the [MIT License](LICENSE). You may use, modify, and distribute it under the terms of that license.
+Scene is released under the [Apache License, Version 2.0](LICENSE). You may use, modify, and distribute it under that license. Redistributed copies and derivative works must retain the relevant attribution in [NOTICE](NOTICE).
 
 ## 0.57.41: direction presets in Scenografia
 

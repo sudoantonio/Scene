@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import type { EditedMedia } from './domain/edited-media';
 import type { AbacoProject, BlenderPlan } from './domain/schema';
 import type { JevActionInput, JevActionPlan } from './domain/jev-action';
 
@@ -10,11 +11,13 @@ declare global {
     abaco?: {
       openProject(): Promise<{ project: AbacoProject; path: string } | null>;
       saveProject(project: AbacoProject, path?: string): Promise<{ project: AbacoProject; path: string } | null>;
+      exportAiFolder(project: AbacoProject, projectPath?: string, editedMedia?: EditedMedia): Promise<{ directory: string; files: number; warnings: string[] } | null>;
       getSettings(): Promise<{ hasApiKey: boolean; hasJevApiKey: boolean; reasoning: 'medium' | 'high'; blenderPath: string }>;
       saveSettings(settings: { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string }): Promise<{ ok: boolean }>;
       chooseBlender(): Promise<string | null>;
       chooseBackground(kind: 'image' | 'model'): Promise<{ path: string; name: string } | null>;
       loadAsset(path: string): Promise<string>;
+      loadFont(font: 'arial' | 'georgia' | 'trebuchet' | 'courier'): Promise<string | null>;
       loadModel(path: string): Promise<{ format: 'glb'; source: string } | { format: 'obj'; source: string; materials?: string }>;
       chooseAudio(): Promise<{ sourcePath: string; name: string } | null>;
       transcribeAudio(sourcePath: string, language: 'it-IT' | 'en-US'): Promise<Array<{ start: number; end: number; text: string }>>;
@@ -30,7 +33,7 @@ declare global {
       getPreviewState(): Promise<PreviewState | null>;
       onPreviewState(callback: (state: PreviewState) => void): () => void;
       onPreviewFrame(callback: (frame: number) => void): () => void;
-      onMenuCommand(callback: (command: 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings') => void): () => void;
+      onMenuCommand(callback: (command: 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'export-ai-folder' | 'settings') => void): () => void;
       onShiftChange(callback: (pressed: boolean) => void): () => void;
     };
   }

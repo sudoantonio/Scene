@@ -1,6 +1,11 @@
+import { PACK_BLEND_SCRIPT } from './pack-blend';
+import type { EditedMedia } from '../src/domain/edited-media';
+import { exportCameraTimeline } from './camera-timeline';
+import { writeAiBundle } from './ai-bundle';
 import { planDirection } from '../src/domain/direction-planner';
+import { assertAnimationHandoff } from '../src/domain/direction-integrity';
 import { prepareAnimationProject, buildAnimationBrief } from '../src/domain/animation-handoff';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, shell, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
@@ -17,6 +22,7 @@ import { BLENDER_BUILD_SCRIPT } from './blender-template';
 import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
 import { hydratePortableProject, projectForStorage } from './project-storage';
 import { exportScreenLayers } from './export-screen-layers';
+import { systemFontFile, type FontId } from '../src/domain/text-style';
 
 type Settings = { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
 const defaults: Settings = { reasoning: 'medium' };
@@ -26,7 +32,7 @@ type LayaRuntime = Awaited<ReturnType<(typeof import('@receptron/laya'))['Laya']
 let layaRuntimePromise: Promise<LayaRuntime> | null = null;
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 let latestPreviewState: PreviewState | null = null;
-type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'settings';
+type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'export-ai-folder' | 'settings';
 
 function loadLayaRuntime(onProgress: (progress: { file: string; received: number; total: number | null }) => void) {
   if (!layaRuntimePromise) {
@@ -53,6 +59,7 @@ function installApplicationMenu() {
       { label: 'Save project', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { type: 'separator' },
       { label: 'Export', submenu: [
+        { label: 'Cartella per l’AI…', click: () => sendMenuCommand('export-ai-folder') },
         { label: 'Blender + Astra…', click: () => sendMenuCommand('export-astra') },
         { label: 'Direct Blender export', click: () => sendMenuCommand('export-direct') },
       ] },
@@ -402,6 +409,19 @@ ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; 
   return { path: filePath, project };
 });
 
+ipcMain.handle('project:exportAiFolder', async (_event, payload: { project: AbacoProject; projectPath?: string; editedMedia?: EditedMedia }) => {
+  const selected = await dialog.showOpenDialog(mainWindow!, { title: 'Esporta cartella per l’AI', properties: ['openDirectory', 'createDirectory'], defaultPath: payload.projectPath ? path.dirname(payload.projectPath) : app.getPath('documents') });
+  if (selected.canceled || !selected.filePaths[0]) return null;
+  const packBlend = async (source: string, destination: string) => {
+    const { command, prefix } = await blenderCommand([path.dirname(source), path.dirname(destination)]);
+    const output = await runProcess(command, [...prefix, '--background', '--factory-startup', '--disable-autoexec', '--python-exit-code', '1', '--python-expr', PACK_BLEND_SCRIPT, '--', source, destination], path.dirname(destination));
+    if (!output.includes('SCENE_ASSET_PACKED')) throw new Error('Blender non ha verificato le risorse del modello. Controlla il percorso in File → Settings.');
+  };
+  const result = await writeAiBundle(ProjectSchema.parse(payload.project), selected.filePaths[0], payload.projectPath, packBlend, payload.editedMedia);
+  shell.showItemInFolder(path.join(result.directory, 'LEGGIMI.md'));
+  return result;
+});
+
 ipcMain.handle('settings:get', async () => {
   const settings = await readSettings();
   return { hasApiKey: Boolean(settings.apiKey), hasJevApiKey: Boolean(settings.jevApiKey), reasoning: settings.reasoning, blenderPath: settings.blenderPath ?? '' };
@@ -439,6 +459,12 @@ ipcMain.handle('asset:load', async (_event, filePath: string) => {
   if (extension !== '.glb') return imageFileDataUrl(filePath);
   const buffer = await fs.readFile(filePath);
   return `data:model/gltf-binary;base64,${buffer.toString('base64')}`;
+});
+ipcMain.handle('font:load', async (_event, font: FontId) => {
+  const file = systemFontFile(font);
+  if (!file) return null;
+  const bytes = await fs.readFile(file);
+  return `data:font/ttf;base64,${bytes.toString('base64')}`;
 });
 
 ipcMain.handle('model:load', async (_event, filePath: string) => {
@@ -575,6 +601,7 @@ ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: str
 
 ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; contactSheet?: string }) => {
   const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
+  assertAnimationHandoff(project);
   if (!project.comments.some((comment) => comment.status === 'pending')) {
     return { schemaVersion: 'BlenderPlanV1', summary: 'Current scene export without Astra instructions.', assumptions: [], warnings: ['No pending comments: the existing scene, camera, and animations were preserved.'], operations: [] };
   }
@@ -655,6 +682,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
 
 ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {
   const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
+  assertAnimationHandoff(project);
   const plan = BlenderPlanSchema.parse(payload.plan);
   const errors = validatePlan(project, plan);
   if (errors.length) throw new Error(errors.join('\n'));
@@ -675,8 +703,9 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
     const blendPath = path.join(tempDir, `scene_${version}.blend`);
     const audioPath = path.join(tempDir, `audio_${version}.wav`);
     await fs.writeFile(projectBundlePath, JSON.stringify(portableProject, null, 2));
-    await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project) }, null, 2));
+    await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project), cameraTimeline: exportCameraTimeline(project) }, null, 2));
     await fs.writeFile(path.join(tempDir, 'ISTRUZIONI_ANIMAZIONE.md'), buildAnimationBrief(portableProject));
+    await fs.writeFile(path.join(tempDir, 'CONTROLLI_CONSEGNA.json'), JSON.stringify(portableProject.animationHandoff, null, 2));
     if (portableProject.animationStandard) await fs.writeFile(path.join(tempDir, 'STANDARD_ANIMAZIONE_ALLEGATO.md'), portableProject.animationStandard.content);
     await fs.writeFile(planPath, JSON.stringify(plan, null, 2));
     await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);

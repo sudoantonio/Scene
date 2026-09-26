@@ -9,6 +9,7 @@ export const MotionSpecSchema = z.object({
   distanceMeters: z.number().nonnegative(),
   rotationDegrees: z.number().nonnegative(),
   durationSeconds: z.number().positive(),
+  energy: z.number().min(0).max(4).optional(),
   path: z.enum(['hold', 'linear', 'smooth', 'arc', 'orbit', 'follow', 'drawn']),
   referenceId: z.string().uuid().optional(),
   framing: z.object({

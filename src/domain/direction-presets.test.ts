@@ -87,8 +87,11 @@ describe('Regia con preset e standard portatili', () => {
     expect(brief).toContain('Non limitarti a miscelare cursori emotivi');
   });
   it('mantiene i vecchi progetti validi e la descrizione narrativa vuota', () => {
-    const p = ProjectSchema.parse(createProject());
+    const legacy = createProject();
+    delete legacy.animationStandard;
+    const p = ProjectSchema.parse(legacy);
     expect(p.animationStandard).toBeUndefined();
+    expect(prepareAnimationProject(p).animationStandard?.version).toBe('2026-09-26.1');
     expect(prepareAnimationProject(p).comments).toEqual([]);
   });
   it('allega e rimuove il documento con undo senza alterare le scene', () => {

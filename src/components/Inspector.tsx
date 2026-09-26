@@ -4,6 +4,7 @@ import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import type { Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
+import { FONT_OPTIONS, fontCss } from '../domain/text-style';
 import ElementsPanel from './ElementsPanel';
 import LightingPanel from './LightingPanel';
 import AudioPanel from './AudioPanel';
@@ -113,8 +114,8 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
           <div className="camera-sliders">
           {positionControls.map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Vertical' : label}</span><strong>{object.screenSpace ? `${Math.round(positionValues![axis] * 100)}%` : `${positionValues![axis].toFixed(1)} m`}</strong><input aria-label={`${label} element`} title={cameraView && axis === 1 ? 'Increase to move the character away from the camera' : undefined} type="range" min={cameraView && axis === 1 && !object.screenSpace ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step={object.screenSpace ? '.01' : '0.1'} value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
           </div>
-          {!object.screenSpace && <button className="subtle align-ground" onClick={() => alignObjectToGround(object.id)}><MoveDown size={13} /> Place on ground</button>}
           <div className="size-control"><div><span>Size</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Element size" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
+          {!object.screenSpace && <button className="subtle align-ground" onClick={() => alignObjectToGround(object.id)}><MoveDown size={13} /> Place on ground</button>}
         </InspectorGroup>
 
         <InspectorGroup title="Rotation" icon={<Rotate3d size={13} />} variant="secondary"><div className="camera-sliders">
@@ -122,7 +123,11 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
             ['Tilt X', 0], ['Tilt Y', 1], ['Turn', 2],
           ] as const).map(([label, axis]) => <label key={`rotation-${axis}`}><span>{label}</span><strong>{transform.rotation[axis].toFixed(0)}°</strong><input aria-label={`${label} element`} type="range" min="-180" max="180" step="1" value={transform.rotation[axis]} onChange={(event) => changeTransformAxis('rotation', axis, Number(event.target.value))} /></label>)}
         </div></InspectorGroup>
-        <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary"><div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div><div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div></InspectorGroup>
+        <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary">
+          <div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div>
+          <div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div>
+          {object.kind === 'text' && <label className="text-font-control"><span>Font</span><select aria-label="Text font" value={object.fontFamily} style={{ fontFamily: fontCss(object.fontFamily) }} onChange={(event) => updateObject(object.id, { fontFamily: event.target.value as typeof object.fontFamily })}>{FONT_OPTIONS.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select></label>}
+        </InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Crop" icon={<Crop size={13} />} variant="secondary"><div className="camera-sliders">{(['Top', 'Right', 'Bottom', 'Left'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Crop ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
         <InspectorGroup title="Advanced values" icon={<Braces size={13} />} variant="secondary">
           <VectorFields label="Position" value={transform.position} onChange={(value) => changeTransform('position', value)} />

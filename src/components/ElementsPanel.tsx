@@ -86,6 +86,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
         <div className="scene-direction-heading"><strong>Scene direction</strong></div>
         <SceneDirectionInput value={directionDraft} onChange={changeDirection} targets={activeScene ? sceneDirectionTargets(project, activeScene.id) : []} selectedId={selectedId} />
       </div>
+      {activeScene && <label className="scene-action-continuity">Action between shots<select aria-label="Action continuity" value={activeScene.actionContinuity ?? 'unspecified'} onChange={event => useEditor.getState().setActionContinuity(activeScene.id, event.target.value as 'unspecified' | 'continue' | 'hold' | 'new_action')}><option value="unspecified">Use scene direction</option><option value="continue">Continue previous action</option><option value="hold">Hold the pose</option><option value="new_action">Start a new action</option></select></label>}
       <AnimationStandardPanel />
     </section>}
   </div>;

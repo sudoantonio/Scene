@@ -1794,6 +1794,13 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .audio-captions-heading strong, .audio-caption-actions button { display: inline-flex; align-items: center; gap: 6px; }
 .audio-captions-heading select, .audio-caption-row input, .audio-caption-row textarea { color: var(--text); background: #292929; border: 1px solid #494949; border-radius: 6px; }
 .audio-captions-heading select { padding: 5px 7px; }
+.audio-transcribe-row { display: flex; align-items: stretch; gap: 7px; margin-top: 9px; }
+.audio-transcribe-row .audio-transcribe { flex: 1; min-width: 0; margin-top: 0; }
+.audio-transcribe-row .audio-caption-icon { position: relative; width: 34px; min-width: 34px; min-height: 34px; display: grid; place-items: center; color: var(--text); background: #383838; border: 1px solid #535353; border-radius: 7px; cursor: pointer; }
+.audio-transcribe-row .audio-caption-icon:hover:not(:disabled) { background: #4a4a4a; }
+.audio-transcribe-row .audio-caption-icon:disabled { opacity: .45; cursor: default; }
+.audio-language-icon select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.audio-language-icon:focus-within { outline: 2px solid #d8ab35; outline-offset: 2px; }
 .audio-transcribe { width: 100%; min-height: 34px; margin-top: 9px; color: #201b0f; background: #d8ab35; border: 0; border-radius: 7px; font-weight: 600; }
 .audio-transcribe:disabled { opacity: .55; }
 .audio-transcribe-error { color: #e99595; font-size: 11px; line-height: 1.4; }
@@ -1801,14 +1808,14 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .audio-caption-actions label { display: inline-flex; align-items: center; gap: 5px; }
 .audio-caption-actions button { padding: 5px 7px; color: var(--text); background: #383838; border: 1px solid #535353; border-radius: 6px; }
 .audio-caption-list { display: grid; gap: 7px; max-height: 280px; overflow: auto; }
-.audio-caption-row { padding: 0 0 8px; background: transparent; border-bottom: 1px solid var(--ui-edge, #414141); }
-.audio-caption-combined { padding: 5px 8px 3px; background: var(--ui-subsection, #292929); border: 1px solid var(--ui-edge, #484848); border-radius: 8px; }
+.audio-caption-row { background: transparent; }
+.audio-caption-combined { position: relative; padding: 5px 8px 3px; background: var(--ui-subsection, #292929); border: 1px solid var(--ui-edge, #484848); border-radius: 8px; }
 .audio-caption-times { min-height: 21px; display: flex; align-items: center; gap: 5px; color: var(--ui-muted, #999); font-size: 10px; }
 .audio-caption-row input { width: 59px; min-width: 0; padding: 1px 0; color: var(--ui-muted, #aaa); background: transparent; border: 0; font-size: 10px; font-variant-numeric: tabular-nums; }
 .audio-caption-row input:focus { outline: 0; box-shadow: none; }
-.audio-caption-row textarea { width: 100%; min-height: 34px; max-height: 90px; padding: 3px 0 4px; color: var(--ui-text, #eee); background: transparent; border: 0; resize: vertical; font-size: 11px; line-height: 1.4; }
+.audio-caption-row textarea { width: 100%; min-height: 34px; max-height: 90px; padding: 3px 0 4px; color: var(--ui-text, #eee); background: transparent; border: 0 !important; outline: 0 !important; box-shadow: none !important; resize: vertical; font-size: 11px; line-height: 1.4; }
 .audio-caption-row textarea:focus { outline: 0; box-shadow: none; }
-.audio-caption-split { min-height: 23px; margin-top: 4px; padding: 0 7px; display: inline-flex; align-items: center; gap: 5px; color: var(--ui-muted, #aaa); background: var(--ui-raised, #383838); border: 1px solid var(--ui-edge, #484848); border-radius: 5px; font-size: 9px; }
+.audio-caption-split { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; color: var(--ui-muted, #aaa); background: var(--ui-raised, #383838); border: 0; border-radius: 5px; }
 .audio-caption-split:hover { color: var(--ui-text, #eee); background: var(--ui-hover, #4a4a4a); }
 .viewport-subtitle { position: absolute; z-index: 20; left: 50%; transform: translateX(-50%); padding: 0 7%; color: white; font-size: clamp(16px, 2vw, 32px); font-weight: 700; line-height: 1.3; text-align: center; text-shadow: 0 2px 4px #000, 0 0 12px #000; pointer-events: none; }
 .audio-waveform { position: absolute; z-index: 0; inset: 4px 7px; width: calc(100% - 14px); height: calc(100% - 8px); overflow: visible; opacity: .62; }
@@ -1901,6 +1908,8 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .screen-space-layer .screen-layer-content > span,
 .preview-screen-layer .screen-layer-content > span {
   font-size: calc(2.65625cqw * var(--layer-scale));
+  padding: .15625cqw .390625cqw;
+  text-shadow: 0 .078125cqw .234375cqw rgba(0,0,0,.45);
 }
 .screen-space-layer .screen-layer-content > img,
 .preview-screen-layer .screen-layer-content > img {

@@ -1,3 +1,4 @@
+import { prepareEditedMedia } from './domain/edited-media';
 import { useEffect, useRef, useState } from 'react';
 import { PanelRightOpen, Plus, Redo2, Undo2 } from 'lucide-react';
 import { applyPlan } from './domain/animation';
@@ -131,6 +132,18 @@ export default function App() {
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
+  const exportAiFolder = async () => {
+    if (!requireDesktop() || busy) return;
+    try {
+      setBusy(true);
+      window.dispatchEvent(new Event('abaco:flush-camera-edit'));
+      const snapshot = useEditor.getState();
+      const editedMedia = await prepareEditedMedia(snapshot.project, window.abaco!.loadAsset, text => notify('info', text));
+      const output = await window.abaco!.exportAiFolder(snapshot.project, snapshot.projectPath, editedMedia);
+      if (output) notify(output.warnings.length ? 'info' : 'ok', `Cartella per l’AI creata: ${output.directory}. ${output.files} file inclusi.${output.warnings.length ? ' Consulta LEGGIMI.md per i punti da verificare.' : ''}`);
+    } catch (error) { notify('error', error instanceof Error ? error.message : 'Esportazione non riuscita.'); }
+    finally { setBusy(false); }
+  };
   const exportDirect = async () => {
     if (!requireDesktop()) return;
     try {
@@ -228,8 +241,9 @@ export default function App() {
     else if (command === 'redo') redo();
     else if (command === 'export-astra') generate();
     else if (command === 'export-direct') exportDirect();
+    else if (command === 'export-ai-folder') exportAiFolder();
     else if (command === 'settings') setSettingsOpen(true);
-  }), [dirty, projectPath]);
+  }), [dirty, projectPath, busy]);
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
@@ -271,8 +285,8 @@ export default function App() {
     <div className="slim-headbar">
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
       <div className={`headbar-history ${collapsed.right ? 'with-panel-toggle' : ''}`}>
-        <button type="button" aria-label="Undo" title="Undo · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={14} /></button>
-        <button type="button" aria-label="Redo" title="Redo · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={14} /></button>
+        <button type="button" aria-label="Undo" title="Undo · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={19} /></button>
+        <button type="button" aria-label="Redo" title="Redo · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={19} /></button>
       </div>
       {collapsed.right && <button className="headbar-inspector-open" aria-label="Open side panel" title="Open panels" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>

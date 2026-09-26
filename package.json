@@ -1,9 +1,9 @@
 {
   "name": "abaco-animatic",
-  "version": "0.58.0",
+  "version": "0.59.2",
   "private": true,
   "author": "Abaco Animation",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "desktopName": "Scene",
   "description": "Editor desktop locale per bozze 3D assistite da GPT-6 Astra e Blender",
   "main": "dist-electron/main.cjs",
@@ -59,7 +59,9 @@
       "dist/index.html",
       "dist/assets/**/*",
       "dist-electron/**/*",
-      "package.json"
+      "package.json",
+      "LICENSE",
+      "NOTICE"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/**/*"
@@ -76,7 +78,16 @@
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.png",
       "artifactName": "Scene-${version}-mac-${arch}.${ext}",
-      "extraResources": [{ "from": "vendor/whisper-cpp/whisper-cli-macos-arm64", "to": "whisper-cli" }, { "from": "vendor/whisper-cpp/LICENSE", "to": "whisper-license.txt" }]
+      "extraResources": [
+        {
+          "from": "vendor/whisper-cpp/whisper-cli-macos-arm64",
+          "to": "whisper-cli"
+        },
+        {
+          "from": "vendor/whisper-cpp/LICENSE",
+          "to": "whisper-license.txt"
+        }
+      ]
     }
   }
 }

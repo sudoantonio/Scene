@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { MotionSpecSchema } from './motion-spec';
+import { createBundledStandard } from './bundled-animation-standard';
+import { FONT_OPTIONS } from './text-style';
 
 export const Vec3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 export type Vec3 = z.infer<typeof Vec3Schema>;
@@ -44,6 +46,7 @@ export const KeyframeSchema = z.object({
   holdFrames: z.number().int().nonnegative().optional(),
   source: z.enum(['user', 'ai']).default('user'),
   purpose: z.enum(['snapshot', 'motion']).optional(),
+  directionActionId: z.string().uuid().optional(),
   commentIds: z.array(z.string().uuid()).default([]),
 }).superRefine((key, ctx) => {
   if (!isValidAnimationValue(key.property, key.value)) {
@@ -57,6 +60,7 @@ export const SceneObjectSchema = z.object({
   name: z.string().min(1),
   kind: ObjectKindSchema,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as ['system', 'arial', 'georgia', 'trebuchet', 'courier']).default('system'),
   visible: z.boolean(),
   transform: TransformSchema,
   text: z.string().default('Text'),
@@ -70,7 +74,7 @@ export const SceneObjectSchema = z.object({
     previewScale: z.number().finite().positive().default(1),
     groundOffset: z.number().finite().nonnegative().default(1),
     controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema, worldPosition: Vec3Schema.optional(), worldBasis: z.tuple([Vec3Schema, Vec3Schema, Vec3Schema]).optional(), morphTargets: z.tuple([z.string(), z.string(), z.string()]).optional(), morphStep: z.number().positive().optional() })).optional(),
-    controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema, source: z.enum(['user', 'ai']).optional() })).optional(),
+    controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema, source: z.enum(['user', 'ai']).optional(), directionActionId: z.string().uuid().optional(), interpolation: InterpolationSchema.optional() })).optional(),
   }).default({ sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 }),
   audio: z.object({
     duration: z.number().finite().nonnegative().default(0),
@@ -81,10 +85,11 @@ export const SceneObjectSchema = z.object({
     trimEnd: z.number().finite().nonnegative().default(0),
     fadeIn: z.number().finite().nonnegative().default(0),
     fadeOut: z.number().finite().nonnegative().default(0),
-    waveform: z.array(z.number().finite().min(0).max(1)).max(256).default([]),
+    waveform: z.array(z.number().finite().min(0).max(1)).max(8192).default([]),
     captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string() })).default([]),
+    captionStyle: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as ['system', 'arial', 'georgia', 'trebuchet', 'courier']), size: z.number().min(.65).max(1.6) }).default({ color: '#ffffff', fontFamily: 'system', size: 1 }),
     showCaptions: z.boolean().default(true),
-  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], showCaptions: true }),
+  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1 }, showCaptions: true }),
   screenSpace: z.boolean().default(false),
   sceneIds: z.array(z.string().uuid()).default([]),
   screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
@@ -101,7 +106,7 @@ export const DirectionPresetSchema = z.object({
 export type DirectionPreset = z.infer<typeof DirectionPresetSchema>;
 export const AnimationStandardSchema = z.object({
   name: z.string().min(1).max(255), content: z.string().trim().min(1).max(500000),
-  attachedAt: z.string(),
+  attachedAt: z.string(), version: z.string().optional(),
 });
 export type AnimationStandard = z.infer<typeof AnimationStandardSchema>;
 
@@ -156,6 +161,7 @@ export const CameraCutSchema = z.object({
   commentIds: z.array(z.string().uuid()).default([]),
   name: z.string().optional(),
   transition: z.enum(['cut', 'auto']).optional(),
+  actionContinuity: z.enum(['unspecified', 'continue', 'hold', 'new_action']).optional(),
   lighting: LightingSettingsSchema.default(defaultLighting),
   background: BackgroundSettingsSchema.default(defaultBackground),
   framing: CameraFramingSchema.default(defaultCameraFraming),
@@ -178,6 +184,12 @@ export const DirectionPlanSchema = z.object({
     referenceId: z.string().uuid().optional(), keepInFrame: z.boolean(),
     distanceMeters: z.number(), durationSeconds: z.number(), durationExplicit: z.boolean().optional(),
     motionSpec: MotionSpecSchema.optional(),
+    performance: z.object({
+      instruction: z.string(), sceneDirection: z.array(z.string()),
+      energy: z.number().min(0).max(4).optional(),
+      timing: z.enum(['explicit', 'suggested']), coordinates: z.literal('preview'),
+      availableFrames: z.tuple([z.number().int(), z.number().int()]),
+    }).optional(),
     decision: z.record(z.unknown()).optional(),
   })),
 });
@@ -198,6 +210,12 @@ export const ProjectSchema = z.object({
     units: z.literal('meters'),
   }),
   animationStandard: AnimationStandardSchema.optional(),
+  animationStandardDisabled: z.boolean().optional(),
+  animationHandoff: z.object({
+    version: z.literal(1), role: z.literal('storyboard'),
+    standardVersion: z.string().optional(),
+    issues: z.array(z.object({ severity: z.enum(['info', 'warning', 'error']), code: z.string(), message: z.string(), planId: z.string().optional() })),
+  }).optional(),
   animationBrief: z.string().optional(),
   directionPlans: z.array(DirectionPlanSchema).optional(),
   objects: z.array(SceneObjectSchema),
@@ -242,7 +260,8 @@ export const PlanOperationSchema = z.object({
   objectId: z.string().uuid(),
   frame: z.number().int().positive(),
   property: z.enum(['position', 'rotation', 'scale', 'visibility', 'text', 'lens', 'camera_cut', 'controller_pose']),
-  controllerName: z.string().min(1).optional(),
+  controllerName: z.string().min(1).nullish().transform(value => value ?? undefined),
+  directionActionId: z.string().uuid().optional(),
   value: OperationValueSchema,
   interpolation: InterpolationSchema,
   rationale: z.string(),
@@ -281,10 +300,10 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     blend_asset: '#777984', camera: '#d1a12a', area_light: '#f2dfac', point_light: '#f2dfac', sun_light: '#f2dfac',
   };
   return {
-    id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind],
+    id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind], fontFamily: 'system',
     visible: true, transform, text: 'Text', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
     asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 },
-    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], showCaptions: true },
+    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1 }, showCaptions: true },
     screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }
@@ -295,6 +314,7 @@ export function createProject(): AbacoProject {
   return {
     schemaVersion: 'AbacoSceneV1', id: crypto.randomUUID(), name: 'New animatic', createdAt: now, updatedAt: now,
     settings: { fps: 24, frameStart: 1, frameEnd: 72, resolutionX: 1920, resolutionY: 1080, units: 'meters' },
+    animationStandard: createBundledStandard(now),
     objects: [camera], groups: [], comments: [], cameraCuts: [{ id: crypto.randomUUID(), cameraId: camera.id, frame: 1, source: 'user', commentIds: [], name: 'Scene 1', transition: 'cut', lighting: defaultLighting(), background: defaultBackground(), framing: defaultCameraFraming() }],
   };
 }

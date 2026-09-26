@@ -1,3 +1,4 @@
+import { visibilityIntervals } from '../src/domain/media-timeline';
 import { evaluateProperty, evaluateTransform } from '../src/domain/animation';
 import type { AbacoProject } from '../src/domain/schema';
 
@@ -12,7 +13,7 @@ export function exportScreenLayers(project: AbacoProject) {
       return {
         frame, x: transform.position[0], y: transform.position[2],
         rotation: transform.rotation[2], scale: Math.max(.1, transform.scale[0]),
-        visible: evaluateProperty(object, 'visibility', frame) as boolean,
+        visible: visibilityIntervals(project, object).some(([a, b]) => frame >= a && frame < b),
         text: object.kind === 'text' ? String(evaluateProperty(object, 'text', frame)) : '',
       };
     }),

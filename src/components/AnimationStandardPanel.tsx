@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useEditor } from '../store/editor';
 import { AnimationStandardSchema } from '../domain/schema';
-import bundledStandard from '../assets/STANDARD_ANIMAZIONE_GENERALE.md?raw';
+import { createBundledStandard } from '../domain/bundled-animation-standard';
 import { FileText, RotateCcw, WandSparkles, X } from 'lucide-react';
 
 export default function AnimationStandardPanel() {
@@ -28,8 +28,8 @@ export default function AnimationStandardPanel() {
   };
   return <div className="animation-standard-slot">
       <input ref={input} type="file" accept=".md,.txt,text/plain,text/markdown" hidden aria-label="Animation standard document" onChange={e => { void importFile(e.target.files?.[0]); }} />
-      <button className="animation-standard-file" type="button" disabled={loading} onClick={() => input.current?.click()} title={standard ? 'Replace animation standard' : 'Attach animation standard'}><FileText size={15} /><span>{standard?.name ?? 'Animation standard'}</span>{standard ? <RotateCcw size={13} /> : <small>Attach file</small>}</button>
-      {!standard && <button className="animation-standard-icon" type="button" disabled={loading} aria-label="Use included cartoon standard" title="Use included cartoon standard" onClick={() => { setError(''); setStandard({ name: 'STANDARD_ANIMAZIONE_GENERALE.md', content: bundledStandard, attachedAt: new Date().toISOString() }); }}><WandSparkles size={14} /></button>}
+      <button className="animation-standard-file" type="button" disabled={loading} onClick={() => input.current?.click()} title={standard ? 'Replace animation standard' : 'Attach animation standard'}><FileText size={15} /><span>{standard ? `${standard.name}${standard.version ? ` · ${standard.version}` : ''}` : 'No animation standard'}</span>{standard ? <RotateCcw size={13} /> : <small>Attach file</small>}</button>
+      {!standard && <button className="animation-standard-icon" type="button" disabled={loading} aria-label="Use included cartoon standard" title="Use included cartoon standard" onClick={() => { setError(''); setStandard(createBundledStandard()); }}><WandSparkles size={14} /></button>}
       {standard && <button className="animation-standard-icon" type="button" disabled={loading} aria-label="Remove animation standard" title="Remove animation standard" onClick={() => setStandard(undefined)}><X size={14} /></button>}
       {loading && <p role="status">Reading document…</p>}{error && <p role="alert">{error}</p>}
     </div>;

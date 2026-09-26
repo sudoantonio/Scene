@@ -295,8 +295,7 @@ describe('Scene direction mentions and motion presets', () => {
 
 it('mostra lo standard come riga compatta senza pannello apribile', () => {
   render(<Inspector panel="scene" onPanelChange={vi.fn()} />);
-  expect(screen.getByText('Animation standard').closest('details')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Use included cartoon standard' }));
+  expect(screen.getByText(/STANDARD_ANIMAZIONE_GENERALE.md/).closest('details')).toBeNull();
   expect(useEditor.getState().project.animationStandard?.name).toBe('STANDARD_ANIMAZIONE_GENERALE.md');
-  expect(screen.getByText('STANDARD_ANIMAZIONE_GENERALE.md')).toBeInTheDocument();
+  expect(screen.getByText(/STANDARD_ANIMAZIONE_GENERALE.md/)).toBeInTheDocument();
 });

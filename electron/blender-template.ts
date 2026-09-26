@@ -1,3 +1,5 @@
+import { APPLY_CAMERA_TIMELINE_SCRIPT } from './camera-timeline';
+
 export const BLENDER_BUILD_SCRIPT = String.raw`import bpy
 import json
 import math
@@ -16,6 +18,13 @@ plan = json.loads(plan_path.read_text(encoding="utf-8"))
 def asset_path(value):
     source = Path(value)
     return source if source.is_absolute() else input_path.parent / source
+
+def font_for_data(data):
+    names = {"arial": "Arial.ttf", "georgia": "Georgia.ttf", "trebuchet": "Trebuchet MS.ttf", "courier": "Courier New.ttf"}
+    name = names.get(data.get("fontFamily"))
+    if not name: return None
+    file = Path("/System/Library/Fonts/Supplemental") / name
+    return bpy.data.fonts.load(str(file), check_existing=True) if file.exists() else None
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -57,6 +66,8 @@ def create_object(data, suffix="", text_override=None):
     elif kind == "text":
         curve = bpy.data.curves.new(name, "FONT")
         curve.body = text_override if text_override is not None else data.get("text", "Testo")
+        selected_font = font_for_data(data)
+        if selected_font: curve.font = selected_font
         curve.align_x = "CENTER"
         curve.align_y = "CENTER"
         curve.extrude = 0.025
@@ -119,6 +130,19 @@ def set_interpolation(obj, frame, mode):
                 if obj.type == "CAMERA" and mode == "bezier":
                     point.handle_left_type = "AUTO_CLAMPED"
                     point.handle_right_type = "AUTO_CLAMPED"
+
+def apply_controller_interpolation(curve, keys):
+    points = list(curve.keyframe_points)
+    for index, point in enumerate(points):
+        authored = next((key for key in keys if abs(key["frame"] - point.co.x) < .001), None)
+        point.interpolation = interpolation_name(authored.get("interpolation", "linear") if authored else "linear")
+        if point.interpolation == "BEZIER" and index + 1 < len(points):
+            following = points[index + 1]
+            distance = (following.co.x - point.co.x) / 3
+            point.handle_right_type = "FREE"
+            point.handle_right = (point.co.x + distance, point.co.y)
+            following.handle_left_type = "FREE"
+            following.handle_left = (following.co.x - distance, following.co.y)
 
 def constrain_camera_segments(obj):
     if obj.type != "CAMERA": return
@@ -224,10 +248,12 @@ def create_blend_asset(data):
                 for key in keys:
                     bone.location = base + Vector(key["offset"])
                     bone.keyframe_insert("location", frame=key["frame"], group=bone.name)
-            for curve in action_fcurves(obj):
-                if curve.data_path.endswith(".location"):
-                    for point in curve.keyframe_points:
-                        point.interpolation = "LINEAR"
+            for bone in obj.pose.bones:
+                name = "BONE|" + obj.name + "|" + bone.name
+                keys = [key for key in controller_keys if key.get("name") == name]
+                for curve in action_fcurves(obj):
+                    if curve.data_path == bone.path_from_id("location"):
+                        apply_controller_interpolation(curve, keys)
         if obj.type != "EMPTY":
             continue
         keys = sorted((key for key in controller_keys if key.get("name") == obj.name), key=lambda key: key["frame"])
@@ -243,8 +269,7 @@ def create_blend_asset(data):
             obj.keyframe_insert("location", frame=key["frame"])
         for curve in action_fcurves(obj):
             if curve.data_path == "location":
-                for point in curve.keyframe_points:
-                    point.interpolation = "LINEAR"
+                apply_controller_interpolation(curve, keys)
     root["abaco_id"] = data["id"]
     root["abaco_kind"] = "blend_asset"
     root["abaco_source_blend"] = str(source_path)
@@ -297,6 +322,11 @@ for data in project["objects"]:
             obj.keyframe_insert("hide_render", frame=end); obj.keyframe_insert("hide_viewport", frame=end)
         set_interpolation(obj, start, "constant")
         objects.setdefault(data["id"], obj)
+
+${APPLY_CAMERA_TIMELINE_SCRIPT}
+
+if project.get("cameraTimeline"):
+    apply_scene_camera_timeline(scene, project["cameraTimeline"], objects)
 
 def visibility_window(obj, start, end):
     first = settings["frameStart"]
@@ -395,6 +425,8 @@ def screen_layer_object(data, name, body=None):
     if data["kind"] == "text":
         curve = bpy.data.curves.new(name, "FONT")
         curve.body = body
+        selected_font = font_for_data(data)
+        if selected_font: curve.font = selected_font
         curve.align_x = "CENTER"
         curve.align_y = "CENTER"
         curve.space_line = 1.08
