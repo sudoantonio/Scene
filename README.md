@@ -16,7 +16,9 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
 
 ## Download
 
-For Apple Silicon Macs, [download Scene 0.59.5 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.5/Scene-0.59.5-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow. The Mac app is not yet signed or notarized; on first launch, if macOS blocks it, right-click `Scene.app` and choose **Open**.
+For Apple Silicon Macs, [download Scene 0.59.5 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.5/Scene-0.59.5-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
+
+The Mac app is not yet signed with an Apple Developer ID or notarized. macOS may report that the downloaded app is “damaged” even when the ZIP is intact. For version 0.59.5, verify the downloaded ZIP with `shasum -a 256 ~/Downloads/Scene-0.59.5-mac-arm64.zip`; its SHA-256 must be `e8b8597f2ed9e8daf89afef7ff2d6cde341ca6cfacdac315c6cf5121eb59cda8`. If it matches, extract the ZIP and run `xattr -dr com.apple.quarantine /path/to/Scene.app` on **that extracted app only** before opening it. You can drag `Scene.app` from Finder into Terminal to insert its exact path. Do not disable macOS security globally. A warning-free download requires Apple Developer ID signing and notarization.
 
 ## Why Scene exists
 
