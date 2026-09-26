@@ -33,6 +33,21 @@ function AudioWaveform({ values }: { values: number[] }) {
   const samples = values.length ? values : Array.from({ length: 64 }, (_, index) => .18 + Math.abs(Math.sin(index * 1.73)) * .35);
   return <svg className="audio-waveform" viewBox={`0 0 ${samples.length} 1`} preserveAspectRatio="none" aria-hidden="true">{samples.map((value, index) => <rect key={index} x={index + .16} y={(1 - value) / 2} width=".68" height={value} rx=".12" />)}</svg>;
 }
+function subtitleClips(object: SceneObject, range: [number, number], fps: number) {
+  const { trimStart, trimEnd, duration, captions, loop } = object.audio;
+  const sourceEnd = trimEnd > trimStart ? trimEnd : duration;
+  const sourceLength = Math.max(.01, sourceEnd - trimStart);
+  const visibleSeconds = (range[1] - range[0]) / fps;
+  const repeats = loop ? Math.ceil(visibleSeconds / sourceLength) : 1;
+  return Array.from({ length: repeats }, (_, repeat) => captions.flatMap((caption) => {
+    const from = Math.max(trimStart, caption.start);
+    const to = Math.min(sourceEnd, caption.end);
+    if (to <= from) return [];
+    const startFrame = range[0] + (repeat * sourceLength + from - trimStart) * fps;
+    const endFrame = Math.min(range[1], range[0] + (repeat * sourceLength + to - trimStart) * fps);
+    return endFrame > startFrame ? [{ id: `${caption.id}:${repeat}`, text: caption.text, startFrame, endFrame }] : [];
+  })).flat();
+}
 export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?(): void }) {
   const project = useEditor((state) => state.project);
   const frame = useEditor((state) => state.currentFrame);
@@ -483,7 +498,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
           <GripVertical className="row-grip" size={12} /><ElementThumbnail object={object} /><button className="row-name" title={displayName} onClick={(event) => { selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); if (activeScene) setSelectedTrack({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scene'}` }); }}>{displayName}</button>{activeScene && noteBadge({ scope: 'object', sceneId: activeScene.id, objectId: object.id, label: `${displayName} · ${activeScene.name ?? 'Scene'}` }, 'label-comment')}<button className="row-action" title={objectVisible ? 'Hide' : 'Show'} aria-label={objectVisible ? `Hide ${displayName}` : `Show ${displayName}`} onClick={() => updateObject(object.id, { visible: !objectVisible })}>{objectVisible ? <Eye size={12} /> : <EyeOff size={12} />}</button><button className="row-action danger" title="Delete" aria-label={`Delete ${displayName}`} onClick={() => deleteObject(object.id)}><Trash2 size={12} /></button>
         </div>
         <div className="track presence-track" onClick={seek}>
-          {object.kind === 'audio' ? audioRange && <button className={`presence-segment audio-layer ${selectedId === object.id ? 'selected-block' : ''}`} style={{ left: left(audioRange[0]), width: `${((audioRange[1] - audioRange[0]) / Math.max(1, end - start + 1)) * 100}%` }} title={`${displayName} · ${(object.audio.duration).toFixed(1)} s`} onClick={(event) => { event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); setTransitionDraft(undefined); setCommentDraft(undefined); }}><AudioWaveform values={object.audio.waveform} /><span className="audio-clip-label"><Music2 size={11} />{displayName}</span>{object.audio.captions.map((caption) => { const duration = Math.max(.01, (audioRange[1] - audioRange[0]) / project.settings.fps); const from = Math.max(0, Math.min(100, (caption.start - object.audio.trimStart) / duration * 100)); const to = Math.max(from, Math.min(100, (caption.end - object.audio.trimStart) / duration * 100)); return <span key={caption.id} className="audio-caption-marker" style={{ left: `${from}%`, width: `${Math.max(.6, to - from)}%` }} title={caption.text} />; })}</button> : scenes.map((scene, index) => {
+          {object.kind === 'audio' ? audioRange && <button className={`presence-segment audio-layer ${selectedId === object.id ? 'selected-block' : ''}`} style={{ left: left(audioRange[0]), width: `${((audioRange[1] - audioRange[0]) / Math.max(1, end - start + 1)) * 100}%` }} title={`${displayName} · ${(object.audio.duration).toFixed(1)} s`} onClick={(event) => { event.stopPropagation(); selectTimelineObject(object.id, event.metaKey || event.ctrlKey); setDeleteTarget({ kind: 'object', objectId: object.id }); setTransitionDraft(undefined); setCommentDraft(undefined); }}><AudioWaveform values={object.audio.waveform} /><span className="audio-clip-label"><Music2 size={11} />{displayName}</span></button> : scenes.map((scene, index) => {
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scene ${index + 1}`}` };
@@ -498,7 +513,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
             }}><span className="presence-resize-handle start" role="separator" aria-label="Resize element start" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'start', event)} /><span className="segment-thumbnails" aria-hidden="true"><ElementThumbnail object={object} compact /></span><span className="segment-mode">Present</span>{noteBadge(selection, 'segment-comment')}<span className="presence-resize-handle end" role="separator" aria-label="Resize element end" onPointerDown={(event) => beginResizePresence(object, scene.id, scene.frame, clipEnd, 'end', event)} /></button>;
           })}
         </div>
-      </div>{object.kind !== 'audio' && renderMotionTrack(object)}</Fragment>})}
+      </div>{object.kind === 'audio' && audioRange && object.audio.captions.length > 0 && <><div className="track-label subtitle-track-label"><span className="movement-hierarchy"><Type size={13} /> Subtitles</span></div><div className={`track subtitle-track ${object.audio.showCaptions ? '' : 'subtitles-hidden'}`} onClick={seek}>{subtitleClips(object, audioRange, project.settings.fps).map((clip) => <button key={clip.id} type="button" className="subtitle-segment" style={{ left: left(clip.startFrame), width: `${((clip.endFrame - clip.startFrame) / Math.max(1, end - start + 1)) * 100}%` }} title={clip.text} aria-label={`Subtitle: ${clip.text}`} onClick={(event) => { event.stopPropagation(); setFrame(Math.round(clip.startFrame)); selectTimelineObject(object.id); }}><span>{clip.text}</span></button>)}</div></>}{object.kind !== 'audio' && renderMotionTrack(object)}</Fragment>})}
     </div>
   </section>;
 }

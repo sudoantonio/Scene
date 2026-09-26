@@ -26,6 +26,25 @@ describe('Punti e maniglie del movimento', () => {
     expect(useEditor.getState().project.settings.frameEnd).toBeGreaterThan(72);
   });
 
+  it('mostra ogni sottotitolo come blocco temporizzato sulla stessa riga', () => {
+    useEditor.getState().addAudio({ sourcePath: '/speech.wav', name: 'Dialogo', duration: 5, waveform: [.2, .8] });
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    useEditor.getState().updateObject(audio.id, { audio: { ...audio.audio, captions: [
+      { id: crypto.randomUUID(), start: .5, end: 1.2, text: 'Prima frase' },
+      { id: crypto.randomUUID(), start: 1.5, end: 2.1, text: 'Seconda frase' },
+    ] } });
+    const { container } = render(<Timeline />);
+    const track = container.querySelector('.subtitle-track')!;
+    const clips = track.querySelectorAll<HTMLButtonElement>('.subtitle-segment');
+    expect(container.querySelectorAll('.subtitle-track')).toHaveLength(1);
+    expect(clips).toHaveLength(2);
+    expect(clips[0]).toHaveTextContent('Prima frase');
+    expect(clips[1]).toHaveTextContent('Seconda frase');
+    expect(Number.parseFloat(clips[1].style.left)).toBeGreaterThan(Number.parseFloat(clips[0].style.left));
+    fireEvent.click(clips[1]);
+    expect(useEditor.getState().currentFrame).toBe(Math.round(20 + 1.5 * useEditor.getState().project.settings.fps));
+  });
+
   it('aggiunge una scena direttamente dalla timeline', () => {
     render(<Timeline />);
     const addScene = screen.getByRole('button', { name: 'Add scene from timeline' });

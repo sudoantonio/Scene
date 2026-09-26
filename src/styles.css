@@ -1809,7 +1809,12 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .audio-waveform { position: absolute; z-index: 0; inset: 4px 7px; width: calc(100% - 14px); height: calc(100% - 8px); overflow: visible; opacity: .62; }
 .audio-waveform rect { fill: #f0d36f; }
 .audio-clip-label { position: relative; z-index: 1; max-width: 55%; padding: 2px 5px; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; color: #fff4cb; background: rgba(53,42,13,.72); border-radius: 3px; text-overflow: ellipsis; white-space: nowrap; }
-.audio-caption-marker { position: absolute; z-index: 2; bottom: 2px; height: 3px; min-width: 2px; background: #f3e7bf; border-radius: 2px; pointer-events: none; }
+.subtitle-track-label { padding-left: 31px; color: #d8bee8; }
+.subtitle-track.subtitles-hidden { opacity: .45; }
+.subtitle-segment { position: absolute; z-index: 2; top: 4px; bottom: 4px; min-width: 2px; padding: 0 7px; overflow: hidden; color: #f4e8f8; background: #684879; border: 1px solid #a781b9; border-radius: 5px; text-align: left; font-size: 10px; cursor: pointer; }
+.subtitle-segment span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtitle-segment:hover { background: #785789; border-color: #c39bd4; }
+.theme-light .subtitle-segment { color: #4f345f; background: #dfcae9; border-color: #a985bb; }
 
 /* Stato REC finale: resta sopra alla maschera del frame e alla palette del tema. */
 .recording-motion.camera-mode .camera-frame-guide {

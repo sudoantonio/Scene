@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('abaco', {
   loadModel: (path: string) => ipcRenderer.invoke('model:load', path),
   chooseAudio: () => ipcRenderer.invoke('audio:choose'),
   transcribeAudio: (sourcePath: string, language: 'it-IT' | 'en-US') => ipcRenderer.invoke('audio:transcribe', { sourcePath, language }),
+  onTranscriptionProgress: (callback: (progress: { received: number; total: number }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: { received: number; total: number }) => callback(progress);
+    ipcRenderer.on('audio:transcribe:progress', listener);
+    return () => ipcRenderer.removeListener('audio:transcribe:progress', listener);
+  },
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),

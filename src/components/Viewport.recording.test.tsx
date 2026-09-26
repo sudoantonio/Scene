@@ -88,6 +88,20 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(camera.keyframes.filter((key) => key.purpose === 'motion')).toHaveLength(0);
   });
 
+  it('non sposta la vista con il trackpad durante una selezione Shift nel canvas', () => {
+    const before = structuredClone(useEditor.getState().project);
+    const { container } = render(<Viewport />);
+    const stage = container.querySelector('.canvas-stage') as HTMLDivElement;
+    stage.setPointerCapture = vi.fn();
+    stage.hasPointerCapture = vi.fn().mockReturnValue(true);
+    stage.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(stage, { button: 0, pointerId: 1, shiftKey: true, clientX: 20, clientY: 20 });
+    fireEvent.wheel(stage, { deltaX: 0, deltaY: 28, deltaMode: 0, shiftKey: true });
+    fireEvent.pointerUp(stage, { pointerId: 1, shiftKey: true, clientX: 20, clientY: 20 });
+    act(() => vi.advanceTimersByTime(400));
+    expect(useEditor.getState().project).toEqual(before);
+  });
+
   it('crea un keyframe controllabile col trackpad fuori da REC su un frame intermedio', () => {
     const scene = useEditor.getState().project.cameraCuts[0];
     act(() => useEditor.getState().setFrame(scene.frame + 12));

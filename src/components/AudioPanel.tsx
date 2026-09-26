@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Captions, Download, Volume2 } from 'lucide-react';
 import { objectPresenceRange } from '../domain/presence';
 import { useEditor } from '../store/editor';
@@ -18,7 +18,9 @@ export default function AudioPanel() {
   const updateObject = useEditor((state) => state.updateObject);
   const [language, setLanguage] = useState<'it-IT' | 'en-US'>('it-IT');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
+  useEffect(() => window.abaco?.onTranscriptionProgress?.(({ received, total }) => setProgress(total > 0 ? Math.min(100, Math.round(received / total * 100)) : 0)), []);
   if (!selected) return null;
   const editCaption = (id: string, patch: Partial<(typeof selected.audio.captions)[number]>) => {
     const latest = useEditor.getState().project.objects.find((item) => item.id === selected.id && item.kind === 'audio');
@@ -27,13 +29,13 @@ export default function AudioPanel() {
   };
   const transcribe = async () => {
     if (!window.abaco) { setError('Local transcription is available in the desktop app.'); return; }
-    setBusy(true); setError('');
+    setBusy(true); setProgress(null); setError('');
     try {
       const captions = await window.abaco.transcribeAudio(selected.asset.sourcePath, language);
       const latest = useEditor.getState().project.objects.find((item) => item.id === selected.id && item.kind === 'audio');
       if (latest) updateObject(selected.id, { audio: { ...latest.audio, captions: captions.map((caption) => ({ ...caption, id: crypto.randomUUID() })), showCaptions: true } });
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setProgress(null); }
   };
   const downloadSrt = () => {
     const range = objectPresenceRange(selected, settings.frameStart, settings.frameEnd + 1);
@@ -46,7 +48,7 @@ export default function AudioPanel() {
   return <section className="audio-controls-section audio-controls-simple">
     <label className="audio-range"><span><Volume2 size={13} /> Volume</span><strong>{Math.round(selected.audio.volume * 100)}%</strong><input aria-label="Audio volume" type="range" min="0" max="1" step="0.01" value={selected.audio.volume} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, volume: Number(event.target.value) } })} /></label>
     <div className="audio-captions-heading"><strong><Captions size={14} /> Subtitles</strong><select aria-label="Transcription language" value={language} onChange={(event) => setLanguage(event.target.value as 'it-IT' | 'en-US')}><option value="it-IT">Italiano</option><option value="en-US">English</option></select></div>
-    <button className="audio-transcribe" type="button" disabled={busy} onClick={transcribe}>{busy ? 'Transcribing on this Mac…' : selected.audio.captions.length ? 'Transcribe again' : 'Transcribe locally'}</button>
+    <button className="audio-transcribe" type="button" disabled={busy} onClick={transcribe}>{busy ? progress === null ? 'Preparing local transcription…' : progress < 100 ? `Downloading model ${progress}%` : 'Transcribing on this Mac…' : selected.audio.captions.length ? 'Transcribe again' : 'Transcribe locally'}</button>
     {error && <p className="audio-transcribe-error" role="alert">{error}</p>}
     {selected.audio.captions.length > 0 && <>
       <div className="audio-caption-actions"><label><input type="checkbox" checked={selected.audio.showCaptions} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, showCaptions: event.target.checked } })} /> Show subtitles</label><button type="button" onClick={downloadSrt}><Download size={13} /> Export SRT</button></div>

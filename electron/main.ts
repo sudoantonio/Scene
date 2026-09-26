@@ -2,7 +2,9 @@ import { planDirection } from '../src/domain/direction-planner';
 import { prepareAnimationProject, buildAnimationBrief } from '../src/domain/animation-handoff';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import OpenAI from 'openai';
 import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan } from '../src/domain/schema';
@@ -466,34 +468,86 @@ ipcMain.handle('audio:choose', async () => {
   return { sourcePath, name: path.basename(sourcePath, path.extname(sourcePath)) };
 });
 
-ipcMain.handle('audio:transcribe', async (_event, payload: { sourcePath: string; language: 'it-IT' | 'en-US' }) => {
-  if (process.platform !== 'darwin') throw new Error('Local transcription is currently available on macOS.');
+const whisperModelUrl = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin';
+const whisperModelSha256 = '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe';
+let whisperModelDownload: Promise<string> | undefined;
+async function ensureWhisperModel(onProgress: (received: number, total: number) => void) {
+  const modelPath = path.join(app.getPath('userData'), 'models', 'ggml-base.bin');
+  if (await fileExists(modelPath)) {
+    const digest = createHash('sha256').update(await fs.readFile(modelPath)).digest('hex');
+    if (digest === whisperModelSha256) return modelPath;
+    await fs.rm(modelPath);
+  }
+  if (whisperModelDownload) return whisperModelDownload;
+  whisperModelDownload = (async () => {
+    await fs.mkdir(path.dirname(modelPath), { recursive: true });
+    const temporary = `${modelPath}.${crypto.randomUUID()}.download`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 600_000);
+    try {
+      const response = await fetch(whisperModelUrl, { signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(`Model download failed (${response.status}).`);
+      const total = Number(response.headers.get('content-length')) || 147_951_465;
+      const reader = response.body.getReader();
+      const file = await fs.open(temporary, 'w');
+      const hash = createHash('sha256');
+      let received = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          for (let offset = 0; offset < value.byteLength;) {
+            const { bytesWritten } = await file.write(value.subarray(offset));
+            offset += bytesWritten;
+          }
+          hash.update(value);
+          received += value.byteLength;
+          onProgress(received, total);
+        }
+      } finally { await file.close(); }
+      if (hash.digest('hex') !== whisperModelSha256) throw new Error('The downloaded speech model failed its integrity check.');
+      await fs.rename(temporary, modelPath);
+      return modelPath;
+    } finally { clearTimeout(timeout); await fs.rm(temporary, { force: true }).catch(() => undefined); }
+  })();
+  try { return await whisperModelDownload; } finally { whisperModelDownload = undefined; }
+}
+
+async function runTranscriptionProcess(command: string, args: string[], cwd: string) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    let detail = '';
+    const timeout = setTimeout(() => child.kill(), 1_200_000);
+    child.stdout.on('data', (chunk) => { detail = (detail + chunk.toString()).slice(-8_000); });
+    child.stderr.on('data', (chunk) => { detail = (detail + chunk.toString()).slice(-8_000); });
+    child.on('error', (error) => { clearTimeout(timeout); reject(error); });
+    child.on('close', (code) => { clearTimeout(timeout); code === 0 ? resolve() : reject(new Error(detail || 'Local transcription failed.')); });
+  });
+}
+
+ipcMain.handle('audio:transcribe', async (event, payload: { sourcePath: string; language: 'it-IT' | 'en-US' }) => {
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('Local transcription is currently available on Apple Silicon Macs.');
   if (!['it-IT', 'en-US'].includes(payload.language)) throw new Error('Unsupported transcription language.');
   const sourcePath = path.resolve(payload.sourcePath);
   if (!await fileExists(sourcePath) || !mediaMimeTypes[path.extname(sourcePath).toLowerCase()]) throw new Error('The imported audio file is unavailable.');
-  const binary = app.isPackaged ? path.join(process.resourcesPath, 'scene-local-speech') : path.join(app.getAppPath(), 'build', 'scene-local-speech');
-  if (!await fileExists(binary)) {
-    if (app.isPackaged) throw new Error('The local transcription helper is missing from Scene.');
-    await fs.mkdir(path.dirname(binary), { recursive: true });
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn('clang', ['-fobjc-arc', '-framework', 'Foundation', '-framework', 'Speech', '-framework', 'AVFoundation', path.join(app.getAppPath(), 'electron', 'local-speech.m'), '-o', binary]);
-      let error = '';
-      child.stderr.on('data', (chunk) => { error += chunk.toString(); });
-      child.on('error', reject);
-      child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Could not prepare local transcription. ${error}`)));
+  const binary = app.isPackaged ? path.join(process.resourcesPath, 'whisper-cli') : path.join(app.getAppPath(), 'vendor', 'whisper-cpp', 'whisper-cli-macos-arm64');
+  if (!await fileExists(binary)) throw new Error('The local transcription engine is missing from Scene.');
+  const progress = (received: number, total: number) => event.sender.send('audio:transcribe:progress', { received, total });
+  const model = await ensureWhisperModel(progress);
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'scene-transcribe-'));
+  try {
+    const wav = path.join(temporary, 'audio.wav');
+    await runTranscriptionProcess('/usr/bin/afconvert', [sourcePath, '-o', wav, '-f', 'WAVE', '-d', 'LEI16@16000', '-c', '1'], temporary);
+    event.sender.send('audio:transcribe:progress', { received: 1, total: 1 });
+    const output = path.join(temporary, 'captions');
+    await runTranscriptionProcess(binary, ['-m', model, '-f', wav, '-l', payload.language === 'it-IT' ? 'it' : 'en', '-ml', '42', '-sow', '-oj', '-of', output, '-t', '4', '-ng'], temporary);
+    const result = JSON.parse(await fs.readFile(`${output}.json`, 'utf8')) as { transcription?: Array<{ offsets?: { from: number; to: number }; text?: string }> };
+    return (result.transcription ?? []).flatMap((part) => {
+      const start = Number(part.offsets?.from) / 1000, end = Number(part.offsets?.to) / 1000;
+      const text = part.text?.trim();
+      return Number.isFinite(start) && Number.isFinite(end) && end > start && text ? [{ start, end, text }] : [];
     });
-  }
-  const output = await new Promise<string>((resolve, reject) => {
-    const child = spawn(binary, [sourcePath, payload.language], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '';
-    const timeout = setTimeout(() => child.kill(), 610_000);
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', (error) => { clearTimeout(timeout); reject(error); });
-    child.on('close', (code) => { clearTimeout(timeout); code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || 'Local transcription failed.')); });
-  });
-  const result = JSON.parse(output) as { captions?: Array<{ start: number; end: number; text: string }> };
-  return (result.captions ?? []).filter((caption) => Number.isFinite(caption.start) && Number.isFinite(caption.end) && caption.end >= caption.start && typeof caption.text === 'string');
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
 ipcMain.handle('blendAsset:choose', async () => {

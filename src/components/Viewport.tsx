@@ -1199,6 +1199,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const pendingCameraCommit = useRef<{ projectId: string; sceneId: string; frame: number; position: Vec3; rotation: Vec3; target: Vec3 } | undefined>(undefined);
   const shiftPressed = useRef(false);
   const marqueeStart = useRef<{ x: number; y: number; ids: string[]; pointerId: number } | null>(null);
+  const suppressSelectionWheelUntil = useRef(0);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
   useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
@@ -1421,6 +1422,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   };
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
+    // Trackpad wheel events can accompany a Shift selection gesture. They must
+    // not pan the view or move the active shot while the pointer is selecting.
+    if (marqueeStart.current || performance.now() < suppressSelectionWheelUntil.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const delta = normalizeWheelDelta(event.deltaX, event.deltaY, event.deltaMode, event.currentTarget.clientHeight);
     const persistCameraEdit = Boolean(cameraView && activeCamera);
     // Chromium espone il pinch del trackpad come Ctrl + wheel: lo gestiamo qui
@@ -1488,7 +1496,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   useEffect(() => {
     const releaseViewportDrag = () => {
       setDraggingObject(false);
-      if (orbitRef.current) orbitRef.current.enabled = !cameraView;
+      if (orbitRef.current) orbitRef.current.enabled = !cameraView && !marqueeStart.current;
       document.body.style.cursor = 'default';
     };
     window.addEventListener('pointerup', releaseViewportDrag, true);
@@ -1689,6 +1697,16 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (event.button !== 0 || !(event.shiftKey || shiftPressed.current) || !stageRef.current || useEditor.getState().jevStroke.active) return;
     const point = marqueePoint(event);
     marqueeStart.current = { ...point, ids: [...selectedIds], pointerId: event.pointerId };
+    // React's capture handler runs before OrbitControls' canvas listener.
+    // Disable navigation immediately so the same press cannot orbit the view.
+    if (orbitRef.current) orbitRef.current.enabled = false;
+    for (const buffer of [cameraPanBuffer.current, cameraRotateBuffer.current]) {
+      if (buffer.timer) window.clearTimeout(buffer.timer);
+      buffer.x = 0;
+      buffer.y = 0;
+      buffer.persist = true;
+      buffer.timer = undefined;
+    }
     stageRef.current.setPointerCapture(event.pointerId);
   };
   const moveMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1702,6 +1720,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const start = marqueeStart.current;
     if (!start || start.pointerId !== event.pointerId) return;
     marqueeStart.current = null;
+    suppressSelectionWheelUntil.current = performance.now() + 160;
+    if (orbitRef.current) orbitRef.current.enabled = !cameraView && !draggingObject;
     if (stageRef.current?.hasPointerCapture(event.pointerId)) stageRef.current.releasePointerCapture(event.pointerId);
     const point = marqueePoint(event);
     setMarquee(null);

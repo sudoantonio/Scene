@@ -9,4 +9,3 @@ release/
 .DS_Store
 build/icon-*-backup.png
 build/icon-with-black-corners.png
-build/scene-local-speech
