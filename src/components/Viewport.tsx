@@ -1,5 +1,6 @@
 import { audioStateAt } from '../domain/media-timeline';
 import { fontCss } from '../domain/text-style';
+import { clampSubtitlePosition, DEFAULT_SUBTITLE_POSITION, moveSubtitlePosition, type SubtitlePosition } from '../domain/subtitle-position';
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
@@ -1186,6 +1187,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const settings = useEditor((state) => state.project.settings);
   const frame = useEditor((state) => state.currentFrame);
   const selectedMotion = useEditor((state) => state.selectedMotion);
+  const selectedCaption = useEditor((state) => state.selectedCaption);
+  const selectCaption = useEditor((state) => state.selectCaption);
+  const updateObject = useEditor((state) => state.updateObject);
   const recordingMotion = useEditor((state) => state.recordingMotion);
   const recordingSession = useEditor((state) => state.recordingSession);
   const select = useEditor((state) => state.select);
@@ -1211,6 +1215,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
   const [draggingObject, setDraggingObject] = useState(false);
+  const [subtitleDragPreview, setSubtitleDragPreview] = useState<{ audioId: string; captionId: string; target: SubtitlePosition }>();
+  const subtitleDragCleanup = useRef<(() => void) | undefined>(undefined);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const objectControls = useRef<TransformControlsImpl | null>(null);
   const shotOrbitRef = useRef<OrbitControlsImpl | null>(null);
@@ -1225,6 +1231,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const suppressSelectionWheelUntil = useRef(0);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
+  useEffect(() => () => subtitleDragCleanup.current?.(), []);
   useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
@@ -1313,8 +1320,44 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const state = audioStateAt(useEditor.getState().project, object, frame);
     if (!state) return [];
     const time = state.sourceTime;
-    return object.audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, text: caption.text, style: object.audio.captionStyle }));
+    const audio = subtitleDragPreview?.audioId === object.id ? moveSubtitlePosition(object.audio, subtitleDragPreview.captionId, subtitleDragPreview.target) : object.audio;
+    return audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, audioId: object.id, text: caption.text, style: audio.captionStyle, position: caption.position ?? audio.captionStyle.position ?? DEFAULT_SUBTITLE_POSITION }));
   }) : [];
+
+  const beginSubtitleDrag = (event: ReactPointerEvent<HTMLDivElement>, audioId: string, captionId: string, position: SubtitlePosition) => {
+    if (event.button !== 0 || !cameraFrame) return;
+    event.preventDefault(); event.stopPropagation();
+    selectCaption({ audioId, captionId });
+    subtitleDragCleanup.current?.();
+    const pointerId = event.pointerId;
+    const initialX = event.clientX, initialY = event.clientY;
+    let target = position;
+    let moved = false;
+    const move = (pointer: PointerEvent) => {
+      if (pointer.pointerId !== pointerId) return;
+      target = clampSubtitlePosition([position[0] + (pointer.clientX - initialX) / cameraFrame.width, position[1] + (pointer.clientY - initialY) / cameraFrame.height]);
+      moved = target[0] !== position[0] || target[1] !== position[1];
+      setSubtitleDragPreview({ audioId, captionId, target });
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+      subtitleDragCleanup.current = undefined;
+      setSubtitleDragPreview(undefined);
+    };
+    const finish = (pointer: PointerEvent) => {
+      move(pointer); cleanup();
+      if (!moved) return;
+      const latest = useEditor.getState().project.objects.find((object) => object.id === audioId && object.kind === 'audio');
+      if (latest) updateObject(audioId, { audio: moveSubtitlePosition(latest.audio, captionId, target) });
+    };
+    const cancel = () => cleanup();
+    subtitleDragCleanup.current = cleanup;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', cancel);
+  };
 
   const flushPendingCameraCommit = () => {
     const pending = pendingCameraCommit.current;
@@ -1814,7 +1857,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
-    {cameraView && cameraFrame && visibleCaptions.length > 0 && <div className="viewport-subtitle" style={{ width: cameraFrame.width, bottom: `calc(50% - ${cameraFrame.height / 2}px + 5%)` }}>{visibleCaptions.map((caption, index) => <span key={caption.id} style={{ color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `${caption.style.size}em` }}>{index > 0 ? ' ' : ''}{caption.text}</span>)}</div>}
+    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;

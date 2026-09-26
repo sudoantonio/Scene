@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MotionSpecSchema } from './motion-spec';
 import { createBundledStandard } from './bundled-animation-standard';
-import { FONT_OPTIONS } from './text-style';
+import { FONT_OPTIONS, type FontId } from './text-style';
 
 export const Vec3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 export type Vec3 = z.infer<typeof Vec3Schema>;
@@ -60,7 +60,7 @@ export const SceneObjectSchema = z.object({
   name: z.string().min(1),
   kind: ObjectKindSchema,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as ['system', 'arial', 'georgia', 'trebuchet', 'courier']).default('system'),
+  fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as [FontId, ...FontId[]]).default('system'),
   visible: z.boolean(),
   transform: TransformSchema,
   text: z.string().default('Text'),
@@ -86,10 +86,11 @@ export const SceneObjectSchema = z.object({
     fadeIn: z.number().finite().nonnegative().default(0),
     fadeOut: z.number().finite().nonnegative().default(0),
     waveform: z.array(z.number().finite().min(0).max(1)).max(8192).default([]),
-    captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string() })).default([]),
-    captionStyle: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as ['system', 'arial', 'georgia', 'trebuchet', 'courier']), size: z.number().min(.65).max(1.6) }).default({ color: '#ffffff', fontFamily: 'system', size: 1 }),
+    captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string(), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).optional() })).default([]),
+    captionStyle: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as [FontId, ...FontId[]]), size: z.number().min(.65).max(1.6), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).default([.5, .95]) }).default({ color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }),
+    applyCaptionPositionToAll: z.boolean().default(true),
     showCaptions: z.boolean().default(true),
-  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1 }, showCaptions: true }),
+  }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }, applyCaptionPositionToAll: true, showCaptions: true }),
   screenSpace: z.boolean().default(false),
   sceneIds: z.array(z.string().uuid()).default([]),
   screenCrop: z.tuple([z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45), z.number().min(0).max(.45)]).default([0, 0, 0, 0]),
@@ -303,7 +304,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind], fontFamily: 'system',
     visible: true, transform, text: 'Text', camera: { lens: 50 }, light: { energy: 1000, size: 5 },
     asset: { sourcePath: '', proxyPath: '', collectionName: '', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 1 },
-    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1 }, showCaptions: true },
+    audio: { duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }, applyCaptionPositionToAll: true, showCaptions: true },
     screenSpace: kind === 'text', sceneIds: [], screenCrop: [0, 0, 0, 0], sceneNotes: [], keyframes: [],
   };
 }

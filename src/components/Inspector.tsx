@@ -4,7 +4,7 @@ import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
 import type { Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
-import { FONT_OPTIONS, fontCss } from '../domain/text-style';
+import FontPicker from './FontPicker';
 import ElementsPanel from './ElementsPanel';
 import LightingPanel from './LightingPanel';
 import AudioPanel from './AudioPanel';
@@ -126,7 +126,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary">
           <div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div>
           <div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div>
-          {object.kind === 'text' && <label className="text-font-control"><span>Font</span><select aria-label="Text font" value={object.fontFamily} style={{ fontFamily: fontCss(object.fontFamily) }} onChange={(event) => updateObject(object.id, { fontFamily: event.target.value as typeof object.fontFamily })}>{FONT_OPTIONS.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select></label>}
+          {object.kind === 'text' && <div className="text-font-control"><FontPicker name="Text font" value={object.fontFamily} onChange={(fontFamily) => updateObject(object.id, { fontFamily })} /></div>}
         </InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Crop" icon={<Crop size={13} />} variant="secondary"><div className="camera-sliders">{(['Top', 'Right', 'Bottom', 'Left'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Crop ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}
         <InspectorGroup title="Advanced values" icon={<Braces size={13} />} variant="secondary">

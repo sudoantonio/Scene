@@ -3,6 +3,7 @@
 import type { EditedMedia } from './domain/edited-media';
 import type { AbacoProject, BlenderPlan } from './domain/schema';
 import type { JevActionInput, JevActionPlan } from './domain/jev-action';
+import type { FontId } from './domain/text-style';
 
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 
@@ -17,7 +18,7 @@ declare global {
       chooseBlender(): Promise<string | null>;
       chooseBackground(kind: 'image' | 'model'): Promise<{ path: string; name: string } | null>;
       loadAsset(path: string): Promise<string>;
-      loadFont(font: 'arial' | 'georgia' | 'trebuchet' | 'courier'): Promise<string | null>;
+      loadFont(font: FontId): Promise<string | null>;
       loadModel(path: string): Promise<{ format: 'glb'; source: string } | { format: 'obj'; source: string; materials?: string }>;
       chooseAudio(): Promise<{ sourcePath: string; name: string } | null>;
       transcribeAudio(sourcePath: string, language: 'it-IT' | 'en-US'): Promise<Array<{ start: number; end: number; text: string }>>;

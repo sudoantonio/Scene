@@ -1039,6 +1039,16 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .text-font-control,
 .app-shell .caption-style-editor label { display: grid; gap: 5px; color: var(--ui-muted); font-size: 10px; }
 .app-shell .text-font-control { margin-top: 13px; }
+.app-shell .font-picker { display: grid; gap: 5px; min-width: 0; color: var(--ui-muted); font-size: 10px; }
+.app-shell .font-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; width: 100%; height: 29px; padding: 4px 8px; color: var(--ui-text); background: var(--ui-raised); border: 1px solid var(--ui-edge); border-radius: 6px; text-align: left; cursor: pointer; }
+.app-shell .font-picker-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.app-shell .font-picker-trigger svg { flex: none; }
+.app-shell .font-picker-menu { display: grid; max-height: 215px; overflow-y: auto; padding: 3px; background: var(--ui-primary); border: 1px solid var(--ui-edge); border-radius: 6px; box-shadow: 0 8px 22px #0005; }
+.app-shell .font-picker-option { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 31px; padding: 4px 7px; color: var(--ui-text); background: transparent; border: 0; border-radius: 4px; text-align: left; white-space: nowrap; cursor: pointer; font-size: 12px; }
+.app-shell .font-picker-option:hover, .app-shell .font-picker-option[aria-selected='true'] { background: var(--ui-hover); }
+.app-shell .font-picker-option > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.app-shell .font-picker-sample { margin-left: auto; opacity: .65; }
+.app-shell .font-picker-option svg { flex: none; }
 .app-shell .text-font-control select,
 .app-shell .caption-style-editor select { min-width: 0; width: 100%; height: 29px; padding: 4px 8px; color: var(--ui-text); background: var(--ui-raised); border: 1px solid var(--ui-edge); border-radius: 6px; }
 .app-shell .caption-style-editor { display: grid; grid-template-columns: minmax(0,1fr) 45px minmax(0,.8fr); gap: 8px; margin: 9px 0 13px; align-items: end; }
@@ -1208,3 +1218,28 @@ body:has(.app-shell.theme-light) #root,
   border-radius: 0 !important;
   box-shadow: none !important;
 }
+
+/* The playhead crosses clips but stays behind the fixed track names. */
+.app-shell .timeline:not(.collapsed) :is(.ruler-label, .track-label) { z-index: 120; }
+.app-shell.theme-dark .timeline:not(.collapsed) .timeline-scroll > :is(.timeline-ruler, .track)::after {
+  z-index: 80;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .3);
+}
+.app-shell .timeline.collapsed .collapsed-scene-overview {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+.app-shell .timeline.collapsed .collapsed-scene-overview::-webkit-scrollbar { display: none; }
+.app-shell .timeline.collapsed .collapsed-scene-playhead { box-shadow: none !important; }
+.app-shell .timeline.collapsed .collapsed-scene-playhead::before { filter: none !important; }
+.app-shell .caption-apply-all { display: inline-flex; align-items: center; gap: 6px; color: var(--ui-text); font-size: 10px; }
+.app-shell .caption-apply-all input { width: 13px; height: 13px; accent-color: #e3b12e; }
+.app-shell .caption-position-hint { margin: 5px 0 11px; color: var(--ui-muted); font-size: 9px; }
+.app-shell .audio-caption-row.selected .audio-caption-combined { border-color: #d3a736; }
+.app-shell .subtitle-segment.selected-block { box-shadow: inset 0 0 0 1px #f0c547 !important; }
+.app-shell .viewport-subtitle { width: max-content; max-width: var(--camera-frame-width); padding: 0 2%; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; }
+.app-shell .viewport-subtitle.dragging { cursor: grabbing; }
+.app-shell .viewport-subtitle.selected { outline: 1px dashed rgba(240,197,71,.82); outline-offset: 4px; border-radius: 2px; }

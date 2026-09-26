@@ -109,14 +109,18 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
     for (let frame = frameStart; frame <= frameEnd; frame++) {
       const sourceTime = audioStateAt(project, object, frame)?.sourceTime;
       if (sourceTime === undefined) continue;
-      const text = object.audio.captions.filter((caption) => caption.start <= sourceTime && sourceTime < caption.end).map((caption) => caption.text).join(' ');
-      if (!text) continue;
-      let index = cache.get(text);
+      const visible = object.audio.captions.filter((caption) => caption.start <= sourceTime && sourceTime < caption.end).map((caption) => ({ text: caption.text, position: caption.position ?? object.audio.captionStyle.position }));
+      if (!visible.length) continue;
+      const text = visible.map((caption) => caption.text).join(' ');
+      const signature = JSON.stringify(visible);
+      let index = cache.get(signature);
       if (index === undefined) {
         const fontSize = Math.max(16 * frameScale, 32 * frameScale * size);
         const stripHeight = Math.ceil(fontSize * 3.4);
-        const style = `box-sizing:border-box;width:${width}px;height:${stripHeight}px;padding:0 7%;display:flex;align-items:flex-end;justify-content:center;text-align:center;color:${color};font:700 ${fontSize}px/1.3 ${fontCss(fontFamily)};text-shadow:0 ${2 * frameScale}px ${4 * frameScale}px #000,0 0 ${12 * frameScale}px #000;font-synthesis:none;white-space:pre-wrap`;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject x="0" y="${Math.max(0, Math.floor(height * .95 - stripHeight))}" width="${width}" height="${stripHeight}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(style)}">${escapeXml(text)}</div></foreignObject></svg>`;
+        const stripWidth = Math.floor(width * .86);
+        const style = `box-sizing:border-box;width:${stripWidth}px;height:${stripHeight}px;padding:0 2%;display:flex;align-items:flex-end;justify-content:center;text-align:center;color:${color};font:700 ${fontSize}px/1.3 ${fontCss(fontFamily)};text-shadow:0 ${2 * frameScale}px ${4 * frameScale}px #000,0 0 ${12 * frameScale}px #000;font-synthesis:none;white-space:pre-wrap`;
+        const layers = visible.map((caption) => `<foreignObject x="${Math.round(caption.position[0] * width - stripWidth / 2)}" y="${Math.round(caption.position[1] * height - stripHeight)}" width="${stripWidth}" height="${stripHeight}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(style)}">${escapeXml(caption.text)}</div></foreignObject>`).join('');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${layers}</svg>`;
         const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
         const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
         const context = canvas.getContext('2d');
@@ -124,7 +128,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
         context.drawImage(image, 0, 0);
         index = output.images.length;
         output.images.push(canvas.toDataURL('image/png'));
-        cache.set(text, index);
+        cache.set(signature, index);
       }
       const last = output.states.at(-1);
       if (last && last.image === index && last.endFrameExclusive === frame) last.endFrameExclusive = frame + 1;

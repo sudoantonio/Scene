@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { EditedMedia } from '../src/domain/edited-media';
 import type { AbacoProject, BlenderPlan } from '../src/domain/schema';
 import type { JevActionInput, JevActionPlan } from '../src/domain/jev-action';
+import type { FontId } from '../src/domain/text-style';
 
 contextBridge.exposeInMainWorld('abaco', {
   openProject: () => ipcRenderer.invoke('project:open'),
@@ -12,7 +13,7 @@ contextBridge.exposeInMainWorld('abaco', {
   chooseBlender: () => ipcRenderer.invoke('settings:chooseBlender'),
   chooseBackground: (kind: 'image' | 'model') => ipcRenderer.invoke('background:choose', kind),
   loadAsset: (path: string) => ipcRenderer.invoke('asset:load', path),
-  loadFont: (font: 'arial' | 'georgia' | 'trebuchet' | 'courier') => ipcRenderer.invoke('font:load', font),
+  loadFont: (font: FontId) => ipcRenderer.invoke('font:load', font),
   loadModel: (path: string) => ipcRenderer.invoke('model:load', path),
   chooseAudio: () => ipcRenderer.invoke('audio:choose'),
   transcribeAudio: (sourcePath: string, language: 'it-IT' | 'en-US') => ipcRenderer.invoke('audio:transcribe', { sourcePath, language }),

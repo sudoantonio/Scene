@@ -51,6 +51,6 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
     schemaVersion: 'SceneEditedMediaV1', settings: project.settings,
     instructions: 'Usa audioMix a partire dal frameStart del progetto, oppure i singoli clip nelle rispettive posizioni, mai entrambi. Tagli, volume, loop e dissolvenze sono già applicati: non applicarli di nuovo. I PNG in overlays hanno la risoluzione finale e includono già posizione, scala, rotazione, ritaglio e testo. Sovrapponili a pieno frame nell’ordine indicato, senza trasformarli di nuovo, solo negli intervalli [startFrame, endFrameExclusive). Le immagini ritagliate sono alternative di lavorazione, non livelli aggiuntivi. project.abaco.json e assets/ conservano gli originali modificabili. TESTI.json conserva anche i testi 3D: quelli richiedono il rendering della scena e non sono livelli 2D.',
     audioMix: mix, audioClips: clips, croppedImages: cropped, overlays, screenLayers,
-    subtitleStyles: project.objects.filter(o => o.kind === 'audio').map(o => ({ objectId: o.id, showCaptions: o.audio.showCaptions, ...o.audio.captionStyle })),
+    subtitleStyles: project.objects.filter(o => o.kind === 'audio').map(o => ({ objectId: o.id, showCaptions: o.audio.showCaptions, applyCaptionPositionToAll: o.audio.applyCaptionPositionToAll, ...o.audio.captionStyle, positions: o.audio.captions.map(caption => ({ captionId: caption.id, position: caption.position ?? o.audio.captionStyle.position })) })),
   }, null, 2));
 }

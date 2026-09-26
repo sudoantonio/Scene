@@ -18,7 +18,7 @@ describe('Portable AI folder',()=>{
   const root=await temp(), p=createProject();p.settings.frameEnd=1;p.settings.fps=1;p.settings.resolutionX=1;p.settings.resolutionY=1;
   const image=createSceneObject('plane',1);image.screenSpace=true;image.asset.sourcePath='/missing/picture.png';image.asset.proxyPath=pixel;p.objects.push(image);
   const audio=createSceneObject('audio',1);audio.asset.sourcePath=path.join(root,'voice.wav');audio.audio.duration=1;p.objects.push(audio);
-  audio.audio.captionStyle={color:'#ffd966',fontFamily:'georgia',size:1.2};
+  audio.audio.captionStyle={color:'#ffd966',fontFamily:'georgia',size:1.2,position:[.5,.95]};
   const wav=encodeWav([new Float32Array(48000).fill(.2),new Float32Array(48000).fill(.2)],48000);await fs.writeFile(audio.asset.sourcePath,wav);
   const media:EditedMedia={projectId:p.id,updatedAt:p.updatedAt,audioMix:wav,audioClips:[],croppedImages:[{objectId:image.id,png:pixel}],overlays:[{objectId:image.id,images:[pixel],states:[{startFrame:1,endFrameExclusive:2,image:0}]}]};
   const out=await writeAiBundle(p,root,path.join(root,'source.json'),undefined,media);
@@ -26,7 +26,7 @@ describe('Portable AI folder',()=>{
   for(const entry of manifest.files){const bytes=await fs.readFile(path.join(out.directory,entry.path));expect(bytes.length).toBe(entry.bytes);expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.sha256);}
   expect(manifest.files.some((f:{path:string})=>f.path==='media/AUDIO_MONTATO.wav')).toBe(true);
   const mounted=JSON.parse(await fs.readFile(path.join(out.directory,'MEDIA_MONTATI.json'),'utf8'));
-  expect(mounted.subtitleStyles).toContainEqual({objectId:audio.id,showCaptions:true,color:'#ffd966',fontFamily:'georgia',size:1.2});
+  expect(mounted.subtitleStyles).toContainEqual({objectId:audio.id,showCaptions:true,applyCaptionPositionToAll:true,color:'#ffd966',fontFamily:'georgia',size:1.2,position:[.5,.95],positions:[]});
   const moved=path.join(root,'moved');await fs.rename(out.directory,moved);
   const stored=ProjectSchema.parse(JSON.parse(await fs.readFile(path.join(moved,'project.abaco.json'),'utf8')));
   expect(stored.objects.find(o=>o.id===audio.id)!.asset.sourcePath).toMatch(/^assets\/audio\//);

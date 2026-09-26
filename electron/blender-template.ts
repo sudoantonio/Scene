@@ -20,10 +20,10 @@ def asset_path(value):
     return source if source.is_absolute() else input_path.parent / source
 
 def font_for_data(data):
-    names = {"arial": "Arial.ttf", "georgia": "Georgia.ttf", "trebuchet": "Trebuchet MS.ttf", "courier": "Courier New.ttf"}
+    names = {"arial": "Supplemental/Arial.ttf", "arial_black": "Supplemental/Arial Black.ttf", "arial_rounded": "Supplemental/Arial Rounded Bold.ttf", "georgia": "Supplemental/Georgia.ttf", "times": "Supplemental/Times New Roman.ttf", "trebuchet": "Supplemental/Trebuchet MS.ttf", "verdana": "Supplemental/Verdana.ttf", "courier": "Supplemental/Courier New.ttf", "monaco": "Monaco.ttf", "geneva": "Geneva.ttf", "comic": "Supplemental/Comic Sans MS.ttf", "bradley": "Supplemental/Bradley Hand Bold.ttf", "impact": "Supplemental/Impact.ttf"}
     name = names.get(data.get("fontFamily"))
     if not name: return None
-    file = Path("/System/Library/Fonts/Supplemental") / name
+    file = Path("/System/Library/Fonts") / name
     return bpy.data.fonts.load(str(file), check_existing=True) if file.exists() else None
 
 bpy.ops.wm.read_factory_settings(use_empty=True)

@@ -25,6 +25,7 @@ type EditorState = {
   project: AbacoProject;
   projectPath?: string;
   selectedId?: string;
+  selectedCaption?: { audioId: string; captionId: string };
   selectedIds: string[];
   multiSelectMode: boolean;
   currentFrame: number;
@@ -48,6 +49,7 @@ type EditorState = {
   loadProject(project: AbacoProject, path: string): void;
   markSaved(project: AbacoProject, path: string): void;
   select(id?: string): void;
+  selectCaption(selection?: { audioId: string; captionId: string }): void;
   selectMember(id: string): void;
   toggleSelection(id: string): void;
   setSelection(ids: string[]): void;
@@ -369,6 +371,7 @@ export const useEditor = create<EditorState>((set, get) => {
     return {
       project: { ...project, updatedAt: new Date().toISOString() },
       selectedIds: state.selectedIds.filter((id) => validIds.has(id)),
+      selectedCaption: state.selectedCaption && project.objects.some((object) => object.id === state.selectedCaption!.audioId && object.audio.captions.some((caption) => caption.id === state.selectedCaption!.captionId)) ? state.selectedCaption : undefined,
       past: [...state.past.slice(-49), snapshot(state.project)], future: [], dirty: true,
     };
   });
@@ -377,15 +380,17 @@ export const useEditor = create<EditorState>((set, get) => {
   });
   return {
     project: initialProject(), selectedIds: [], multiSelectMode: false, currentFrame: 1, isPlaying: false, cameraView: false, setCameraView: (cameraView) => { flushPendingCameraEdit(); set({ cameraView }); }, jevStroke: { active: false, points: [] }, setJevStrokeActive: (active) => set((state) => ({ jevStroke: { ...state.jevStroke, active } })), setJevStrokePoints: (points) => set((state) => ({ jevStroke: { ...state.jevStroke, points } })), setJevStrokeContext: (viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect) => set((state) => ({ jevStroke: { ...state.jevStroke, viewMode, viewRotation, viewPosition, verticalFovDegrees, aspect } })), clearJevStroke: () => set({ jevStroke: { active: false, points: [] } }), interpolation: 'bezier', gizmoMode: 'translate', past: [], future: [], dirty: false,
-    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
-    loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
+    newProject: () => set({ project: createProject(), projectPath: undefined, selectedId: undefined, selectedCaption: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: 1, isPlaying: false, past: [], future: [], dirty: false }),
+    loadProject: (project, projectPath) => { const normalized = normalizeProjectData(project); set({ project: normalized, projectPath, selectedId: undefined, selectedCaption: undefined, selectedIds: [], multiSelectMode: false, selectedMotion: undefined, recordingMotion: undefined, recordingSession: undefined, jevStroke: { active: false, points: [] }, currentFrame: normalized.settings.frameStart, isPlaying: false, past: [], future: [], dirty: false }); },
     markSaved: (project, projectPath) => set({ project, projectPath, dirty: false }),
     select: (selectedId) => set((state) => ({
       selectedId,
+      selectedCaption: state.selectedCaption?.audioId === selectedId ? state.selectedCaption : undefined,
       selectedIds: selectedId ? state.project.groups.find((group) => group.memberIds.includes(selectedId))?.memberIds ?? [selectedId] : [],
       selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
       gizmoMode: selectedId && selectedId !== state.selectedId ? 'translate' : state.gizmoMode,
     })),
+    selectCaption: (selectedCaption) => set(selectedCaption ? { selectedCaption, selectedId: selectedCaption.audioId, selectedIds: [selectedCaption.audioId] } : { selectedCaption: undefined }),
     selectMember: (selectedId) => set({ selectedId, selectedIds: [selectedId], selectedMotion: undefined }),
     toggleSelection: (id) => set((state) => {
       if (!state.project.objects.some((object) => object.id === id)) return state;

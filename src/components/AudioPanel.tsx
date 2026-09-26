@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Captions, Download, Languages, Scissors, Volume2 } from 'lucide-react';
 import { captionsSrt } from '../domain/media-timeline';
-import { FONT_OPTIONS, fontCss } from '../domain/text-style';
+import FontPicker from './FontPicker';
 import { useEditor } from '../store/editor';
 
 export default function AudioPanel() {
   const selectedId = useEditor((state) => state.selectedId);
   const selected = useEditor((state) => state.project.objects.find((object) => object.id === selectedId && object.kind === 'audio'));
   const updateObject = useEditor((state) => state.updateObject);
+  const selectedCaption = useEditor((state) => state.selectedCaption);
+  const selectCaption = useEditor((state) => state.selectCaption);
   const [language, setLanguage] = useState<'it-IT' | 'en-US'>('it-IT');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -69,12 +71,14 @@ export default function AudioPanel() {
     {error && <p className="audio-transcribe-error" role="alert">{error}</p>}
     {selected.audio.captions.length > 0 && <>
       <div className="audio-caption-actions"><label><input type="checkbox" checked={selected.audio.showCaptions} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, showCaptions: event.target.checked } })} /> Show subtitles</label></div>
+      <label className="caption-apply-all"><input type="checkbox" aria-label="Apply to all" checked={selected.audio.applyCaptionPositionToAll} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, applyCaptionPositionToAll: event.target.checked } })} /> Apply to all</label>
+      <p className="caption-position-hint">Drag a subtitle in the frame to move it.</p>
       <div className="caption-style-editor" aria-label="Subtitle appearance">
-        <label><span>Font</span><select aria-label="Subtitle font" value={selected.audio.captionStyle.fontFamily} style={{ fontFamily: fontCss(selected.audio.captionStyle.fontFamily) }} onChange={(event) => changeCaptionStyle({ fontFamily: event.target.value as typeof selected.audio.captionStyle.fontFamily })}>{FONT_OPTIONS.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select></label>
+        <FontPicker name="Subtitle font" value={selected.audio.captionStyle.fontFamily} onChange={(fontFamily) => changeCaptionStyle({ fontFamily })} />
         <label className="caption-color-control"><span>Color</span><input aria-label="Subtitle color" type="color" value={selected.audio.captionStyle.color} onChange={(event) => changeCaptionStyle({ color: event.target.value })} /></label>
         <label className="caption-size-control"><span>Size</span><select aria-label="Subtitle size" value={selected.audio.captionStyle.size} onChange={(event) => changeCaptionStyle({ size: Number(event.target.value) })}><option value="0.85">Small</option><option value="1">Normal</option><option value="1.2">Large</option><option value="1.4">Very large</option></select></label>
       </div>
-      <div className="audio-caption-list">{selected.audio.captions.map((caption) => <div className="audio-caption-row" key={caption.id}><div className="audio-caption-combined"><textarea aria-label="Subtitle text" value={caption.text} onChange={(event) => editCaption(caption.id, { text: event.target.value })} onSelect={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyUp={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); splitCaptionAtCursor(caption.id, event.currentTarget.selectionStart); } }} />{textCursor?.captionId === caption.id && textCursor.offset > 0 && textCursor.offset < caption.text.length && <button className="audio-caption-split" aria-label="Split at cursor" title="Split at cursor" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => splitCaptionAtCursor(caption.id)}><Scissors size={12} /></button>}</div></div>)}</div>
+      <div className="audio-caption-list">{selected.audio.captions.map((caption) => <div className={`audio-caption-row ${selectedCaption?.audioId === selected.id && selectedCaption.captionId === caption.id ? 'selected' : ''}`} key={caption.id}><div className="audio-caption-combined"><textarea aria-label="Subtitle text" value={caption.text} onFocus={() => selectCaption({ audioId: selected.id, captionId: caption.id })} onChange={(event) => editCaption(caption.id, { text: event.target.value })} onSelect={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyUp={(event) => setTextCursor({ captionId: caption.id, offset: event.currentTarget.selectionStart ?? 0 })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); splitCaptionAtCursor(caption.id, event.currentTarget.selectionStart); } }} />{textCursor?.captionId === caption.id && textCursor.offset > 0 && textCursor.offset < caption.text.length && <button className="audio-caption-split" aria-label="Split at cursor" title="Split at cursor" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => splitCaptionAtCursor(caption.id)}><Scissors size={12} /></button>}</div></div>)}</div>
     </>}
   </section>;
 }

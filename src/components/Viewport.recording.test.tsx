@@ -52,6 +52,38 @@ afterEach(() => {
 });
 
 describe('REC camera dopo il cambio scena nella vista camera', () => {
+  it('trascina un sottotitolo nello spazio e applica lo spostamento a tutti solo quando richiesto', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    act(() => useEditor.getState().addAudio({ sourcePath: '/voice.wav', name: 'Voice', duration: 3, waveform: [] }));
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const firstId = crypto.randomUUID(), secondId = crypto.randomUUID();
+    act(() => useEditor.getState().updateObject(audio.id, { audio: { ...audio.audio, captions: [
+      { id: firstId, start: 0, end: 1, text: 'First' },
+      { id: secondId, start: 1, end: 2, text: 'Second' },
+    ] } }));
+    render(<Viewport />);
+    const first = screen.getByLabelText('Subtitle in frame: First');
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 160, clientY: 70 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 160, clientY: 70 });
+    let changed = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
+    expect(changed.audio.captionStyle.position[0]).toBeGreaterThan(.5);
+    expect(changed.audio.captionStyle.position[1]).toBeLessThan(.95);
+    expect(changed.audio.captions[1].position).toBeUndefined();
+    expect(useEditor.getState().selectedCaption).toEqual({ audioId: audio.id, captionId: firstId });
+
+    act(() => useEditor.getState().updateObject(audio.id, { audio: { ...changed.audio, applyCaptionPositionToAll: false } }));
+    fireEvent.pointerDown(first, { button: 0, pointerId: 2, clientX: 160, clientY: 70 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 200, clientY: 50 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 200, clientY: 50 });
+    const individual = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
+    expect(individual.audio.captionStyle.position).toEqual(changed.audio.captionStyle.position);
+    expect(individual.audio.captions[0].position).toBeDefined();
+    expect(individual.audio.captions[1].position).toBeUndefined();
+    width.mockRestore(); height.mockRestore();
+  });
+
   it('sostituisce una risorsa 2D non caricabile senza mostrare l’icona immagine rotta del browser', () => {
     render(<ScreenAssetImage source="asset-mancante.png" name="Bozza" />);
     fireEvent.error(screen.getByRole('img', { name: 'Bozza' }));

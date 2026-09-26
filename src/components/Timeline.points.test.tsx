@@ -66,6 +66,7 @@ describe('Punti e maniglie del movimento', () => {
     expect(Number.parseFloat(clips[1].style.left)).toBeGreaterThan(Number.parseFloat(clips[0].style.left));
     fireEvent.click(clips[1]);
     expect(useEditor.getState().currentFrame).toBe(Math.round(20 + 1.5 * useEditor.getState().project.settings.fps));
+    expect(useEditor.getState().selectedCaption).toEqual({ audioId: audio.id, captionId: useEditor.getState().project.objects.find((object) => object.id === audio.id)!.audio.captions[1].id });
   });
 
   it('modifica inizio e fine del sottotitolo trascinando i bordi nella timeline', () => {
@@ -202,6 +203,17 @@ describe('Punti e maniglie del movimento', () => {
     expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Record motion' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add scene from collapsed timeline' }));
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
+  });
+
+  it('fa scorrere orizzontalmente la barra delle scene anche con la rotella verticale', () => {
+    useEditor.getState().addShot();
+    const { container } = render(<Timeline collapsed />);
+    const overview = container.querySelector<HTMLElement>('.collapsed-scene-overview')!;
+    Object.defineProperty(overview, 'scrollWidth', { configurable: true, value: 1200 });
+    Object.defineProperty(overview, 'clientWidth', { configurable: true, value: 300 });
+    overview.scrollLeft = 0;
+    fireEvent.wheel(overview, { deltaY: 85 });
+    expect(overview.scrollLeft).toBe(85);
   });
 
   it('a timeline aperta non mostra la barra ridotta delle scene', () => {
