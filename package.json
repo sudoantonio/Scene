@@ -5,7 +5,7 @@
   "author": "Abaco Animation",
   "license": "Apache-2.0",
   "desktopName": "Scene",
-  "description": "Editor desktop locale per bozze 3D assistite da GPT-6 Astra e Blender",
+  "description": "Editor desktop per storyboard 3D con Jev/Laya; richiede Blender per produzione e rendering",
   "main": "dist-electron/main.cjs",
   "type": "module",
   "scripts": {
