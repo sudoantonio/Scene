@@ -14,6 +14,10 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
   <img src="docs/assets/scene-interface.png" alt="Scene interface showing the 3D stage, camera path, character, and timeline" width="1200">
 </p>
 
+## Download
+
+For Apple Silicon Macs, [download Scene 0.59.4 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.4/Scene-0.59.4-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow. The Mac app is not yet signed or notarized; on first launch, if macOS blocks it, right-click `Scene.app` and choose **Open**.
+
 ## Why Scene exists
 
 Recent AI models have become very capable at creating, modifying, and organizing 3D content. At the same time, ABACO needed a more consistent way to produce educational animated content for its social channels.
