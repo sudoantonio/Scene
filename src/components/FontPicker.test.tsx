@@ -9,6 +9,8 @@ it('previews each font in its own family and selects it', () => {
   const onChange = vi.fn();
   render(<FontPicker name="Text font" value="system" onChange={onChange} />);
   fireEvent.click(screen.getByRole('button', { name: 'Text font' }));
+  expect(screen.getByRole('listbox').parentElement).toBe(document.body);
+  expect(screen.getByRole('listbox')).toHaveStyle({ position: 'fixed' });
   const options = screen.getAllByRole('option');
   expect(options).toHaveLength(FONT_OPTIONS.length);
   expect(FONT_OPTIONS.length).toBeGreaterThan(10);

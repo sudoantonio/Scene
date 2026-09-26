@@ -687,8 +687,8 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
   // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
   // e salti soprattutto durante la scala.
-  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera') || (object.kind === 'blend_asset' && !!object.asset.controllers?.length)) return visual;
-  return <>{visual}<group ref={translationProxy} /><TransformControls ref={objectControls} object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={1.2} enabled
+  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
+  return <>{visual}<group ref={translationProxy} /><TransformControls ref={objectControls} object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={object.kind === 'blend_asset' ? .8 : 1.2} enabled
     showZ={!viewTranslation && !(object.kind === 'plane' && mode === 'scale')}
     onObjectChange={() => {
       if (!ref.current) return;

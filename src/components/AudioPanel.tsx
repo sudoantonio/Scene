@@ -70,8 +70,10 @@ export default function AudioPanel() {
     </div>
     {error && <p className="audio-transcribe-error" role="alert">{error}</p>}
     {selected.audio.captions.length > 0 && <>
-      <div className="audio-caption-actions"><label><input type="checkbox" checked={selected.audio.showCaptions} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, showCaptions: event.target.checked } })} /> Show subtitles</label></div>
-      <label className="caption-apply-all"><input type="checkbox" aria-label="Apply to all" checked={selected.audio.applyCaptionPositionToAll} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, applyCaptionPositionToAll: event.target.checked } })} /> Apply to all</label>
+      <div className="audio-caption-options">
+        <label><input type="checkbox" checked={selected.audio.showCaptions} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, showCaptions: event.target.checked } })} /> Show subtitles</label>
+        <label><input type="checkbox" checked={selected.audio.applyCaptionPositionToAll} onChange={(event) => updateObject(selected.id, { audio: { ...selected.audio, applyCaptionPositionToAll: event.target.checked } })} /> Apply to all</label>
+      </div>
       <p className="caption-position-hint">Drag a subtitle in the frame to move it.</p>
       <div className="caption-style-editor" aria-label="Subtitle appearance">
         <FontPicker name="Subtitle font" value={selected.audio.captionStyle.fontFamily} onChange={(fontFamily) => changeCaptionStyle({ fontFamily })} />
