@@ -221,7 +221,7 @@ async function makePortableProject(project: AbacoProject, root: string) {
     } else if (object.kind === 'blend_asset') {
       if (object.asset.sourcePath) object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'modelli', object.id);
       if (object.asset.proxyPath) object.asset.proxyPath = await copyAsset(object.asset.proxyPath, 'anteprime', `${object.id}-preview`);
-    } else if (object.screenSpace && object.kind !== 'text' && (object.asset.sourcePath || object.asset.proxyPath)) {
+    } else if (object.kind === 'plane' && (object.asset.sourcePath || object.asset.proxyPath)) {
       const relative = await copyAsset(object.asset.sourcePath, 'immagini', object.id, object.asset.proxyPath);
       object.asset.sourcePath = relative;
       object.asset.proxyPath = relative;
@@ -576,13 +576,7 @@ ipcMain.handle('audio:transcribe', async (event, payload: { sourcePath: string; 
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
-ipcMain.handle('blendAsset:choose', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openFile'], title: 'Add a character or Blender asset',
-    filters: [{ name: 'Blender files', extensions: ['blend'] }],
-  });
-  if (result.canceled || !result.filePaths[0]) return null;
-  const sourcePath = path.resolve(result.filePaths[0]);
+async function importBlendAsset(sourcePath: string) {
   const cacheDir = path.join(app.getPath('userData'), 'asset-cache');
   const assetId = crypto.randomUUID();
   const proxyPath = path.join(cacheDir, `${assetId}.glb`);
@@ -592,6 +586,27 @@ ipcMain.handle('blendAsset:choose', async () => {
     name: path.basename(sourcePath, path.extname(sourcePath)),
     boundsCenter: metadata.boundsCenter, previewScale: metadata.previewScale, groundOffset: metadata.groundOffset, controllers: metadata.controllers,
   };
+}
+
+ipcMain.handle('blendAsset:choose', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openFile'], title: 'Add a character or Blender asset',
+    filters: [{ name: 'Blender files', extensions: ['blend'] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return importBlendAsset(path.resolve(result.filePaths[0]));
+});
+
+ipcMain.handle('asset:importDrop', async (_event, incomingPath: string) => {
+  if (typeof incomingPath !== 'string' || !incomingPath.trim()) throw new Error('Invalid dropped file.');
+  const filePath = path.resolve(incomingPath);
+  const stats = await fs.stat(filePath);
+  if (!stats.isFile()) throw new Error('Drop a file, not a folder.');
+  const extension = path.extname(filePath).toLowerCase();
+  if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) return { kind: 'image' as const, path: filePath, name: path.basename(filePath) };
+  if (['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'].includes(extension)) return { kind: 'audio' as const, sourcePath: filePath, name: path.basename(filePath, extension) };
+  if (extension === '.blend') return { kind: 'blend' as const, asset: await importBlendAsset(filePath) };
+  throw new Error(`Unsupported file: ${path.basename(filePath)}. Use an image, audio file, or .blend asset.`);
 });
 
 ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }) => {

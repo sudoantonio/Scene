@@ -66,7 +66,7 @@ type EditorState = {
   setInterpolation(value: Interpolation): void;
   setGizmoMode(value: 'translate' | 'rotate' | 'scale'): void;
   addObject(kind: ObjectKind): void;
-  addScreenImage(asset: { sourcePath: string; dataUrl: string; name: string }): void;
+  addImage(asset: { sourcePath: string; dataUrl: string; name: string; aspectRatio?: number }, space: 'screen' | 'world'): void;
   addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
   trimAudioOnTimeline(id: string, edge: 'start' | 'end', deltaFrames: number): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number; controllers?: SceneObject['asset']['controllers'] }): void;
@@ -288,6 +288,26 @@ const makeObjectLocalToScene = (project: AbacoProject, object: SceneObject, scen
   if (range.end <= project.settings.frameEnd) putKey(object, range.end, 'visibility', false, 'constant');
 };
 
+const removeObjectFromScene = (project: AbacoProject, objectId: string, sceneId: string) => {
+  const range = sceneRange(project, sceneId);
+  const object = project.objects.find((item) => item.id === objectId && item.kind !== 'camera' && item.kind !== 'audio' && !item.kind.includes('light'));
+  if (!range || !object || (object.sceneIds.length > 0 && !object.sceneIds.includes(sceneId))
+    || !objectPresenceRange(object, range.scene.frame, range.end)) return false;
+  const remainingSceneIds = object.sceneIds.filter((id) => id !== sceneId);
+  // An empty sceneIds array means "all scenes". Keep the last membership and
+  // hide it with visibility instead of accidentally making the object global.
+  if (remainingSceneIds.length > 0) object.sceneIds = remainingSceneIds;
+  object.keyframes = object.keyframes.filter((key) => key.frame < range.scene.frame || key.frame >= range.end);
+  object.sceneNotes = object.sceneNotes.filter((note) => note.frame < range.scene.frame || note.frame >= range.end);
+  putKey(object, range.scene.frame, 'visibility', false, 'constant');
+  project.comments = project.comments.flatMap((comment) => {
+    if (comment.sceneId !== sceneId || !comment.targetIds.includes(objectId)) return [comment];
+    const targetIds = comment.targetIds.filter((id) => id !== objectId);
+    return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
+  });
+  return true;
+};
+
 const makeCameraShotIndependent = (project: AbacoProject, camera: SceneObject, sceneFrame: number, keepSceneStartConstant = true) => {
   const properties: AnimProperty[] = ['position', 'rotation', 'scale', 'lens'];
   closePreviousScene(camera, sceneFrame, properties);
@@ -484,11 +504,12 @@ export const useEditor = create<EditorState>((set, get) => {
       const ids = new Set(state.selectedIds.filter((id) => state.project.objects.some((object) => object.id === id && object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light'))));
       if (!ids.size) return;
       const next = snapshot(state.project);
-      next.objects = next.objects.filter((object) => !ids.has(object.id));
-      next.comments = next.comments.flatMap((comment) => {
-        const targetIds = comment.targetIds.filter((id) => !ids.has(id));
-        return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
-      });
+      ensureSceneSnapshots(next);
+      const sceneId = next.cameraCuts.find((cut) => cut.frame === activeSceneStart(next, state.currentFrame))?.id;
+      if (!sceneId) return;
+      let removed = false;
+      for (const id of ids) removed = removeObjectFromScene(next, id, sceneId) || removed;
+      if (!removed) return;
       commit(next);
       set({ selectedId: undefined, selectedIds: [], selectedMotion: undefined });
     },
@@ -543,13 +564,17 @@ export const useEditor = create<EditorState>((set, get) => {
       commit(next);
       set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
-    addScreenImage: (asset) => {
+    addImage: (asset, space) => {
       const state = get();
-      const object = createSceneObject('plane', state.project.objects.filter((item) => item.screenSpace && item.kind === 'plane').length + 1);
+      const object = createSceneObject('plane', state.project.objects.filter((item) => item.kind === 'plane' && Boolean(item.asset.sourcePath)).length + 1);
       object.name = asset.name;
-      object.screenSpace = true;
-      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.dataUrl, collectionName: 'Livello 2D', boundsCenter: [0, 0, 0], previewScale: 1, groundOffset: 0 };
+      object.screenSpace = space === 'screen';
+      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.dataUrl, collectionName: space === 'screen' ? 'Livello 2D' : 'Immagine 3D', boundsCenter: [0, 0, 0], previewScale: Number.isFinite(asset.aspectRatio) && (asset.aspectRatio ?? 0) > 0 ? asset.aspectRatio! : 1, groundOffset: 0 };
       object.transform.scale = [1, 1, 1];
+      if (space === 'world') {
+        object.transform.position = [0, 0, 1.5];
+        object.transform.rotation = [90, 0, 0];
+      }
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
@@ -887,11 +912,10 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       if (!state.selectedId) return;
       const next = snapshot(state.project);
-      const object = next.objects.find((item) => item.id === state.selectedId);
-      if (!object || object.kind === 'camera') return;
       ensureSceneSnapshots(next);
-      putKey(object, activeSceneStart(next, state.currentFrame), 'visibility', false, 'constant');
-      commit(next); set({ selectedId: undefined });
+      const sceneId = next.cameraCuts.find((cut) => cut.frame === activeSceneStart(next, state.currentFrame))?.id;
+      if (!sceneId || !removeObjectFromScene(next, state.selectedId, sceneId)) return;
+      commit(next); set({ selectedId: undefined, selectedIds: [], selectedMotion: undefined });
     },
     updateObject: (id, patch) => {
       const next = snapshot(get().project);
@@ -1025,6 +1049,11 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
       const object = state.project.objects.find((item) => item.id === id);
       if (!object || object.kind === 'camera' || object.kind.includes('light')) return;
+      if (object.kind !== 'audio') {
+        const sceneId = state.project.cameraCuts.find((cut) => cut.frame === activeSceneStart(state.project, state.currentFrame))?.id;
+        if (sceneId) get().deleteObjectFromScene(id, sceneId);
+        return;
+      }
       const next = snapshot(state.project);
       next.objects = next.objects.filter((item) => item.id !== id);
       next.comments = next.comments.flatMap((comment) => {
@@ -1096,35 +1125,15 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     deleteObjectFromScene: (objectId, sceneId) => {
       const next = snapshot(get().project);
-      const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
-      const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-      const index = scenes.findIndex((scene) => scene.id === sceneId);
-      const scene = scenes[index];
-      if (!object || !scene) return;
       ensureSceneSnapshots(next);
-      const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
-      if (object.sceneIds.length) {
-        object.sceneIds = object.sceneIds.filter((id) => id !== sceneId);
-        if (!object.sceneIds.length) {
-          next.objects = next.objects.filter((item) => item.id !== objectId);
-          next.comments = next.comments.flatMap((comment) => {
-            if (!comment.targetIds.includes(objectId)) return [comment];
-            const targetIds = comment.targetIds.filter((id) => id !== objectId);
-            return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
-          });
-          commit(next);
-          return;
-        }
-      }
-      object.keyframes = object.keyframes.filter((key) => key.frame < scene.frame || key.frame >= sceneEnd);
-      object.sceneNotes = object.sceneNotes.filter((note) => note.frame < scene.frame || note.frame >= sceneEnd);
-      putKey(object, scene.frame, 'visibility', false, 'constant');
-      next.comments = next.comments.flatMap((comment) => {
-        if (comment.sceneId !== sceneId || !comment.targetIds.includes(objectId)) return [comment];
-        const targetIds = comment.targetIds.filter((id) => id !== objectId);
-        return targetIds.length || comment.scope === 'scene' ? [{ ...comment, targetIds }] : [];
-      });
+      if (!removeObjectFromScene(next, objectId, sceneId)) return;
       commit(next);
+      set((state) => ({
+        selectedId: state.selectedId === objectId ? undefined : state.selectedId,
+        selectedIds: state.selectedIds.filter((id) => id !== objectId),
+        selectedMotion: state.selectedMotion?.objectId === objectId ? undefined : state.selectedMotion,
+        recordingMotion: state.recordingMotion?.objectId === objectId ? undefined : state.recordingMotion,
+      }));
     },
     deleteMotionFromScene: (objectId, sceneId) => {
       const state = get();

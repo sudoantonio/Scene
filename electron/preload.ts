@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { EditedMedia } from '../src/domain/edited-media';
 import type { AbacoProject, BlenderPlan } from '../src/domain/schema';
 import type { JevActionInput, JevActionPlan } from '../src/domain/jev-action';
@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('abaco', {
     return () => ipcRenderer.removeListener('audio:transcribe:progress', listener);
   },
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
+  getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),
+  importDroppedAsset: (filePath: string) => ipcRenderer.invoke('asset:importDrop', filePath),
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),
   generatePlan: (project: AbacoProject, contactSheet?: string) => ipcRenderer.invoke('ai:generate', { project, contactSheet }),
   generateJevAction: (input: JevActionInput): Promise<JevActionPlan> => ipcRenderer.invoke('jev:action', input),

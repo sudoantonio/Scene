@@ -47,6 +47,18 @@ describe('project image recovery', () => {
     expect(loaded.objects.slice(-1)[0]?.asset.sourcePath).toBe('/new/assets/picture.png');
   });
 
+  it('recovers the texture of a 3D image plane after reopening the project', async () => {
+    const project = imageProject();
+    const image = project.objects.at(-1)!;
+    image.screenSpace = false;
+    image.asset.proxyPath = 'assets/picture.png';
+    const readImage = vi.fn().mockResolvedValue(preview);
+    const loaded = await hydratePortableProject(project, '/bundle/project.abaco.json', readImage);
+    expect(readImage).toHaveBeenCalledWith('/originals/picture.png');
+    expect(loaded.objects.at(-1)?.asset.proxyPath).toBe(preview);
+    expect(loaded.objects.at(-1)?.screenSpace).toBe(false);
+  });
+
   it('loads an existing proxy when the original image is missing', async () => {
     const project = imageProject();
     project.objects.slice(-1)[0]!.asset.proxyPath = 'assets/recovery.png';

@@ -1246,3 +1246,4 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .viewport-subtitle { width: max-content; max-width: var(--camera-frame-width); padding: 0 2%; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; }
 .app-shell .viewport-subtitle.dragging { cursor: grabbing; }
 .app-shell .viewport-subtitle.selected { outline: 1px dashed rgba(240,197,71,.82); outline-offset: 4px; border-radius: 2px; }
+.app-shell .viewport-subtitle-resize-handle { position: absolute; right: -12px; bottom: -12px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid #2b2514; border-radius: 3px; background: #f0c547; box-shadow: 0 0 0 1px rgba(255,255,255,.85); cursor: nwse-resize; pointer-events: auto; touch-action: none; }

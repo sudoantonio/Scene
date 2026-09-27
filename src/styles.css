@@ -11,6 +11,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { border: 0; cursor: pointer; }
 button:disabled { opacity: .4; cursor: default; }
 .app-shell { height: 100%; display: grid; grid-template-rows: 58px minmax(0, 1fr) 250px; background: var(--bg); }
+.asset-drop-overlay { position: fixed; z-index: 80; inset: 12px; display: grid; place-items: center; pointer-events: none; border: 3px dashed #e3b626; border-radius: 12px; background: rgba(20, 20, 20, .62); color: #fff; font-size: 17px; font-weight: 650; text-align: center; }
 .topbar { display: flex; align-items: center; gap: 18px; padding: 0 14px; background: #11151c; border-bottom: 1px solid var(--line); z-index: 5; }
 .brand { display: flex; align-items: center; gap: 9px; min-width: 214px; }
 .brand-mark { width: 34px; height: 34px; border: 1px solid #6e4e27; border-radius: 9px; display: grid; place-items: center; color: var(--orange); background: #291f16; }

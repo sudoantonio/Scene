@@ -19,7 +19,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   const frame = useEditor((state) => state.currentFrame);
   const addObject = useEditor((state) => state.addObject);
   const addBlendAsset = useEditor((state) => state.addBlendAsset);
-  const addScreenImage = useEditor((state) => state.addScreenImage);
+  const addImage = useEditor((state) => state.addImage);
   const addAudio = useEditor((state) => state.addAudio);
   const setSceneDirection = useEditor((state) => state.setSceneDirection);
   const [directionDrafts, setDirectionDrafts] = useState<Record<string, string>>({});
@@ -53,15 +53,32 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
     }, 350);
     pendingSaves.current.set(sceneId, { text, timer });
   };
+  const insertImage = async (space: 'screen' | 'world') => {
+    try {
+      if (!window.abaco) throw new Error('Image import is available in the desktop app.');
+      const image = await window.abaco.chooseBackground('image');
+      if (!image) return;
+      const dataUrl = await window.abaco.loadAsset(image.path);
+      const bitmap = new window.Image();
+      const dimensions = new Promise<number>((resolve) => {
+        bitmap.onload = () => resolve(bitmap.naturalWidth / Math.max(1, bitmap.naturalHeight));
+        bitmap.onerror = () => resolve(1);
+      });
+      bitmap.src = dataUrl;
+      const aspectRatio = await dimensions;
+      addImage({ sourcePath: image.path, dataUrl, name: image.name, aspectRatio }, space);
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Image import failed.'); }
+  };
   return <div className="elements-panel">
     {mode === 'add' ? <section className="add-section">
       <div className="section-heading"><h2>Add element</h2></div>
       <h2>Shapes</h2>
-      <div className="shape-row">{shapes.map(({ kind, label, icon: Icon }) => <button key={kind} className="shape-button" onClick={() => addObject(kind)}><Icon size={15} /><span>{label}</span></button>)}</div>
+      <div className="shape-row">{shapes.map(({ kind, label, icon: Icon }) => <button key={kind} className="shape-button" draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-scene-shape', kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addObject(kind)}><Icon size={15} /><span>{label}</span></button>)}</div>
       <h2 className="spaced-title">Insert</h2>
       <div className="quick-add">
-        <button onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Text</span></button>
-        <button onClick={async () => { try { if (!window.abaco) throw new Error('Image import is available in the desktop app.'); const image = await window.abaco.chooseBackground('image'); if (image) addScreenImage({ sourcePath: image.path, dataUrl: await window.abaco.loadAsset(image.path), name: image.name }); } catch (error) { window.alert(error instanceof Error ? error.message : 'Image import failed.'); } }}><Image size={15} /><span>Image</span></button>
+        <button draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-scene-shape', 'text'); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Text</span></button>
+        <button onClick={() => void insertImage('screen')}><Image size={15} /><span>Image 2D</span></button>
+        <button onClick={() => void insertImage('world')}><Image size={15} /><span>Image 3D</span></button>
         <button onClick={async () => {
           try {
             if (!window.abaco) throw new Error('.blend import is available in the desktop app.');

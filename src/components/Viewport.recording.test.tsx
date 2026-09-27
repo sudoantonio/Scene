@@ -52,6 +52,29 @@ afterEach(() => {
 });
 
 describe('REC camera dopo il cambio scena nella vista camera', () => {
+  it('ridimensiona il sottotitolo con la maniglia, mostra l’anteprima e salva al rilascio', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    act(() => useEditor.getState().addAudio({ sourcePath: '/voice.wav', name: 'Voice', duration: 3, waveform: [] }));
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const captionId = crypto.randomUUID();
+    act(() => useEditor.getState().updateObject(audio.id, { audio: { ...audio.audio, captions: [{ id: captionId, start: 0, end: 1, text: 'First' }] } }));
+    render(<Viewport />);
+    const subtitle = screen.getByLabelText('Subtitle in frame: First');
+    fireEvent.pointerDown(subtitle, { button: 0, pointerId: 20, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 20, clientX: 100, clientY: 100 });
+    const handle = screen.getByRole('separator', { name: 'Resize subtitle' });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 21, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 21, clientX: 170, clientY: 170 });
+    expect(subtitle.style.fontSize).not.toContain('32px');
+    expect(useEditor.getState().project.objects.find((object) => object.id === audio.id)!.audio.captionStyle.size).toBe(1);
+    fireEvent.pointerUp(window, { pointerId: 21, clientX: 170, clientY: 170 });
+    const saved = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
+    expect(saved.audio.captionStyle.size).toBeGreaterThan(1);
+    expect(saved.audio.captionStyle.size).toBeLessThanOrEqual(1.6);
+    width.mockRestore(); height.mockRestore();
+  });
+
   it('trascina un sottotitolo nello spazio e applica lo spostamento a tutti solo quando richiesto', () => {
     const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
     const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
@@ -99,6 +122,16 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     const { container } = render(<Viewport />);
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
     expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
+  });
+
+  it('sospende i renderer secondari durante la riproduzione e li ripristina alla pausa', () => {
+    act(() => useEditor.setState({ cameraView: false, isPlaying: true }));
+    const { container } = render(<Viewport />);
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(0);
+    expect(container.querySelectorAll('.live-camera-preview')).toHaveLength(0);
+    act(() => useEditor.setState({ isPlaying: false }));
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
+    expect(container.querySelectorAll('.live-camera-preview')).toHaveLength(1);
   });
 
   it('mantiene visibili i controlli esterni anche senza una selezione', () => {

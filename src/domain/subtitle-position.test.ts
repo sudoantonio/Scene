@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSceneObject, SceneObjectSchema } from './schema';
-import { moveSubtitlePosition } from './subtitle-position';
+import { clampSubtitleSize, moveSubtitlePosition } from './subtitle-position';
 
 const makeAudio = () => {
   const audio = createSceneObject('audio', 1).audio;
@@ -12,6 +12,11 @@ const makeAudio = () => {
 };
 
 describe('Subtitle spatial position', () => {
+  it('bounds a subtitle handle drag to supported saved sizes', () => {
+    expect(clampSubtitleSize(.2)).toBe(.65);
+    expect(clampSubtitleSize(1.23456)).toBe(1.235);
+    expect(clampSubtitleSize(4)).toBe(1.6);
+  });
   it('moves the shared position and all individual overrides together by default', () => {
     const audio = makeAudio();
     const moved = moveSubtitlePosition(audio, audio.captions[0].id, [.4, .85]);

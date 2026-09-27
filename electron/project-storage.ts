@@ -28,7 +28,7 @@ export async function hydratePortableProject(project: AbacoProject, filePath: st
   for (const object of hydrated.objects) {
     object.asset.sourcePath = resolveAsset(object.asset.sourcePath);
     object.asset.proxyPath = resolveAsset(object.asset.proxyPath);
-    if (object.screenSpace && object.kind !== 'text' && !isDataUrl(object.asset.proxyPath)) {
+    if (object.kind === 'plane' && (object.screenSpace || object.asset.sourcePath) && !isDataUrl(object.asset.proxyPath)) {
       const paths = Array.from(new Set([object.asset.sourcePath, object.asset.proxyPath].filter(Boolean)));
       let error: unknown;
       for (const imagePath of paths) {

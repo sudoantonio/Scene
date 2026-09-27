@@ -30,6 +30,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Salvataggi e apertura progetto', () => {
+  it('adds a dragged shape to the scene', () => {
+    render(<App />);
+    const shell = document.querySelector('.app-shell')!;
+    fireEvent.drop(shell, { dataTransfer: { types: ['application/x-scene-shape'], getData: () => 'sphere', files: [] } });
+    expect(useEditor.getState().project.objects.some((object) => object.kind === 'sphere')).toBe(true);
+  });
+
+  it('imports a dropped Blender asset through the desktop bridge', async () => {
+    const asset = { sourcePath: '/tmp/character.blend', proxyPath: '/tmp/character.glb', collectionName: 'Blender Scene', name: 'Character', boundsCenter: [0, 0, 0] as [number, number, number], previewScale: 1, groundOffset: 0 };
+    window.abaco!.getDroppedFilePath = vi.fn().mockReturnValue(asset.sourcePath);
+    window.abaco!.importDroppedAsset = vi.fn().mockResolvedValue({ kind: 'blend', asset });
+    render(<App />);
+    const shell = document.querySelector('.app-shell')!;
+    await act(async () => { fireEvent.drop(shell, { dataTransfer: { types: ['Files'], getData: () => '', files: [new File(['blend'], 'character.blend')] } }); });
+    expect(window.abaco!.importDroppedAsset).toHaveBeenCalledWith(asset.sourcePath);
+    expect(useEditor.getState().project.objects.some((object) => object.name === 'Character')).toBe(true);
+  });
+
   it('mostra i controlli nel pannello laterale', () => {
     render(<App />);
     expect(screen.getByTestId('inspector')).toHaveTextContent('edit');

@@ -1,6 +1,6 @@
 import { audioStateAt } from '../domain/media-timeline';
 import { fontCss } from '../domain/text-style';
-import { clampSubtitlePosition, DEFAULT_SUBTITLE_POSITION, moveSubtitlePosition, type SubtitlePosition } from '../domain/subtitle-position';
+import { clampSubtitlePosition, clampSubtitleSize, DEFAULT_SUBTITLE_POSITION, moveSubtitlePosition, type SubtitlePosition } from '../domain/subtitle-position';
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
 import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
@@ -419,6 +419,13 @@ function Styled3DText({ object, visible }: { object: SceneObject; visible: boole
   return <Text visible={visible} color={object.color} font={font} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
 }
 
+function ImagePlaneVisual({ object }: { object: SceneObject }) {
+  const texture = useLoader(THREE.TextureLoader, object.asset.proxyPath);
+  useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
+  const aspect = THREE.MathUtils.clamp(object.asset.previewScale || 1, .1, 10);
+  return <mesh castShadow><planeGeometry args={[2 * aspect, 2]} /><meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent alphaTest={.01} toneMapped={false} /></mesh>;
+}
+
 function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneObject; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
@@ -426,7 +433,9 @@ function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneO
     case 'sphere': return <mesh castShadow>{material}<sphereGeometry args={[1, 32, 18]} /></mesh>;
     case 'cylinder': return <mesh castShadow>{material}<cylinderGeometry args={[1, 1, 2, 32]} /></mesh>;
     case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
-    case 'plane': return <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
+    case 'plane': return object.asset.proxyPath
+      ? <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<mesh>{material}<planeGeometry args={[2, 2]} /></mesh>}><Suspense fallback={null}><ImagePlaneVisual object={object} /></Suspense></BackgroundAssetBoundary>
+      : <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
     case 'text': return <Styled3DText object={object} visible={!hideText} />;
     case 'blend_asset': return <BlendAssetVisual object={object} onDragChange={onDragChange} />;
     case 'camera': return <CameraVisual object={object} />;
@@ -436,12 +445,26 @@ function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneO
   }
 }
 
-function SceneItem({ object, cameraView, objectControls, interactionEnabled = true, onDragChange }: { object: SceneObject; cameraView: boolean; objectControls: RefObject<TransformControlsImpl | null>; interactionEnabled?: boolean; onDragChange(value: boolean): void }) {
+function SelectionOutline({ target }: { target: RefObject<THREE.Group | null> }) {
+  const scene = useThree((state) => state.scene);
+  const outline = useRef<THREE.BoxHelper | null>(null);
+  useEffect(() => {
+    if (!target.current) return;
+    const helper = new THREE.BoxHelper(target.current, 0xd8ab35);
+    helper.material.depthTest = false;
+    helper.renderOrder = 30;
+    scene.add(helper);
+    outline.current = helper;
+    return () => { scene.remove(helper); helper.geometry.dispose(); helper.material.dispose(); outline.current = null; };
+  }, [scene, target]);
+  useFrame(() => outline.current?.update());
+  return null;
+}
+
+function SceneItem({ object, frame, cameraView, objectControls, interactionEnabled = true, onDragChange }: { object: SceneObject; frame: number; cameraView: boolean; objectControls: RefObject<TransformControlsImpl | null>; interactionEnabled?: boolean; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const translationProxy = useRef<THREE.Group>(null);
   const viewCamera = useThree((state) => state.camera);
-  const scene = useThree((state) => state.scene);
-  const selectionOutline = useRef<THREE.BoxHelper | null>(null);
   const directDrag = useRef<{
     pointerId: number; moved: boolean; x: number; y: number;
     position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3;
@@ -451,7 +474,6 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const gizmoDragging = useRef(false);
   const gizmoCleanup = useRef<(() => void) | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
-  const currentFrame = useEditor((state) => state.currentFrame);
   const selectedId = useEditor((state) => state.selectedId);
   const selectedIds = useEditor((state) => state.selectedIds);
   const multiSelectMode = useEditor((state) => state.multiSelectMode);
@@ -466,25 +488,15 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   const setPlaying = useEditor((state) => state.setPlaying);
   const [textEditing, setTextEditing] = useState(false);
   const [textDraft, setTextDraft] = useState('');
-  const transform = evaluateTransform(object, currentFrame);
-  const text = evaluateProperty(object, 'text', currentFrame) as string;
-  const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', currentFrame) as boolean;
+  const transform = evaluateTransform(object, frame);
+  const text = evaluateProperty(object, 'text', frame) as string;
+  const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', frame) as boolean;
   const helperOnly = object.kind === 'camera' || object.kind.includes('light');
   const helperSelected = selectedIds.includes(object.id) || selectedMotion?.objectId === object.id;
-  useEffect(() => {
-    if (!helperSelected || !visible || !ref.current || object.kind === 'camera' || object.kind === 'blend_asset' || object.kind.includes('light')) return;
-    const outline = new THREE.BoxHelper(ref.current, 0xd8ab35);
-    outline.material.depthTest = false;
-    outline.renderOrder = 30;
-    scene.add(outline);
-    selectionOutline.current = outline;
-    return () => { scene.remove(outline); outline.geometry.dispose(); outline.material.dispose(); if (selectionOutline.current === outline) selectionOutline.current = null; };
-  }, [helperSelected, object.kind, scene, visible]);
-  useFrame(() => selectionOutline.current?.update());
   const shown = useMemo(() => ({ ...object, text }), [object, text]);
   const viewTranslation = cameraView && mode === 'translate';
   useLayoutEffect(() => {
-    if (!viewTranslation || !translationProxy.current || gizmoDragging.current) return;
+    if (!viewTranslation || selectedId !== object.id || !translationProxy.current || gizmoDragging.current) return;
     translationProxy.current.position.set(...transform.position);
     translationProxy.current.quaternion.copy(viewCamera.quaternion);
     translationProxy.current.updateMatrixWorld();
@@ -676,6 +688,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
       onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={startDirectDrag} onPointerMove={moveDirectDrag} onPointerUp={finishDirectDrag} onPointerCancel={finishDirectDrag}>
       <MeshVisual object={shown} hideText={textEditing} onDragChange={onDragChange} />
+      {helperSelected && visible && object.kind !== 'camera' && object.kind !== 'blend_asset' && !object.kind.includes('light') && <SelectionOutline target={ref} />}
       {textEditing && <Html center zIndexRange={[100, 0]}>
         <textarea className="viewport-text-editor" aria-label={`Edit ${object.name}`} autoFocus value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
           if (event.key === 'Escape') { event.preventDefault(); setTextDraft(text); setTextEditing(false); }
@@ -842,7 +855,7 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCap
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
     <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
     <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
-    {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
+    {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
     <ShotCamera object={camera} aspect={aspect} frame={frame} />
     <ThumbnailEmitter projectId={projectId} sceneId={scene.id} revision={revision} objects={objects} frame={frame} onCaptured={onCaptured} />
   </Canvas></div>;
@@ -860,6 +873,7 @@ function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark }: { pro
   if (!scene) return null;
   return <div className="thumbnail-renderers" aria-hidden="true"><SceneThumbnailRenderer projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} onCaptured={complete} /></div>;
 }
+const MemoSceneThumbnailQueue = memo(SceneThumbnailQueue);
 
 function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFind }: { scene: CameraCut; camera: SceneObject; objects: SceneObject[]; aspect: number; dark: boolean; onOpen(): void; onFind(): void }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -880,7 +894,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, scene.lighting.intensity)} />
       <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
-      {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
+      {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
       <ShotCamera object={camera} aspect={aspect} frame={frame} />
     </Canvas><ReadonlyScreenLayers objects={objects} frame={frame} /></div></button>
     <button className="live-camera-preview-find" title="Find camera" aria-label="Find camera" onClick={onFind}><Focus size={13} /></button>
@@ -1186,6 +1200,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const cuts = useEditor((state) => state.project.cameraCuts);
   const settings = useEditor((state) => state.project.settings);
   const frame = useEditor((state) => state.currentFrame);
+  const playing = useEditor((state) => state.isPlaying);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const selectedCaption = useEditor((state) => state.selectedCaption);
   const selectCaption = useEditor((state) => state.selectCaption);
@@ -1217,6 +1232,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const [draggingObject, setDraggingObject] = useState(false);
   const [subtitleDragPreview, setSubtitleDragPreview] = useState<{ audioId: string; captionId: string; target: SubtitlePosition }>();
   const subtitleDragCleanup = useRef<(() => void) | undefined>(undefined);
+  const [subtitleSizePreview, setSubtitleSizePreview] = useState<{ audioId: string; size: number }>();
+  const subtitleSizeCleanup = useRef<(() => void) | undefined>(undefined);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const objectControls = useRef<TransformControlsImpl | null>(null);
   const shotOrbitRef = useRef<OrbitControlsImpl | null>(null);
@@ -1231,7 +1248,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const suppressSelectionWheelUntil = useRef(0);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
-  useEffect(() => () => subtitleDragCleanup.current?.(), []);
+  useEffect(() => () => { subtitleDragCleanup.current?.(); subtitleSizeCleanup.current?.(); }, []);
   useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
@@ -1321,7 +1338,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (!state) return [];
     const time = state.sourceTime;
     const audio = subtitleDragPreview?.audioId === object.id ? moveSubtitlePosition(object.audio, subtitleDragPreview.captionId, subtitleDragPreview.target) : object.audio;
-    return audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, audioId: object.id, text: caption.text, style: audio.captionStyle, position: caption.position ?? audio.captionStyle.position ?? DEFAULT_SUBTITLE_POSITION }));
+    return audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, audioId: object.id, text: caption.text, style: { ...audio.captionStyle, size: subtitleSizePreview?.audioId === object.id ? subtitleSizePreview.size : audio.captionStyle.size }, position: caption.position ?? audio.captionStyle.position ?? DEFAULT_SUBTITLE_POSITION }));
   }) : [];
 
   const beginSubtitleDrag = (event: ReactPointerEvent<HTMLDivElement>, audioId: string, captionId: string, position: SubtitlePosition) => {
@@ -1354,6 +1371,40 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     };
     const cancel = () => cleanup();
     subtitleDragCleanup.current = cleanup;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', cancel);
+  };
+
+  const beginSubtitleResize = (event: ReactPointerEvent<HTMLSpanElement>, audioId: string, captionId: string, initialSize: number) => {
+    if (event.button !== 0 || !cameraFrame) return;
+    event.preventDefault(); event.stopPropagation();
+    selectCaption({ audioId, captionId });
+    subtitleSizeCleanup.current?.();
+    const pointerId = event.pointerId;
+    const initialX = event.clientX, initialY = event.clientY;
+    let size = initialSize;
+    const move = (pointer: PointerEvent) => {
+      if (pointer.pointerId !== pointerId) return;
+      const distance = ((pointer.clientX - initialX) + (pointer.clientY - initialY)) / 2;
+      size = clampSubtitleSize(initialSize * (1 + distance / Math.max(80, cameraFrame.width * .3)));
+      setSubtitleSizePreview({ audioId, size });
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+      subtitleSizeCleanup.current = undefined;
+      setSubtitleSizePreview(undefined);
+    };
+    const finish = (pointer: PointerEvent) => {
+      move(pointer); cleanup();
+      if (size === initialSize) return;
+      const latest = useEditor.getState().project.objects.find((object) => object.id === audioId && object.kind === 'audio');
+      if (latest) updateObject(audioId, { audio: { ...latest.audio, captionStyle: { ...latest.audio.captionStyle, size } } });
+    };
+    const cancel = () => cleanup();
+    subtitleSizeCleanup.current = cleanup;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish);
     window.addEventListener('pointercancel', cancel);
@@ -1819,7 +1870,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
-    <Canvas key={rendererGeneration} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
+    <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={(event) => { if (event.button === 0 && !multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
@@ -1827,14 +1878,14 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
       <SceneBackground kind={activeCut?.background?.kind ?? 'none'} path={activeCut?.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
-      <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow />
+      <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow={!playing} />
       <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
       <Line name="abaco-x-axis" points={[[-20, 0, .012], [20, 0, .012]]} color="#c64d4d" lineWidth={1.2} transparent opacity={.94} />
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
-      {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light')).map((object) => <SceneItem key={object.id} object={object} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
-      {!cameraView && activeCamera && <SceneItem object={activeCamera} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {showMotionPaths && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
-      {showMotionPaths && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
+      {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <SceneItem key={object.id} object={object} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {!cameraView && activeCamera && <SceneItem object={activeCamera} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
+      {showMotionPaths && !playing && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {showMotionPaths && !playing && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
@@ -1842,7 +1893,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
-    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}</div>)}
+    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
@@ -1852,7 +1903,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       const camera = orbitRef.current?.object;
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
-    {!recordingSession && <SceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
+    {!recordingSession && !playing && <MemoSceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
     {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Back to free view" onClick={() => setCameraView(false)}><ArrowLeft size={15} /><span>Back</span></button>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Blender-style camera controls">
@@ -1882,7 +1933,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     <div className="viewport-bottom-right">
       <button className={`motion-path-visibility ${showMotionPaths ? 'active' : ''}`} aria-pressed={showMotionPaths} aria-label={showMotionPaths ? 'Hide motion paths' : 'Show motion paths'} title={showMotionPaths ? 'Hide paths' : 'Show paths'} onClick={() => setShowMotionPaths((value) => !value)}>{showMotionPaths ? <Eye size={15} /> : <EyeOff size={15} />}</button>
     </div>
-    {!cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => setCameraView(true)} onFind={() => {
+    {!playing && !cameraView && activeCut && activeCamera && <LiveCameraPreview scene={activeCut} camera={activeCamera} objects={objects} aspect={aspect} dark={dark} onOpen={() => setCameraView(true)} onFind={() => {
       const controls = orbitRef.current;
       if (!controls || !activeCameraTransform) return;
       controls.target.set(...activeCameraTransform.position);

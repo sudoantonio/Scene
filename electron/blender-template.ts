@@ -91,7 +91,12 @@ def create_object(data, suffix="", text_override=None):
     if kind in ("cube", "sphere", "cylinder", "cone", "plane"):
         obj = bpy.context.object
     obj.name = name
-    if kind in ("cube", "sphere", "cylinder", "cone", "plane", "text"):
+    if kind == "plane" and data.get("asset", {}).get("sourcePath"):
+        image = bpy.data.images.load(str(asset_path(data["asset"]["sourcePath"])), check_existing=True)
+        aspect = image.size[0] / max(1, image.size[1])
+        for vertex in obj.data.vertices: vertex.co.x *= aspect
+        obj.data.materials.append(overlay_material(name, "#ffffff", image))
+    elif kind in ("cube", "sphere", "cylinder", "cone", "plane", "text"):
         obj.data.materials.append(make_material(data))
     obj["abaco_id"] = data["id"]
     obj["abaco_kind"] = kind

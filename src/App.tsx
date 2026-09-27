@@ -1,5 +1,6 @@
 import { prepareEditedMedia } from './domain/edited-media';
 import { useEffect, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { PanelRightOpen, Plus, Redo2, Undo2 } from 'lucide-react';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
@@ -12,8 +13,18 @@ import Viewport, { captureContactSheet } from './components/Viewport';
 import AudioPlayback from './components/AudioPlayback';
 import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
+import { inspectAudio } from './domain/audio';
+import type { ObjectKind } from './domain/schema';
 
 const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Direct export without AI changes.', assumptions: [], warnings: [], operations: [] });
+const draggableShapes: ObjectKind[] = ['cube', 'sphere', 'cylinder', 'cone', 'plane', 'text'];
+const acceptsDrop = (event: DragEvent) => Array.from(event.dataTransfer.types).some((type) => type === 'Files' || type === 'application/x-scene-shape');
+const imageAspectRatio = (source: string) => new Promise<number>((resolve) => {
+  const bitmap = new window.Image();
+  bitmap.onload = () => resolve(bitmap.naturalWidth / Math.max(1, bitmap.naturalHeight));
+  bitmap.onerror = () => resolve(1);
+  bitmap.src = source;
+});
 const initialLayout = () => {
   try {
     const saved = JSON.parse(localStorage.getItem('abaco-layout-v1') ?? '{}');
@@ -51,11 +62,60 @@ export default function App() {
   const workspaceRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error' | 'info'; text: string }>();
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepth = useRef(0);
   // File writes must finish in order, and their results must never replace edits
   // made while the native save operation was still running.
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   const notify = (type: 'ok' | 'error' | 'info', text: string) => { setMessage({ type, text }); window.setTimeout(() => setMessage(undefined), 6500); };
+  const onDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!acceptsDrop(event)) return;
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDropActive(true);
+  };
+  const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!acceptsDrop(event)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (!dragDepth.current) setDropActive(false);
+  };
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!acceptsDrop(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+  const onDrop = async (event: DragEvent<HTMLDivElement>) => {
+    if (!acceptsDrop(event)) return;
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDropActive(false);
+    const shape = event.dataTransfer.getData('application/x-scene-shape') as ObjectKind;
+    if (draggableShapes.includes(shape)) {
+      useEditor.getState().addObject(shape);
+      return;
+    }
+    if (!window.abaco) { notify('error', 'File drop is available in the desktop app.'); return; }
+    const paths = Array.from(event.dataTransfer.files).map((file) => window.abaco!.getDroppedFilePath(file)).filter(Boolean);
+    if (!paths.length) return;
+    let imported = 0;
+    const failures: string[] = [];
+    for (const filePath of paths) {
+      try {
+        const asset = await window.abaco.importDroppedAsset(filePath);
+        if (asset.kind === 'image') {
+          const dataUrl = await window.abaco.loadAsset(asset.path);
+          useEditor.getState().addImage({ sourcePath: asset.path, dataUrl, name: asset.name, aspectRatio: await imageAspectRatio(dataUrl) }, event.shiftKey ? 'screen' : 'world');
+        } else if (asset.kind === 'audio') {
+          const source = await window.abaco.loadAsset(asset.sourcePath);
+          useEditor.getState().addAudio({ ...asset, ...await inspectAudio(source) });
+        } else useEditor.getState().addBlendAsset(asset.asset);
+        imported += 1;
+      } catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
+    }
+    if (imported) notify('ok', `${imported} item${imported === 1 ? '' : 's'} added to the scene.${failures.length ? ` ${failures.length} failed: ${failures[0]}` : ''}`);
+    else if (failures.length) notify('error', failures[0]!);
+  };
   const requireDesktop = () => { if (!window.abaco) { notify('error', 'This feature requires the Electron desktop app.'); return false; } return true; };
 
   const save = async (path = projectPath) => {
@@ -179,22 +239,33 @@ export default function App() {
   };
   useEffect(() => {
     if (!playing) return;
-    const timer = window.setInterval(() => {
+    let animationFrame = 0;
+    let previousTime = performance.now();
+    let partialFrames = 0;
+    const tick = (now: number) => {
       const state = useEditor.getState();
+      const elapsed = Math.min(250, Math.max(0, now - previousTime));
+      previousTime = now;
+      partialFrames += elapsed * state.project.settings.fps / 1000;
+      const advance = Math.floor(partialFrames);
+      partialFrames -= advance;
+      if (!advance) { animationFrame = window.requestAnimationFrame(tick); return; }
       if (state.recordingSession) {
         const scenes = state.project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
         const index = scenes.findIndex((scene) => scene.id === state.recordingSession?.sceneId);
         const sceneEnd = scenes[index + 1]?.frame ?? state.project.settings.frameEnd + 1;
-        if (index < 0 || state.currentFrame >= sceneEnd - 1) {
+        if (index < 0 || state.currentFrame + advance >= sceneEnd) {
+          state.setFrame(Math.max(state.currentFrame, sceneEnd - 1));
           state.stopRecording();
           return;
         }
       }
-      if (state.currentFrame >= state.project.settings.frameEnd) { state.setFrame(state.project.settings.frameStart); state.setPlaying(false); }
-      else state.setFrame(state.currentFrame + 1);
-    }, 1000 / project.settings.fps);
-    return () => window.clearInterval(timer);
-  }, [playing, project.settings.fps]);
+      if (state.currentFrame + advance >= state.project.settings.frameEnd) { state.setFrame(state.project.settings.frameStart); state.setPlaying(false); }
+      else { state.setFrame(state.currentFrame + advance); animationFrame = window.requestAnimationFrame(tick); }
+    };
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [playing]);
 
   useEffect(() => {
     if (!dirty || !projectPath || !window.abaco) return;
@@ -280,7 +351,8 @@ export default function App() {
   const rightWidth = collapsed.right ? 32 : layout.right;
   const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
   const dockInspectorBesideTimeline = collapsed.timeline && !collapsed.right;
-  return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
+  return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={(event) => { void onDrop(event); }} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
+    {dropActive && <div className="asset-drop-overlay" aria-hidden="true">Drop to add · images become 3D · hold Shift for 2D</div>}
     <AudioPlayback />
     <div className="slim-headbar">
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>

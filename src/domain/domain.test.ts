@@ -859,7 +859,8 @@ describe('scene indipendenti', () => {
     useEditor.getState().reorderObjects(textId, cubeId);
     expect(useEditor.getState().project.objects.filter((object) => object.kind !== 'camera').map((object) => object.id)).toEqual([textId, cubeId]);
     useEditor.getState().deleteObject(textId);
-    expect(useEditor.getState().project.objects.some((object) => object.id === textId)).toBe(false);
+    const text = useEditor.getState().project.objects.find((object) => object.id === textId)!;
+    expect(evaluateProperty(text, 'visibility', 1)).toBe(false);
     expect(useEditor.getState().project.objects.filter((object) => object.kind === 'camera')).toHaveLength(1);
   });
 
@@ -940,6 +941,20 @@ describe('scene indipendenti', () => {
     expect(evaluateProperty(cube, 'visibility', scenes[1].frame)).toBe(true);
     expect(cube.sceneIds).toEqual([scenes[1].id]);
     expect(() => ProjectSchema.parse(project)).not.toThrow();
+  });
+
+  it('il comando Elimina mantiene l’elemento nelle altre scene', () => {
+    useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, selectedIds: [], past: [], future: [], dirty: false });
+    useEditor.getState().addObject('sphere');
+    const id = useEditor.getState().selectedId!;
+    useEditor.getState().addShot();
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(scenes[0].frame);
+    useEditor.getState().deleteObject(id);
+    const object = useEditor.getState().project.objects.find((item) => item.id === id)!;
+    expect(evaluateProperty(object, 'visibility', scenes[0].frame)).toBe(false);
+    expect(evaluateProperty(object, 'visibility', scenes[1].frame)).toBe(true);
+    expect(object.sceneIds).toEqual([scenes[1].id]);
   });
 
   it('ridimensiona una clip spostando le scene successive senza cambiarle', () => {
