@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject, type Transform } from '../domain/schema';
+import { evaluateTransform } from '../domain/animation';
 import { useEditor } from './editor';
 const pose = (x: number): Transform => ({ position: [x, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
 const points = (id: string) => useEditor.getState().project.objects.find(o => o.id === id)!.keyframes.filter(k => k.property === 'position' && k.purpose === 'motion').sort((a,b) => a.frame-b.frame);
@@ -9,6 +10,56 @@ beforeEach(() => {
 });
 afterEach(() => { useEditor.getState().stopRecording(); vi.useRealTimers(); });
 describe('record movement endpoints', () => {
+  it('returns from point editing to element controls when the element is selected again', () => {
+    useEditor.getState().addObject('cube');
+    const id = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().selectMotion({ objectId: id, sceneId });
+    useEditor.getState().select(id);
+    expect(useEditor.getState().selectedId).toBe(id);
+    expect(useEditor.getState().selectedMotion).toBeUndefined();
+  });
+  it('uses the last recorded pose as the final pose of a newly created element', () => {
+    useEditor.getState().addObject('cube');
+    const id = useEditor.getState().selectedId!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const initialPosition = evaluateTransform(useEditor.getState().project.objects.find(o => o.id === id)!, scene.frame).position;
+    expect(points(id)).toHaveLength(0);
+
+    useEditor.getState().startRecording(scene.id);
+    useEditor.getState().setTransform(id, pose(5));
+    useEditor.getState().finishRecordingMovement();
+    useEditor.getState().setTransform(id, pose(9));
+    useEditor.getState().stopRecording();
+
+    const object = useEditor.getState().project.objects.find(o => o.id === id)!;
+    expect(evaluateTransform(object, scene.frame).position).toEqual(initialPosition);
+    expect(points(id).map(key => key.frame)).toEqual([1, 13, 25]);
+    expect(evaluateTransform(object, useEditor.getState().project.settings.frameEnd).position).toEqual([9, 0, 1]);
+  });
+  it('adds points when an existing path handle is dragged during REC', () => {
+    useEditor.getState().addObject('cube');
+    const id = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startRecording(sceneId);
+    for (const x of [1, 2]) {
+      useEditor.getState().setTransform(id, pose(x));
+      useEditor.getState().finishRecordingMovement();
+    }
+    useEditor.getState().stopRecording();
+    const original = structuredClone(points(id));
+    expect(original.map(key => key.frame)).toEqual([1, 13, 25]);
+
+    useEditor.getState().setFrame(25);
+    useEditor.getState().startRecording(sceneId);
+    useEditor.getState().updateMotionPoint(id, original[2].id, [3, 0, 1]);
+    useEditor.getState().updateMotionPoint(id, original[2].id, [4, 0, 1]);
+
+    const recorded = points(id);
+    expect(recorded.map(key => key.frame)).toEqual([1, 13, 25, 37, 49]);
+    for (const old of original) expect(recorded.find(key => key.id === old.id)).toEqual(old);
+    expect(recorded.at(-1)?.value).toEqual([4, 0, 1]);
+  });
   it.each([24,30,60])('fixes one endpoint per pause at half-second intervals at %i fps', fps => {
     useEditor.getState().updateSettings({ fps });
     useEditor.getState().addObject('cube');

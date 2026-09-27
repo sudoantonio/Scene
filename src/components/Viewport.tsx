@@ -481,7 +481,6 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
     return () => { scene.remove(outline); outline.geometry.dispose(); outline.material.dispose(); if (selectionOutline.current === outline) selectionOutline.current = null; };
   }, [helperSelected, object.kind, scene, visible]);
   useFrame(() => selectionOutline.current?.update());
-  const motionEditing = Boolean(selectedMotion);
   const shown = useMemo(() => ({ ...object, text }), [object, text]);
   const viewTranslation = cameraView && mode === 'translate';
   useLayoutEffect(() => {
@@ -672,10 +671,10 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
 
   const commitTextEdit = () => { updateObject(object.id, { text: textDraft }); setTextEditing(false); };
   const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
-      onPointerOver={motionEditing ? undefined : (event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={motionEditing ? undefined : (event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
+      onPointerOver={(event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={(event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
       onDoubleClick={(event) => { event.stopPropagation(); selectMember(object.id); if (object.kind === 'text') { setTextDraft(text); setTextEditing(true); } }}
-      onClick={motionEditing ? undefined : (event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
-      onPointerDown={motionEditing ? undefined : startDirectDrag} onPointerMove={motionEditing ? undefined : moveDirectDrag} onPointerUp={motionEditing ? undefined : finishDirectDrag} onPointerCancel={motionEditing ? undefined : finishDirectDrag}>
+      onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
+      onPointerDown={startDirectDrag} onPointerMove={moveDirectDrag} onPointerUp={finishDirectDrag} onPointerCancel={finishDirectDrag}>
       <MeshVisual object={shown} hideText={textEditing} onDragChange={onDragChange} />
       {textEditing && <Html center zIndexRange={[100, 0]}>
         <textarea className="viewport-text-editor" aria-label={`Edit ${object.name}`} autoFocus value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
@@ -688,7 +687,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
   // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
   // e salti soprattutto durante la scala.
-  if (!interactionEnabled || motionEditing || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
+  if (!interactionEnabled || directDrag.current || selectedId !== object.id || !visible || (cameraView && helperOnly) || (helperOnly && object.kind !== 'camera')) return visual;
   return <>{visual}<group ref={translationProxy} /><TransformControls ref={objectControls} object={(viewTranslation ? translationProxy : ref) as unknown as RefObject<THREE.Object3D>} mode={mode} space={viewTranslation || mode === 'rotate' ? 'local' : 'world'} size={object.kind === 'blend_asset' ? .8 : 1.2} enabled
     showZ={!viewTranslation && !(object.kind === 'plane' && mode === 'scale')}
     onObjectChange={() => {

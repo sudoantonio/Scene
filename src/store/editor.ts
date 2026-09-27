@@ -239,7 +239,11 @@ const recordTransformSample = (project: AbacoProject, object: SceneObject, scene
   }
   if (!session.touchedObjectIds.includes(object.id)) {
     const initial = evaluateTransform(object, session.startFrame);
-    for (const property of recordingProperties) appendRecordingKey(object, session.startFrame, property, initial[property], interpolation);
+    for (const property of recordingProperties) {
+      if (!object.keyframes.some(key => key.frame === session.startFrame && key.property === property && key.purpose === 'motion')) {
+        appendRecordingKey(object, session.startFrame, property, initial[property], interpolation);
+      }
+    }
   }
   const keys = recordingProperties.map(property => {
     const existing = object.keyframes.find(key => endpointIds.includes(key.id) && key.property === property);
@@ -378,7 +382,7 @@ export const useEditor = create<EditorState>((set, get) => {
       selectedId,
       selectedCaption: state.selectedCaption?.audioId === selectedId ? state.selectedCaption : undefined,
       selectedIds: selectedId ? state.project.groups.find((group) => group.memberIds.includes(selectedId))?.memberIds ?? [selectedId] : [],
-      selectedMotion: state.selectedMotion?.objectId === selectedId ? state.selectedMotion : undefined,
+      selectedMotion: undefined,
       gizmoMode: selectedId && selectedId !== state.selectedId ? 'translate' : state.gizmoMode,
     })),
     selectCaption: (selectedCaption) => set(selectedCaption ? { selectedCaption, selectedId: selectedCaption.audioId, selectedIds: [selectedCaption.audioId] } : { selectedCaption: undefined }),
@@ -1318,7 +1322,19 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     updateMotionPoint: (objectId, keyframeId, position) => {
       if (!position.every(Number.isFinite)) return;
-      const next = snapshot(get().project);
+      const state = get();
+      const recording = state.recordingSession;
+      if (recording) {
+        const range = sceneRange(state.project, recording.sceneId);
+        const object = state.project.objects.find((item) => item.id === objectId);
+        const point = object?.keyframes.find((item) => item.id === keyframeId && item.property === 'position');
+        if (range && object && point && point.frame >= range.scene.frame && point.frame < range.end) {
+          state.setTransform(objectId, { ...evaluateTransform(object, state.currentFrame), position });
+          get().finishRecordingMovement();
+        }
+        return;
+      }
+      const next = snapshot(state.project);
       const object = next.objects.find((item) => item.id === objectId);
       const key = object?.keyframes.find((item) => item.id === keyframeId && item.property === 'position');
       if (!object || !key) return;
