@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject } from '../domain/schema';
 import { objectPresenceRange } from '../domain/presence';
@@ -31,10 +31,39 @@ describe('Punti e maniglie del movimento', () => {
     useEditor.getState().setFrame(25);
     const { container } = render(<Timeline />);
     fireEvent.click(container.querySelector('.presence-segment:not(.audio-layer)')!);
-    useEditor.getState().setFrame(25);
+    act(() => useEditor.getState().setFrame(25));
     fireEvent.click(screen.getByRole('button', { name: 'Split clip at playhead' }));
     expect(useEditor.getState().project.cameraCuts).toHaveLength(1);
-    expect(useEditor.getState().project.objects.filter((object) => object.name.startsWith('Clip'))).toHaveLength(2);
+    expect(useEditor.getState().project.objects.filter((object) => object.kind === 'plane' && object.name.startsWith('Clip'))).toHaveLength(2);
+    expect(container.querySelectorAll('.object-row.object-kind-plane')).toHaveLength(1);
+    expect(container.querySelectorAll('.object-row.object-kind-plane .presence-segment')).toHaveLength(2);
+  });
+
+  it('trascina la metà destra del video mantenendo il punto sorgente del taglio', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const { container } = render(<Timeline />);
+    fireEvent.click(container.querySelector('.object-row.object-kind-plane .presence-segment')!);
+    act(() => useEditor.getState().setFrame(25));
+    fireEvent.click(screen.getByRole('button', { name: 'Split clip at playhead' }));
+    const right = useEditor.getState().project.objects.find((object) => object.name === 'Clip (2)')!;
+    vi.spyOn(container.querySelector('.object-row.object-kind-plane .presence-track')!, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
+    fireEvent.pointerDown(container.querySelector<HTMLButtonElement>('.object-row.object-kind-plane [title^="Clip (2) · frame"]')!, { button: 0, clientX: 300 });
+    fireEvent.pointerMove(window, { clientX: 420 });
+    fireEvent.pointerUp(window, { clientX: 420 });
+    const project = useEditor.getState().project;
+    const moved = project.objects.find((object) => object.id === right.id)!;
+    expect(objectPresenceRange(moved, 1, project.settings.frameEnd + 1)?.[0]).toBeGreaterThan(25);
+    expect(moved.asset.sourceOffset).toBeCloseTo(5 / 24);
+    expect(container.querySelectorAll('.object-row.object-kind-plane .presence-segment')).toHaveLength(2);
+  });
+  it('mostra le due metà di un audio tagliato sulla stessa traccia', () => {
+    useEditor.getState().addAudio({ sourcePath: '/sound.wav', name: 'Audio', duration: 2, waveform: [] });
+    const { container } = render(<Timeline />);
+    fireEvent.click(container.querySelector('.audio-layer')!);
+    act(() => useEditor.getState().setFrame(30));
+    fireEvent.click(screen.getByRole('button', { name: 'Split clip at playhead' }));
+    expect(container.querySelectorAll('.object-row.object-kind-audio')).toHaveLength(1);
+    expect(container.querySelectorAll('.object-row.object-kind-audio .audio-layer')).toHaveLength(2);
   });
   it('allunga scena e barra del video trascinando la maniglia oltre la fine attuale', () => {
     useEditor.getState().setFrame(1);

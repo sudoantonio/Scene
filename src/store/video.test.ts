@@ -70,6 +70,33 @@ describe('video in the editor', () => {
     expect(objectPresenceRange(audio, 1, 73)).toEqual([1, 73]);
   });
 
+  it('moves the right half without resetting the source time or removing the left half', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const first = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().setFrame(25);
+    useEditor.getState().splitObjectClip(first.id, scene.id);
+    const second = useEditor.getState().project.objects.find((object) => object.name === 'Clip (2)')!;
+    useEditor.getState().moveObjectPresence(second.id, scene.id, 37);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const moved = project.objects.find((object) => object.id === second.id)!;
+    expect(objectPresenceRange(project.objects.find((object) => object.id === first.id)!, 1, 85)).toEqual([1, 25]);
+    expect(objectPresenceRange(moved, 1, 85)).toEqual([37, 85]);
+    expect(moved.asset.sourceOffset).toBe(1);
+    expect(videoTime(37, 37, 24, 3, moved.asset.sourceOffset)).toBe(1);
+    expect(videoTime(49, 37, 24, 3, moved.asset.sourceOffset)).toBe(1.5);
+  });
+
+  it('keeps a managed video muted after its separate audio track is deleted', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const video = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    const audio = useEditor.getState().project.objects.find((object) => object.asset.linkedVideoId === video.id)!;
+    useEditor.getState().deleteObject(audio.id);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    expect(project.objects.find((object) => object.id === video.id)?.asset.audioManaged).toBe(true);
+    expect(project.objects.some((object) => object.id === audio.id)).toBe(false);
+  });
+
   it('splits an audio block into independently editable source ranges', () => {
     useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
     const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
@@ -119,7 +146,7 @@ describe('video in the editor', () => {
     const project = ProjectSchema.parse(useEditor.getState().project);
     const scene = project.cameraCuts.at(-1)!;
     const cube = project.objects.find((object) => object.id === cubeId)!;
-    expect(scene.background).toEqual({ kind: 'video', path: '/tmp/clip.mov', name: 'Interlude' });
+    expect(scene.background).toMatchObject({ kind: 'video', path: '/tmp/clip.mov', name: 'Interlude', audioManaged: true });
     expect(scene.name).toBe('Interlude');
     expect(project.settings.frameEnd).toBe(scene.frame + 47);
     expect(evaluateProperty(cube, 'visibility', 1)).toBe(true);

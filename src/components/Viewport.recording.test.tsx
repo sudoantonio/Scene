@@ -52,6 +52,31 @@ afterEach(() => {
 });
 
 describe('REC camera dopo il cambio scena nella vista camera', () => {
+  it('non riattiva l’audio incorporato del video dopo aver eliminato la traccia separata', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    act(() => useEditor.getState().addVideo({ sourcePath: '/clip.mp4', name: 'Clip', duration: 2, aspectRatio: 1 }, 'screen'));
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const { container } = render(<Viewport />);
+    expect((container.querySelector('.screen-layer-content video') as HTMLVideoElement).muted).toBe(true);
+    act(() => useEditor.getState().deleteObject(audio.id));
+    expect((container.querySelector('.screen-layer-content video') as HTMLVideoElement).muted).toBe(true);
+  });
+  it('mostra la metà destra dopo il taglio e conserva il tempo sorgente quando viene spostata', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    act(() => useEditor.getState().addVideo({ sourcePath: '/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen'));
+    const first = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    act(() => { useEditor.getState().setFrame(25); useEditor.getState().splitObjectClip(first.id, sceneId); });
+    const right = useEditor.getState().project.objects.find((object) => object.name === 'Clip (2)')!;
+    act(() => { useEditor.getState().moveObjectPresence(right.id, sceneId, 37); useEditor.getState().setFrame(37); });
+    const { container } = render(<Viewport />);
+    const video = container.querySelector('.screen-layer-content video') as HTMLVideoElement;
+    expect(video).toBeInTheDocument();
+    fireEvent.loadedMetadata(video);
+    expect(video.currentTime).toBeCloseTo(1);
+  });
   it('ridimensiona il sottotitolo con la maniglia, mostra l’anteprima e salva al rilascio', () => {
     const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
     const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);

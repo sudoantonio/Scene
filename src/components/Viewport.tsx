@@ -1,4 +1,4 @@
-import { audioStateAt } from '../domain/media-timeline';
+import { audioStateAt, visibilityIntervals } from '../domain/media-timeline';
 import { fontCss } from '../domain/text-style';
 import { clampSubtitlePosition, clampSubtitleSize, DEFAULT_SUBTITLE_POSITION, moveSubtitlePosition, type SubtitlePosition } from '../domain/subtitle-position';
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
@@ -451,10 +451,11 @@ function useVideoSource(sourcePath: string) {
 
 function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame: number; muted: boolean }) {
   const source = useVideoSource(object.asset.sourcePath);
-  const hasSeparateAudio = useEditor((state) => state.project.objects.some((item) => item.kind === 'audio' && item.asset.linkedVideoId && item.asset.sourcePath === object.asset.sourcePath));
   const playing = useEditor((state) => state.isPlaying);
-  const fps = useEditor((state) => state.project.settings.fps);
-  const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
+  const project = useEditor((state) => state.project);
+  const fps = project.settings.fps;
+  const videoIntervals = useMemo(() => visibilityIntervals(project, object), [project, object]);
+  const startFrame = videoIntervals.find(([from, to]) => frame >= from && frame < to)?.[0] ?? project.settings.frameStart;
   const duration = object.asset.duration ?? 0;
   const [texture, setTexture] = useState<THREE.VideoTexture>();
   const video = useRef<HTMLVideoElement | null>(null);
@@ -465,13 +466,20 @@ function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame
     element.src = source;
     element.preload = 'auto';
     element.playsInline = true;
-    element.muted = muted || hasSeparateAudio;
+    element.muted = muted || object.asset.audioManaged === true;
+    element.onloadedmetadata = () => {
+      const state = useEditor.getState();
+      const latest = state.project.objects.find((item) => item.id === object.id) ?? object;
+      const at = state.currentFrame;
+      const clipStart = visibilityIntervals(state.project, latest).find(([from, to]) => at >= from && at < to)?.[0] ?? state.project.settings.frameStart;
+      syncVideo(element, at, clipStart, state.project.settings.fps, latest.asset.duration ?? 0, state.isPlaying, latest.asset.sourceOffset ?? 0);
+    };
     video.current = element;
     const next = new THREE.VideoTexture(element);
     next.colorSpace = THREE.SRGBColorSpace;
     setTexture(next);
-    return () => { element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
-  }, [muted, hasSeparateAudio, source]);
+    return () => { element.onloadedmetadata = null; element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
+  }, [muted, object.asset.audioManaged, source]);
   useEffect(() => {
     if (!video.current) return;
     syncVideo(video.current, frame, startFrame, fps, duration, playing, object.asset.sourceOffset ?? 0);
@@ -1010,10 +1018,11 @@ export function ScreenAssetImage({ source, name = '' }: { source: string; name?:
 }
 
 function ScreenAssetVideo({ object, frame, muted = false }: { object: SceneObject; frame: number; muted?: boolean }) {
-  const fps = useEditor((state) => state.project.settings.fps);
-  const hasSeparateAudio = useEditor((state) => state.project.objects.some((item) => item.kind === 'audio' && item.asset.linkedVideoId && item.asset.sourcePath === object.asset.sourcePath));
-  const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
-  return <SyncedVideo sourcePath={object.asset.sourcePath} frame={frame} startFrame={startFrame} fps={fps} duration={object.asset.duration ?? 0} sourceOffset={object.asset.sourceOffset ?? 0} muted={muted || hasSeparateAudio} />;
+  const project = useEditor((state) => state.project);
+  const fps = project.settings.fps;
+  const videoIntervals = useMemo(() => visibilityIntervals(project, object), [project, object]);
+  const startFrame = videoIntervals.find(([from, to]) => frame >= from && frame < to)?.[0] ?? project.settings.frameStart;
+  return <SyncedVideo sourcePath={object.asset.sourcePath} frame={frame} startFrame={startFrame} fps={fps} duration={object.asset.duration ?? 0} sourceOffset={object.asset.sourceOffset ?? 0} muted={muted || object.asset.audioManaged === true} />;
 }
 
 export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[]; frame: number }) {
@@ -2000,7 +2009,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </Canvas>}
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
-    {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} muted={objects.some((item) => item.kind === 'audio' && item.asset.sourcePath === activeCut.background.path)} />}
+    {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} muted={activeCut.background.audioManaged === true || objects.some((item) => item.kind === 'audio' && item.asset.sourcePath === activeCut.background.path)} />}
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}

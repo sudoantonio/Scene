@@ -16,9 +16,9 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
 
 ## Download
 
-For Apple Silicon Macs, [download Scene 0.59.13 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.13/Scene-0.59.13-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
+For Apple Silicon Macs, [download Scene 0.59.14 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.14/Scene-0.59.14-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
 
-The Mac app is not yet signed with an Apple Developer ID or notarized. The SHA-256 of the 0.59.13 ZIP is `b5b931c3ee30efec06babbcbcfcf237df6e94fd96dd31aa6b4987beef173246b`. If macOS says it cannot verify Scene, first confirm that you downloaded it from this release. After trying to open it, go to **System Settings → Privacy & Security → Open Anyway → Open** to approve this copy, following [Apple's instructions](https://support.apple.com/en-gb/102445). A warning-free download requires Apple Developer ID signing and notarization.
+The Mac app is not yet signed with an Apple Developer ID or notarized. The SHA-256 of the 0.59.14 ZIP is `2e68885f95ea43f214ab630a8de10d022f9ee628d96dd3be2e8c52c9054bcc67`. If macOS says it cannot verify Scene, first confirm that you downloaded it from this release. After trying to open it, go to **System Settings → Privacy & Security → Open Anyway → Open** to approve this copy, following [Apple's instructions](https://support.apple.com/en-gb/102445). A warning-free download requires Apple Developer ID signing and notarization.
 
 ## Why Scene exists
 

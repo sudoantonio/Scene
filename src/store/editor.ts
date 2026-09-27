@@ -640,7 +640,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const object = createSceneObject('plane', state.project.objects.filter((item) => item.kind === 'plane').length + 1);
       object.name = asset.name;
       object.screenSpace = space === 'screen';
-      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.sourcePath, collectionName: space === 'screen' ? 'Video 2D' : 'Video 3D', boundsCenter: [0, 0, 0], previewScale: asset.aspectRatio || 1, groundOffset: 0, duration: asset.duration };
+      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.sourcePath, collectionName: space === 'screen' ? 'Video 2D' : 'Video 3D', boundsCenter: [0, 0, 0], previewScale: asset.aspectRatio || 1, groundOffset: 0, duration: asset.duration, audioManaged: true };
       object.transform.scale = [1, 1, 1];
       if (space === 'world') { object.transform.position = [0, 0, 1.5]; object.transform.rotation = [90, 0, 0]; }
       const next = snapshot(state.project);
@@ -668,7 +668,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const cut = next.cameraCuts.find((scene) => scene.frame === state.currentFrame);
       if (!cut) return;
       cut.name = asset.name;
-      cut.background = { kind: 'video', path: asset.sourcePath, name: asset.name };
+      cut.background = { kind: 'video', path: asset.sourcePath, name: asset.name, audioManaged: true };
       next.settings.frameEnd = cut.frame + Math.max(1, Math.round(asset.duration * next.settings.fps)) - 1;
       addVideoAudioTrack(next, asset.sourcePath, asset.name, asset.duration, cut.frame);
       for (const object of next.objects) if (object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light')) removeObjectFromScene(next, object.id, cut.id);
@@ -839,6 +839,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const right = structuredClone(object);
       right.id = crypto.randomUUID();
       right.name = `${object.name} (2)`;
+      right.asset.timelineTrackId = object.asset.timelineTrackId ?? object.id;
       if (object.kind === 'audio') {
         const sourceCut = object.audio.trimStart + (cut - presence[0]) / next.settings.fps;
         const sourceEnd = object.audio.trimEnd > object.audio.trimStart ? object.audio.trimEnd : object.audio.duration;
@@ -866,7 +867,7 @@ export const useEditor = create<EditorState>((set, get) => {
         if (presence[0] > bounds[0]) putKey(object, presence[0], 'visibility', true, 'constant');
         putKey(object, cut, 'visibility', false, 'constant');
       }
-      next.objects.push(right);
+      next.objects.splice(next.objects.findIndex((item) => item.id === object.id) + 1, 0, right);
       commit(next);
       set({ selectedId: right.id, selectedIds: [right.id] });
     },
