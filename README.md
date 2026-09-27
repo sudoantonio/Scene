@@ -16,9 +16,9 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
 
 ## Download
 
-For Apple Silicon Macs, [download Scene 0.59.7 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.7/Scene-0.59.7-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
+For Apple Silicon Macs, [download Scene 0.59.8 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.8/Scene-0.59.8-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
 
-The Mac app is not yet signed with an Apple Developer ID or notarized. macOS may report that the downloaded app is “damaged” even when the ZIP is intact. For version 0.59.7, verify the downloaded ZIP with `shasum -a 256 ~/Downloads/Scene-0.59.7-mac-arm64.zip`; its SHA-256 must be `acb2f04cfc84ec0829f265216a2c1ebb60c826dfd9554a3ef56188439b757a1b`. If it matches, extract the ZIP and run `xattr -dr com.apple.quarantine /path/to/Scene.app` on **that extracted app only** before opening it. You can drag `Scene.app` from Finder into Terminal to insert its exact path. Do not disable macOS security globally. A warning-free download requires Apple Developer ID signing and notarization.
+The Mac app is not yet signed with an Apple Developer ID or notarized. The SHA-256 of the 0.59.8 ZIP is `ac28b8a7a9836a0d666d440a7a31b207e670fb5dfab95f5d50139e0767630f00`. If macOS says it cannot verify Scene, first confirm that you downloaded it from this release. After trying to open it, go to **System Settings → Privacy & Security → Open Anyway → Open** to approve this copy, following [Apple's instructions](https://support.apple.com/en-gb/102445). A warning-free download requires Apple Developer ID signing and notarization.
 
 ## Why Scene exists
 

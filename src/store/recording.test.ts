@@ -10,6 +10,55 @@ beforeEach(() => {
 });
 afterEach(() => { useEditor.getState().stopRecording(); vi.useRealTimers(); });
 describe('record movement endpoints', () => {
+  it('keeps a static resize through the end of a newly created element', () => {
+    useEditor.getState().addObject('sphere');
+    const id = useEditor.getState().selectedId!;
+    const before = useEditor.getState().project.objects.find(o => o.id === id)!;
+    const start = useEditor.getState().project.cameraCuts[0].frame;
+    const end = useEditor.getState().project.settings.frameEnd;
+    useEditor.getState().setFrame(start + 15);
+    useEditor.getState().setTransform(id, { ...evaluateTransform(before, start + 15), scale: [.25, .25, .25] });
+    const object = useEditor.getState().project.objects.find(o => o.id === id)!;
+    expect(evaluateTransform(object, start).scale).toEqual([.25, .25, .25]);
+    expect(evaluateTransform(object, end).scale).toEqual([.25, .25, .25]);
+  });
+  it('updates the unchanged scale at the final motion point outside REC', () => {
+    useEditor.getState().addObject('sphere');
+    const id = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(id, sceneId);
+    useEditor.getState().stopMotion();
+    const frame = useEditor.getState().currentFrame;
+    const before = useEditor.getState().project.objects.find(o => o.id === id)!;
+    useEditor.getState().setTransform(id, { ...evaluateTransform(before, frame), scale: [.25, .25, .25] });
+    const object = useEditor.getState().project.objects.find(o => o.id === id)!;
+    expect(evaluateTransform(object, 1).scale).toEqual([.25, .25, .25]);
+    expect(evaluateTransform(object, frame).scale).toEqual([.25, .25, .25]);
+  });
+  it('animates a resize while a motion is being created', () => {
+    useEditor.getState().addObject('sphere');
+    const id = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    useEditor.getState().startMotion(id, sceneId);
+    const frame = useEditor.getState().currentFrame;
+    const before = useEditor.getState().project.objects.find(o => o.id === id)!;
+    useEditor.getState().setTransform(id, { ...evaluateTransform(before, frame), scale: [.25, .25, .25] });
+    const object = useEditor.getState().project.objects.find(o => o.id === id)!;
+    expect(evaluateTransform(object, 1).scale).toEqual([1, 1, 1]);
+    expect(evaluateTransform(object, frame).scale).toEqual([.25, .25, .25]);
+  });
+  it('records a resize while REC is active', () => {
+    useEditor.getState().addObject('sphere');
+    const id = useEditor.getState().selectedId!;
+    const sceneId = useEditor.getState().project.cameraCuts[0].id;
+    const before = useEditor.getState().project.objects.find(o => o.id === id)!;
+    useEditor.getState().startRecording(sceneId);
+    useEditor.getState().setTransform(id, { ...evaluateTransform(before, 1), scale: [.25, .25, .25] });
+    useEditor.getState().stopRecording();
+    const object = useEditor.getState().project.objects.find(o => o.id === id)!;
+    expect(evaluateTransform(object, 1).scale).toEqual([1, 1, 1]);
+    expect(evaluateTransform(object, 13).scale).toEqual([.25, .25, .25]);
+  });
   it('returns from point editing to element controls when the element is selected again', () => {
     useEditor.getState().addObject('cube');
     const id = useEditor.getState().selectedId!;

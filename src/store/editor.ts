@@ -205,6 +205,19 @@ const putMotionKey = (object: SceneObject, sceneFrame: number, frame: number, pr
 };
 
 const recordingProperties = ['position', 'rotation', 'scale'] as const;
+const sameScale = (left: Vec3, right: Vec3) => left.every((value, axis) => Math.abs(value - right[axis]) < 0.00001);
+const updateStaticScale = (object: SceneObject, sceneFrame: number, sceneEnd: number, previous: Vec3, scale: Vec3) => {
+  if (sameScale(previous, scale)) return;
+  for (const key of object.keyframes) {
+    if (key.property === 'scale' && key.frame >= sceneFrame && key.frame < sceneEnd && Array.isArray(key.value) && sameScale(key.value as Vec3, previous)) {
+      key.value = structuredClone(scale);
+    }
+  }
+  if (sameScale(object.transform.scale, previous)) object.transform.scale = structuredClone(scale);
+  if (!object.keyframes.some((key) => key.property === 'scale' && key.frame === sceneFrame)) {
+    putKey(object, sceneFrame, 'scale', scale, 'constant', false, 'snapshot');
+  }
+};
 const unwrapRotation = (rotation: Vec3, reference: Vec3): Vec3 => rotation.map((angle, axis) =>
   angle + 360 * Math.round((reference[axis] - angle) / 360)) as Vec3;
 const appendRecordingKey = (object: SceneObject, frame: number, property: typeof recordingProperties[number], value: KeyframeValue, interpolation: Interpolation) => {
@@ -1255,6 +1268,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const session = scene && state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
       const sessionActive = Boolean(session) && object.kind !== 'audio' && !object.kind.includes('light');
       const range = scene ? sceneRange(next, scene.id) : undefined;
+      const previousTransform = evaluateTransform(object, state.currentFrame);
       const recordFrame = session && range ? Math.min(range.end - 1, Math.max(session.startFrame + 1, state.currentFrame)) : state.currentFrame;
       const selectedKey = state.selectedMotion?.objectId === id && state.selectedMotion.sceneId === scene?.id && state.selectedMotion.keyframeId
         ? object.keyframes.find((key) => key.id === state.selectedMotion!.keyframeId && key.frame === state.currentFrame && key.property === 'position')
@@ -1281,7 +1295,9 @@ export const useEditor = create<EditorState>((set, get) => {
             && state.selectedMotion?.objectId === id
             && state.selectedMotion.sceneId === scene?.id
             && object.keyframes.some((key) => key.property === property && key.frame === state.currentFrame && key.purpose === 'motion');
-          if ((motionActive && object.kind !== 'camera') || selectedKey || manualCameraPoint || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
+          if (property === 'scale' && !motionActive && !selectedKey && !manualCameraPoint && range && object.kind !== 'camera') {
+            updateStaticScale(object, sceneFrame, range.end, previousTransform.scale, transform.scale);
+          } else if ((motionActive && object.kind !== 'camera') || selectedKey || manualCameraPoint || editingExistingPoint) putMotionKey(object, sceneFrame, state.currentFrame, property, transform[property], state.interpolation);
           else putKey(object, sceneFrame, property, transform[property], 'constant', false, 'snapshot');
         }
       }
