@@ -134,7 +134,7 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(useEditor.getState().project).toEqual(before);
   });
 
-  it('crea un keyframe controllabile col trackpad fuori da REC su un frame intermedio', () => {
+  it('non crea keyframe col trackpad fuori da REC su un frame intermedio', () => {
     const scene = useEditor.getState().project.cameraCuts[0];
     act(() => useEditor.getState().setFrame(scene.frame + 12));
     const { container } = render(<Viewport />);
@@ -143,8 +143,8 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     const state = useEditor.getState();
     const camera = state.project.objects.find((object) => object.id === scene.cameraId)!;
     const point = camera.keyframes.find((key) => key.property === 'position' && key.frame === scene.frame + 12 && key.purpose === 'motion');
-    expect(point).toBeDefined();
-    expect(state.selectedMotion).toMatchObject({ objectId: camera.id, sceneId: scene.id, keyframeId: point!.id });
+    expect(point).toBeUndefined();
+    expect(camera.keyframes.filter(key => key.purpose === 'motion')).toHaveLength(0);
   });
 
   it('annulla il delta trackpad in attesa prima di cambiare frame', () => {
@@ -166,6 +166,20 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop motion recording' }));
     const camera = useEditor.getState().project.objects.find((object) => object.id === scene.cameraId)!;
     expect(camera.keyframes.some((key) => key.property === 'rotation' && key.purpose === 'motion' && key.frame === scene.frame + 12)).toBe(true);
+  });
+
+  it.each([false, true])('fissa ogni gesto WASD a mezzo secondo (camera selezionata=%s)', selected => {
+    render(<Viewport />);
+    const scene = useEditor.getState().project.cameraCuts[0];
+    act(() => { if (selected) useEditor.getState().select(scene.cameraId); useEditor.getState().startRecording(scene.id); });
+    for (let gesture = 0; gesture < 2; gesture++) {
+      fireEvent.keyDown(window, { code: 'KeyW', key: 'w' });
+      for (let i = 0; i < 60; i++) act(() => vi.advanceTimersByTime(16));
+      fireEvent.keyUp(window, { code: 'KeyW', key: 'w' });
+    }
+    act(() => useEditor.getState().stopRecording());
+    const camera = useEditor.getState().project.objects.find(o => o.id === scene.cameraId)!;
+    expect(camera.keyframes.filter(k => k.property === 'position' && k.purpose === 'motion').map(k => k.frame).sort((a,b) => a-b)).toEqual([1,13,25]);
   });
 
   it('muove la posa base della camera con WASDQE senza richiedere REC', () => {
@@ -265,7 +279,7 @@ describe('controlli della vista libera', () => {
     const state = useEditor.getState();
     const updated = state.project.objects.find((object) => object.id === scene.cameraId)!;
     expect(evaluateTransform(updated, scene.frame + 10).position).not.toEqual(before);
-    expect(updated.keyframes.some((key) => key.property === 'position' && key.frame === scene.frame + 10 && key.purpose === 'motion')).toBe(true);
+    expect(updated.keyframes.some((key) => key.property === 'position' && key.frame === scene.frame + 10 && key.purpose === 'motion')).toBe(false);
     expect(state.recordingSession).toBeUndefined();
   });
 

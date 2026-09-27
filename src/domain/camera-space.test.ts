@@ -44,6 +44,6 @@ describe('camera-relative movement', () => {
     useEditor.getState().stopRecording();
     const changed = useEditor.getState().project.objects[0];
     expect(changed.keyframes.find((k) => k.property === 'position' && k.frame === 1)?.interpolation).toBe('linear');
-    expect(evaluateTransform(changed, 13).position).toEqual([8, -7, 5]);
+    expect(evaluateTransform(changed, 7).position).toEqual([8, -7, 5]);
   });
 });

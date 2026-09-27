@@ -552,7 +552,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
     const drag = directDrag.current;
     if (!drag) return;
     drag.cleanup?.();
-    if (drag.moved) commit();
+    if (drag.moved) { commit(); useEditor.getState().finishRecordingMovement(); }
     directDrag.current = undefined;
     setDragging(false);
     onDragChange(false);
@@ -643,6 +643,7 @@ function SceneItem({ object, cameraView, objectControls, interactionEnabled = tr
     gizmoCleanup.current = undefined;
     // An unrestricted snap could move the two axes the user did not drag.
     commit(false);
+    useEditor.getState().finishRecordingMovement();
     setDragging(false);
     onDragChange(false);
   };
@@ -1594,7 +1595,6 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     let freeFlight: { sceneId: string; position: Vec3; rotation: Vec3; target: Vec3; lastCommitTime: number } | undefined;
     let animationFrame = 0;
     let previousTime = performance.now();
-    let recordingFrameRemainder = 0;
 
     const editableTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
@@ -1620,35 +1620,21 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       held.delete(event.code);
       if (![...held].some((code) => movementCodes.has(code))) {
         flushFreeFlight();
-        recordingFrameRemainder = 0;
+        flushPendingCameraCommit();
+        useEditor.getState().finishRecordingMovement();
       }
     };
-    const clearKeys = () => { flushFreeFlight(); held.clear(); recordingFrameRemainder = 0; };
+    const clearKeys = () => { flushFreeFlight(); flushPendingCameraCommit(); held.clear(); useEditor.getState().finishRecordingMovement(); };
     const tick = (time: number) => {
       const deltaSeconds = Math.min(.05, Math.max(0, (time - previousTime) / 1000));
       previousTime = time;
       if ([...held].some((code) => movementCodes.has(code))) {
-        let editor = useEditor.getState();
-        // REC has its own clock while movement keys are held. The Play state
-        // remains off, but the recording cursor advances so every WASDQE
-        // sample is visible and lands on a controllable frame.
-        if (editor.recordingSession) {
-          recordingFrameRemainder += deltaSeconds * editor.project.settings.fps;
-          const frameStep = Math.floor(recordingFrameRemainder);
-          if (frameStep > 0) {
-            recordingFrameRemainder -= frameStep;
-            const scenes = editor.project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-            const sceneIndex = scenes.findIndex((scene) => scene.id === editor.recordingSession?.sceneId);
-            const sceneEnd = scenes[sceneIndex + 1]?.frame ?? editor.project.settings.frameEnd + 1;
-            editor.setFrame(Math.min(sceneEnd - 1, editor.currentFrame + frameStep));
-            editor = useEditor.getState();
-          }
-        } else recordingFrameRemainder = 0;
+        const editor = useEditor.getState();
         const selected = editor.project.objects.find((object) => object.id === editor.selectedId
           && object.kind !== 'audio'
           && !object.kind.includes('light')
           && evaluateProperty(object, 'visibility', editor.currentFrame));
-        if (selected && (selected.kind !== 'camera' || !cameraView || Boolean(editor.recordingSession))) {
+        if (selected && (selected.kind !== 'camera' || !cameraView)) {
           const transform = evaluateTransform(selected, editor.currentFrame);
           const controls = cameraView ? shotOrbitRef.current : orbitRef.current;
           const viewCamera = controls?.object;
