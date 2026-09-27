@@ -15,6 +15,7 @@ import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta
 import { controllerMotionPaths } from '../domain/controller-motion-path';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import { objectPresenceRange } from '../domain/presence';
+import { isVideoFile, videoTime } from '../domain/video';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import headerLogo from '../assets/abaco-scene-header.png';
@@ -83,7 +84,6 @@ export function WebGLContextGuard({ primary = false, onLost }: { primary?: boole
 }
 
 export async function captureContactSheet(frames: number[]): Promise<string | undefined> {
-  if (!viewportCanvas) return undefined;
   const editor = useEditor.getState();
   const original = editor.currentFrame;
   const selected = [...new Set(frames)].slice(0, 6);
@@ -92,8 +92,18 @@ export async function captureContactSheet(frames: number[]): Promise<string | un
     for (const frame of selected) {
       useEditor.getState().setFrame(frame);
       await nextPaint();
-      if (!viewportCanvas) break;
-      shots.push({ frame, url: viewportCanvas.toDataURL('image/jpeg', 0.72) });
+      const current = useEditor.getState().project;
+      const scene = current.cameraCuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
+      if (scene?.background.kind === 'video') {
+        const video = document.querySelector<HTMLVideoElement>('.scene-video');
+        if (!video) continue;
+        if (video.seeking) await Promise.race([new Promise<void>((resolve) => video.addEventListener('seeked', () => resolve(), { once: true })), new Promise<void>((resolve) => window.setTimeout(resolve, 800))]);
+        if (!video.videoWidth) continue;
+        const still = document.createElement('canvas');
+        still.width = 960; still.height = 540;
+        still.getContext('2d')?.drawImage(video, 0, 0, still.width, still.height);
+        shots.push({ frame, url: still.toDataURL('image/jpeg', .72) });
+      } else if (viewportCanvas) shots.push({ frame, url: viewportCanvas.toDataURL('image/jpeg', 0.72) });
     }
   } catch {
     return undefined;
@@ -344,14 +354,14 @@ function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDra
   </>;
 }
 
-export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model'; path: string }) {
+export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'model' | 'video'; path: string }) {
   const [source, setSource] = useState<string>();
   const [obj, setObj] = useState<{ source: string; materials?: string }>();
   useEffect(() => {
     let active = true;
     setSource(undefined);
     setObj(undefined);
-    if (kind !== 'none' && path) {
+    if (kind !== 'none' && kind !== 'video' && path) {
       if (window.abaco && kind === 'model') window.abaco.loadModel(path).then((value) => {
         if (!active) return;
         if (value.format === 'obj') setObj(value);
@@ -426,7 +436,67 @@ function ImagePlaneVisual({ object }: { object: SceneObject }) {
   return <mesh castShadow><planeGeometry args={[2 * aspect, 2]} /><meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent alphaTest={.01} toneMapped={false} /></mesh>;
 }
 
-function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneObject; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
+function useVideoSource(sourcePath: string) {
+  const [source, setSource] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    setSource(undefined);
+    if (!sourcePath) return;
+    const load = window.abaco ? window.abaco.videoSource(sourcePath) : Promise.resolve(sourcePath);
+    void load.then((url) => { if (active) setSource(url); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [sourcePath]);
+  return source;
+}
+
+function syncVideo(element: HTMLVideoElement, frame: number, startFrame: number, fps: number, duration: number, playing: boolean) {
+  const expected = videoTime(frame, startFrame, fps, duration);
+  if (!playing || Math.abs(element.currentTime - expected) > .18) {
+    try { element.currentTime = expected; } catch { /* metadata is still loading */ }
+  }
+  if (playing && expected < duration - .02 && element.paused) void element.play().catch(() => undefined);
+  else element.pause();
+}
+
+function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame: number; muted: boolean }) {
+  const source = useVideoSource(object.asset.sourcePath);
+  const playing = useEditor((state) => state.isPlaying);
+  const fps = useEditor((state) => state.project.settings.fps);
+  const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
+  const duration = object.asset.duration ?? 0;
+  const [texture, setTexture] = useState<THREE.VideoTexture>();
+  const video = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (!source) return;
+    const element = document.createElement('video');
+    element.crossOrigin = 'anonymous';
+    element.src = source;
+    element.preload = 'auto';
+    element.playsInline = true;
+    element.muted = muted;
+    video.current = element;
+    const next = new THREE.VideoTexture(element);
+    next.colorSpace = THREE.SRGBColorSpace;
+    setTexture(next);
+    return () => { element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
+  }, [muted, source]);
+  useEffect(() => {
+    if (!video.current) return;
+    syncVideo(video.current, frame, startFrame, fps, duration, playing);
+  }, [duration, fps, frame, playing, source, startFrame]);
+  const aspect = THREE.MathUtils.clamp(object.asset.previewScale || 1, .1, 10);
+  return <mesh castShadow><planeGeometry args={[2 * aspect, 2]} /><meshBasicMaterial map={texture ?? null} color={texture ? '#ffffff' : '#333333'} side={THREE.DoubleSide} toneMapped={false} /></mesh>;
+}
+
+function SyncedVideo({ sourcePath, frame, startFrame, fps, duration, muted = false, className }: { sourcePath: string; frame: number; startFrame: number; fps: number; duration: number; muted?: boolean; className?: string }) {
+  const source = useVideoSource(sourcePath);
+  const ref = useRef<HTMLVideoElement>(null);
+  const playing = useEditor((state) => state.isPlaying);
+  useEffect(() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing); }, [duration, fps, frame, playing, source, startFrame]);
+  return <video ref={ref} className={className} src={source} crossOrigin="anonymous" playsInline preload="auto" muted={muted} onLoadedMetadata={() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing); }} />;
+}
+
+function MeshVisual({ object, frame, muted = false, hideText = false, onDragChange }: { object: SceneObject; frame: number; muted?: boolean; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
     case 'cube': return <mesh castShadow>{material}<boxGeometry args={[2, 2, 2]} /></mesh>;
@@ -434,7 +504,8 @@ function MeshVisual({ object, hideText = false, onDragChange }: { object: SceneO
     case 'cylinder': return <mesh castShadow>{material}<cylinderGeometry args={[1, 1, 2, 32]} /></mesh>;
     case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
     case 'plane': return object.asset.proxyPath
-      ? <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<mesh>{material}<planeGeometry args={[2, 2]} /></mesh>}><Suspense fallback={null}><ImagePlaneVisual object={object} /></Suspense></BackgroundAssetBoundary>
+      ? isVideoFile(object.asset.sourcePath) ? <VideoPlaneVisual object={object} frame={frame} muted={muted} />
+      : <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<mesh>{material}<planeGeometry args={[2, 2]} /></mesh>}><Suspense fallback={null}><ImagePlaneVisual object={object} /></Suspense></BackgroundAssetBoundary>
       : <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
     case 'text': return <Styled3DText object={object} visible={!hideText} />;
     case 'blend_asset': return <BlendAssetVisual object={object} onDragChange={onDragChange} />;
@@ -687,7 +758,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
       onDoubleClick={(event) => { event.stopPropagation(); selectMember(object.id); if (object.kind === 'text') { setTextDraft(text); setTextEditing(true); } }}
       onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
       onPointerDown={startDirectDrag} onPointerMove={moveDirectDrag} onPointerUp={finishDirectDrag} onPointerCancel={finishDirectDrag}>
-      <MeshVisual object={shown} hideText={textEditing} onDragChange={onDragChange} />
+      <MeshVisual object={shown} frame={frame} hideText={textEditing} onDragChange={onDragChange} />
       {helperSelected && visible && object.kind !== 'camera' && object.kind !== 'blend_asset' && !object.kind.includes('light') && <SelectionOutline target={ref} />}
       {textEditing && <Html center zIndexRange={[100, 0]}>
         <textarea className="viewport-text-editor" aria-label={`Edit ${object.name}`} autoFocus value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
@@ -829,7 +900,7 @@ export function ThumbnailItem({ object, frame }: { object: SceneObject; frame: n
   const transform = evaluateTransform(object, frame);
   const shown = { ...object, text: evaluateProperty(object, 'text', frame) as string };
   if (!evaluateProperty(object, 'visibility', frame)) return null;
-  return <group position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale}><MeshVisual object={shown} /></group>;
+  return <group position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale}><MeshVisual object={shown} frame={frame} muted /></group>;
 }
 
 const thumbnailRevision = (scene: CameraCut, objects: SceneObject[]) => {
@@ -837,10 +908,41 @@ const thumbnailRevision = (scene: CameraCut, objects: SceneObject[]) => {
   return `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${object.kind}:${object.color}:${object.fontFamily}:${object.screenSpace}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${object.screenCrop.join(',')}`).join('|')}`;
 };
 
+function VideoSceneThumbnail({ projectId, scene, aspect, revision, onCaptured }: { projectId: string; scene: CameraCut; aspect: number; revision: string; onCaptured(): void }) {
+  const source = useVideoSource(scene.background.path);
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const element = video.current;
+    if (!source || !element) return;
+    let done = false;
+    const capture = () => {
+      if (done || !element.videoWidth) return;
+      done = true;
+      const canvas = document.createElement('canvas');
+      canvas.width = 320; canvas.height = Math.max(1, Math.round(320 / aspect));
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.fillStyle = '#000'; context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(element, 0, 0, canvas.width, canvas.height);
+        window.dispatchEvent(new CustomEvent('abaco:scene-thumbnail', { detail: { projectId, sceneId: scene.id, revision, url: canvas.toDataURL('image/jpeg', .76) } }));
+      }
+      onCaptured();
+    };
+    const fail = () => { if (!done) { done = true; onCaptured(); } };
+    element.addEventListener('loadeddata', capture);
+    element.addEventListener('error', fail);
+    if (element.readyState >= 2) capture();
+    return () => { element.removeEventListener('loadeddata', capture); element.removeEventListener('error', fail); };
+  }, [aspect, onCaptured, projectId, revision, scene.id, source]);
+  return <video ref={video} src={source} crossOrigin="anonymous" muted playsInline preload="metadata" />;
+}
+
 function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCaptured }: { projectId: string; scene: CameraCut; objects: SceneObject[]; aspect: number; dark: boolean; onCaptured(): void }) {
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
   const frame = scene.frame;
+  const revision = thumbnailRevision(scene, objects);
+  if (scene.background.kind === 'video') return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><VideoSceneThumbnail projectId={projectId} scene={scene} aspect={aspect} revision={revision} onCaptured={onCaptured} /></div>;
   const camera = objects.find((object) => object.id === scene.cameraId && object.kind === 'camera');
   if (!camera) return null;
   const lightingStyle = { neutral: { ambient: .72, key: 1.7 }, soft: { ambient: 1.05, key: .9 }, warm: { ambient: .68, key: 1.75 }, dramatic: { ambient: .22, key: 2.7 } }[scene.lighting.preset];
@@ -848,7 +950,6 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCap
   const elevation = THREE.MathUtils.degToRad(scene.lighting.elevation);
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
-  const revision = thumbnailRevision(scene, objects);
   return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
     <WebGLContextGuard onLost={recoverRenderer} />
     <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
@@ -880,6 +981,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const recoverRenderer = useMemo(() => () => setRendererGeneration((value) => value + 1), []);
   const frame = useEditor((state) => state.currentFrame);
+  const settings = useEditor((state) => state.project.settings);
   const lightingStyle = { neutral: { ambient: .72, key: 1.7 }, soft: { ambient: 1.05, key: .9 }, warm: { ambient: .68, key: 1.75 }, dramatic: { ambient: .22, key: 2.7 } }[scene.lighting.preset];
   const angle = THREE.MathUtils.degToRad(scene.lighting.direction);
   const elevation = THREE.MathUtils.degToRad(scene.lighting.elevation);
@@ -888,7 +990,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
   if (collapsed) return <button className="live-camera-preview-collapsed" title="Expand camera preview" aria-label="Expand camera preview" onClick={() => setCollapsed(false)}><Video size={15} /></button>;
   return <div className="live-camera-preview" style={{ width: aspect < 1 ? 'clamp(92px, 14%, 128px)' : undefined }}>
     <button className="live-camera-preview-open" onClick={onOpen} title="Open camera view" aria-label="Open camera preview">
-    <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}><Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true }}>
+    <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}>{scene.background.kind === 'video' ? <SyncedVideo sourcePath={scene.background.path} frame={frame} startFrame={scene.frame} fps={settings.fps} duration={(settings.frameEnd - scene.frame + 1) / settings.fps} muted /> : <Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true }}>
       <WebGLContextGuard onLost={recoverRenderer} />
       <color attach="background" args={[dark ? '#353535' : '#f1f1ef']} />
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
@@ -896,7 +998,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
       <directionalLight color={scene.lighting.color} position={lightPosition} intensity={lightingStyle.key * scene.lighting.intensity} />
       {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <ThumbnailItem key={object.id} object={object} frame={frame} />)}
       <ShotCamera object={camera} aspect={aspect} frame={frame} />
-    </Canvas><ReadonlyScreenLayers objects={objects} frame={frame} /></div></button>
+    </Canvas>}<ReadonlyScreenLayers objects={objects} frame={frame} /></div></button>
     <button className="live-camera-preview-find" title="Find camera" aria-label="Find camera" onClick={onFind}><Focus size={13} /></button>
     <button className="live-camera-preview-collapse" title="Collapse camera preview" aria-label="Collapse camera preview" onClick={() => setCollapsed(true)}><Minimize2 size={13} /></button>
   </div>;
@@ -907,6 +1009,12 @@ export function ScreenAssetImage({ source, name = '' }: { source: string; name?:
   useEffect(() => setFailed(false), [source]);
   if (failed || !source) return <div className="screen-image-missing" title={name ? `Image unavailable: ${name}` : 'Image unavailable'}><ImageOff aria-hidden="true" /></div>;
   return <img src={source} alt={name} draggable={false} onError={() => setFailed(true)} />;
+}
+
+function ScreenAssetVideo({ object, frame, muted = false }: { object: SceneObject; frame: number; muted?: boolean }) {
+  const fps = useEditor((state) => state.project.settings.fps);
+  const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
+  return <SyncedVideo sourcePath={object.asset.sourcePath} frame={frame} startFrame={startFrame} fps={fps} duration={object.asset.duration ?? 0} muted={muted} />;
 }
 
 export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[]; frame: number }) {
@@ -921,7 +1029,7 @@ export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[
         '--layer-scale': String(Math.max(.1, transform.scale[0])),
       } as CSSProperties;
       return <div key={object.id} className="preview-screen-layer" style={style}><div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>
-        {object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}
+        {object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : isVideoFile(object.asset.sourcePath) ? <ScreenAssetVideo object={object} frame={frame} muted /> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}
       </div></div>;
     })}
   </div>;
@@ -993,7 +1101,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
       const selected = selectedIds.includes(object.id) || selectedId === object.id;
       return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
-        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
+        <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : isVideoFile(object.asset.sourcePath) ? <ScreenAssetVideo object={object} frame={frame} /> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
         {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Rotate layer" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Resize layer" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
       </div>;
     })}
@@ -1252,6 +1360,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
+  const videoScene = activeCut?.background.kind === 'video' && Boolean(activeCut.background.path);
   const activeCamera = objects.find((object) => object.id === activeCut?.cameraId && object.kind === 'camera');
   const activeCameraTransform = activeCamera ? evaluateTransform(activeCamera, frame) : undefined;
   const activeCameraTarget = activeCameraTransform && activeCut
@@ -1869,8 +1978,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (selectionMenu && !target.closest('.viewport-selection-menu')) setSelectionMenu(null);
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
-    <div ref={stageRef} className="canvas-stage" onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
-    <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
+    <div ref={stageRef} className="canvas-stage" style={videoScene ? { display: 'none' } : undefined} onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
+    {!videoScene && <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={(event) => { if (event.button === 0 && !multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
@@ -1889,9 +1998,10 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
-    </Canvas>
+    </Canvas>}
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
+    {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} />}
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, SceneObjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from '../domain/animation';
 import { groundedPositionZ } from '../domain/ground';
+import { controllerOffset } from '../domain/controller-pose';
 import { moveGroupMembers } from '../domain/group-transform';
 
 type RecordingSession = {
@@ -67,6 +68,8 @@ type EditorState = {
   setGizmoMode(value: 'translate' | 'rotate' | 'scale'): void;
   addObject(kind: ObjectKind): void;
   addImage(asset: { sourcePath: string; dataUrl: string; name: string; aspectRatio?: number }, space: 'screen' | 'world'): void;
+  addVideo(asset: { sourcePath: string; name: string; duration: number; aspectRatio: number }, space: 'screen' | 'world'): void;
+  addVideoScene(asset: { sourcePath: string; name: string; duration: number }): void;
   addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
   trimAudioOnTimeline(id: string, edge: 'start' | 'end', deltaFrames: number): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number; controllers?: SceneObject['asset']['controllers'] }): void;
@@ -586,6 +589,38 @@ export const useEditor = create<EditorState>((set, get) => {
       commit(next);
       set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
+    addVideo: (asset, space) => {
+      const state = get();
+      const object = createSceneObject('plane', state.project.objects.filter((item) => item.kind === 'plane').length + 1);
+      object.name = asset.name;
+      object.screenSpace = space === 'screen';
+      object.asset = { sourcePath: asset.sourcePath, proxyPath: asset.sourcePath, collectionName: space === 'screen' ? 'Video 2D' : 'Video 3D', boundsCenter: [0, 0, 0], previewScale: asset.aspectRatio || 1, groundOffset: 0, duration: asset.duration };
+      object.transform.scale = [1, 1, 1];
+      if (space === 'world') { object.transform.position = [0, 0, 1.5]; object.transform.rotation = [90, 0, 0]; }
+      const next = snapshot(state.project);
+      const sceneFrame = activeSceneStart(next, state.currentFrame);
+      const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
+      putKey(object, sceneFrame, 'position', object.transform.position);
+      putKey(object, sceneFrame, 'rotation', object.transform.rotation);
+      putKey(object, sceneFrame, 'scale', object.transform.scale);
+      if (scene) makeObjectLocalToScene(next, object, scene.id);
+      next.objects.push(object);
+      if (!next.cameraCuts.some((cut) => cut.frame > sceneFrame)) next.settings.frameEnd = Math.max(next.settings.frameEnd, sceneFrame + Math.max(1, Math.round(asset.duration * next.settings.fps)) - 1);
+      commit(next);
+      set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
+    },
+    addVideoScene: (asset) => {
+      get().addShot();
+      const state = get();
+      const next = snapshot(state.project);
+      const cut = next.cameraCuts.find((scene) => scene.frame === state.currentFrame);
+      if (!cut) return;
+      cut.name = asset.name;
+      cut.background = { kind: 'video', path: asset.sourcePath, name: asset.name };
+      next.settings.frameEnd = cut.frame + Math.max(1, Math.round(asset.duration * next.settings.fps)) - 1;
+      for (const object of next.objects) if (object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light')) removeObjectFromScene(next, object.id, cut.id);
+      commit(next);
+    },
     addAudio: (asset) => {
       const state = get();
       const object = createSceneObject('audio', state.project.objects.filter((item) => item.kind === 'audio').length + 1);
@@ -979,11 +1014,23 @@ export const useEditor = create<EditorState>((set, get) => {
       const next = snapshot(state.project);
       const object = next.objects.find((item) => item.id === id && item.kind === 'blend_asset');
       if (!object?.asset.controllers?.some((item) => item.name === name)) return;
-      if (state.currentFrame > next.settings.frameStart && !(object.asset.controllerKeys ?? []).some((key) => key.name === name && key.frame <= next.settings.frameStart)) {
-        object.asset.controllerKeys = [...(object.asset.controllerKeys ?? []), { name, frame: next.settings.frameStart, offset: [0, 0, 0] }];
-      }
-      object.asset.controllerKeys = (object.asset.controllerKeys ?? []).filter((key) => key.name !== name || key.frame !== state.currentFrame);
-      object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset, source: 'user' });
+      const sceneStart = activeSceneStart(next, state.currentFrame);
+      const scene = next.cameraCuts.find((cut) => cut.frame === sceneStart);
+      const range = scene && sceneRange(next, scene.id);
+      if (!range) return;
+      const keys = object.asset.controllerKeys ?? [];
+      const original = object.asset;
+      const beforeScene = sceneStart > next.settings.frameStart ? controllerOffset(original, name, sceneStart - 1, next.settings.frameStart) : undefined;
+      const atSceneStart = controllerOffset(original, name, sceneStart, next.settings.frameStart);
+      const afterScene = range.end <= next.settings.frameEnd ? controllerOffset(original, name, range.end, next.settings.frameStart) : undefined;
+      const addBoundary = (frame: number, value: Vec3) => {
+        if (!keys.some((key) => key.name === name && key.frame === frame)) keys.push({ name, frame, offset: value, source: 'user', interpolation: 'constant' });
+      };
+      if (beforeScene) addBoundary(sceneStart - 1, beforeScene);
+      if (state.currentFrame > sceneStart) addBoundary(sceneStart, atSceneStart);
+      if (afterScene) addBoundary(range.end, afterScene);
+      object.asset.controllerKeys = keys.filter((key) => key.name !== name || key.frame !== state.currentFrame);
+      object.asset.controllerKeys.push({ name, frame: state.currentFrame, offset, source: 'user', interpolation: 'constant' });
       commit(next);
     },
     setSceneNote: (id, text) => {

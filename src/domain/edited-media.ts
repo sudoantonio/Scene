@@ -49,7 +49,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
   }
   await document.fonts.ready;
   const frameScale = width / 1280;
-  for (const object of project.objects.filter(o => o.screenSpace && ['text', 'plane'].includes(o.kind))) {
+  for (const object of project.objects.filter(o => o.screenSpace && ['text', 'plane'].includes(o.kind) && !/\.(mp4|m4v|mov|webm)$/i.test(o.asset.sourcePath))) {
     progress?.(`Preparazione di ${object.name}…`);
     const ranges = visibilityIntervals(project, object);
     if (!ranges.length) continue;

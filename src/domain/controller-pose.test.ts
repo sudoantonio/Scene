@@ -33,6 +33,25 @@ describe('Blender character controllers', () => {
     expect(controllerOffset(restored.asset, 'CTRL_MANO_DX', 12)).toEqual([0, 0, 0]);
   });
 
+  it('keeps a body edit inside its scene and preserves the poses before and after it', () => {
+    const project = createProject();
+    const character = createSceneObject('blend_asset', 1);
+    character.asset.controllers = [{ name: 'CTRL_MANO_DX', position: [0, 0, 0], worldPosition: [.6, 0, .5] }];
+    project.objects.push(character);
+    useEditor.getState().loadProject(project, '/private/tmp/character.abaco.json');
+    useEditor.getState().addShot();
+    useEditor.getState().addShot();
+    const scenes = useEditor.getState().project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+    useEditor.getState().setFrame(scenes[1].frame + 10);
+    useEditor.getState().setControllerOffset(character.id, 'CTRL_MANO_DX', [.5, 0, 0]);
+    const asset = useEditor.getState().project.objects.find((item) => item.id === character.id)!.asset;
+    expect(controllerOffset(asset, 'CTRL_MANO_DX', scenes[0].frame)).toEqual([0, 0, 0]);
+    expect(controllerOffset(asset, 'CTRL_MANO_DX', scenes[1].frame - 1)).toEqual([0, 0, 0]);
+    expect(controllerOffset(asset, 'CTRL_MANO_DX', scenes[1].frame + 10)).toEqual([.5, 0, 0]);
+    expect(controllerOffset(asset, 'CTRL_MANO_DX', scenes[2].frame - 1)).toEqual([.5, 0, 0]);
+    expect(controllerOffset(asset, 'CTRL_MANO_DX', scenes[2].frame)).toEqual([0, 0, 0]);
+  });
+
   it('deforms the loaded preview immediately and resets weights when returning to rest', () => {
     const model = new THREE.Group();
     const arm = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));

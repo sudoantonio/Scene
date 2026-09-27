@@ -2,6 +2,7 @@ import path from 'node:path';
 import { ProjectSchema, type AbacoProject } from '../src/domain/schema';
 
 const isDataUrl = (value: string) => value.startsWith('data:');
+const isVideoFile = (value: string) => /\.(mp4|m4v|mov|webm)$/i.test(value);
 const portablePath = (value: string) => value.split(path.sep).join('/');
 const isInside = (root: string, value: string) => {
   const relative = path.relative(root, value);
@@ -28,7 +29,7 @@ export async function hydratePortableProject(project: AbacoProject, filePath: st
   for (const object of hydrated.objects) {
     object.asset.sourcePath = resolveAsset(object.asset.sourcePath);
     object.asset.proxyPath = resolveAsset(object.asset.proxyPath);
-    if (object.kind === 'plane' && (object.screenSpace || object.asset.sourcePath) && !isDataUrl(object.asset.proxyPath)) {
+    if (object.kind === 'plane' && !isVideoFile(object.asset.sourcePath) && (object.screenSpace || object.asset.sourcePath) && !isDataUrl(object.asset.proxyPath)) {
       const paths = Array.from(new Set([object.asset.sourcePath, object.asset.proxyPath].filter(Boolean)));
       let error: unknown;
       for (const imagePath of paths) {

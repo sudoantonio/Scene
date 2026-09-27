@@ -1,11 +1,12 @@
 import AnimationStandardPanel from './AnimationStandardPanel';
 import SceneDirectionInput from './SceneDirectionInput';
-import { Box, Circle, Cone, Cylinder, FileBox, Image, Music2, SquareDashed, TextCursorInput } from 'lucide-react';
+import { Box, Circle, Cone, Cylinder, FileBox, Image, Music2, SquareDashed, TextCursorInput, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ObjectKind } from '../domain/schema';
 import { combinedSceneDirection, sceneDirectionTargets } from '../domain/scene-direction';
 import { useEditor } from '../store/editor';
 import { inspectAudio } from '../domain/audio';
+import { inspectVideo } from '../domain/video';
 
 const shapes: Array<{ kind: ObjectKind; label: string; icon: typeof Box }> = [
   { kind: 'cube', label: 'Cube', icon: Box }, { kind: 'sphere', label: 'Sphere', icon: Circle },
@@ -20,6 +21,8 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   const addObject = useEditor((state) => state.addObject);
   const addBlendAsset = useEditor((state) => state.addBlendAsset);
   const addImage = useEditor((state) => state.addImage);
+  const addVideo = useEditor((state) => state.addVideo);
+  const addVideoScene = useEditor((state) => state.addVideoScene);
   const addAudio = useEditor((state) => state.addAudio);
   const setSceneDirection = useEditor((state) => state.setSceneDirection);
   const [directionDrafts, setDirectionDrafts] = useState<Record<string, string>>({});
@@ -69,6 +72,16 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
       addImage({ sourcePath: image.path, dataUrl, name: image.name, aspectRatio }, space);
     } catch (error) { window.alert(error instanceof Error ? error.message : 'Image import failed.'); }
   };
+  const insertVideo = async (mode: 'screen' | 'world' | 'scene') => {
+    try {
+      if (!window.abaco) throw new Error('Video import is available in the desktop app.');
+      const selected = await window.abaco.chooseVideo();
+      if (!selected) return;
+      const metadata = await inspectVideo(selected.sourcePath);
+      if (mode === 'scene') addVideoScene({ ...selected, duration: metadata.duration });
+      else addVideo({ ...selected, duration: metadata.duration, aspectRatio: metadata.aspectRatio }, mode);
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Video import failed.'); }
+  };
   return <div className="elements-panel">
     {mode === 'add' ? <section className="add-section">
       <div className="section-heading"><h2>Add element</h2></div>
@@ -79,6 +92,9 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
         <button draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-scene-shape', 'text'); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addObject('text')}><TextCursorInput size={15} /><span>Text</span></button>
         <button onClick={() => void insertImage('screen')}><Image size={15} /><span>Image 2D</span></button>
         <button onClick={() => void insertImage('world')}><Image size={15} /><span>Image 3D</span></button>
+        <button onClick={() => void insertVideo('world')}><Video size={15} /><span>Video 3D</span></button>
+        <button onClick={() => void insertVideo('screen')}><Video size={15} /><span>Video 2D</span></button>
+        <button onClick={() => void insertVideo('scene')}><Video size={15} /><span>Video scene</span></button>
         <button onClick={async () => {
           try {
             if (!window.abaco) throw new Error('.blend import is available in the desktop app.');

@@ -25,9 +25,12 @@ declare global {
       onTranscriptionProgress(callback: (progress: { received: number; total: number }) => void): () => void;
       chooseBlendAsset(): Promise<{ sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number]; worldBasis?: [[number, number, number], [number, number, number], [number, number, number]]; morphTargets?: [string, string, string]; morphStep?: number }> } | null>;
       getDroppedFilePath(file: File): string;
+      chooseVideo(): Promise<{ sourcePath: string; name: string } | null>;
+      videoSource(filePath: string): Promise<string>;
       importDroppedAsset(filePath: string): Promise<
         | { kind: 'image'; path: string; name: string }
         | { kind: 'audio'; sourcePath: string; name: string }
+        | { kind: 'video'; sourcePath: string; name: string }
         | { kind: 'blend'; asset: NonNullable<Awaited<ReturnType<NonNullable<Window['abaco']>['chooseBlendAsset']>>> }
       >;
       ensureBlendAssetProxy(asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }): Promise<{ boundsCenter: [number, number, number]; previewScale: number; groundOffset: number; controllers?: Array<{ name: string; position: [number, number, number]; worldPosition?: [number, number, number]; worldBasis?: [[number, number, number], [number, number, number], [number, number, number]]; morphTargets?: [string, string, string]; morphStep?: number }> }>;

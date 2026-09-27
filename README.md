@@ -16,9 +16,9 @@ Scene includes **TypeSafe Jev** and **Laya** for turning written directions into
 
 ## Download
 
-For Apple Silicon Macs, [download Scene 0.59.9 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.9/Scene-0.59.9-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
+For Apple Silicon Macs, [download Scene 0.59.10 as a ZIP](https://github.com/sudoantonio/Scene/releases/download/v0.59.10/Scene-0.59.10-mac-arm64.zip), extract it, and move `Scene.app` to Applications. [All releases](https://github.com/sudoantonio/Scene/releases) are listed on GitHub. Blender must also be installed for Scene's 3D build and render workflow.
 
-The Mac app is not yet signed with an Apple Developer ID or notarized. The SHA-256 of the 0.59.9 ZIP is `73e101a3701afbb1ab69fa3b0025e7b34828f2d09775be44505e0d1b8c8102f1`. If macOS says it cannot verify Scene, first confirm that you downloaded it from this release. After trying to open it, go to **System Settings → Privacy & Security → Open Anyway → Open** to approve this copy, following [Apple's instructions](https://support.apple.com/en-gb/102445). A warning-free download requires Apple Developer ID signing and notarization.
+The Mac app is not yet signed with an Apple Developer ID or notarized. The SHA-256 of the 0.59.10 ZIP is `ee05f7c58da6d14c304950d0f76e5d7188f7d62d641d45a46ce0f4cc69744bf7`. If macOS says it cannot verify Scene, first confirm that you downloaded it from this release. After trying to open it, go to **System Settings → Privacy & Security → Open Anyway → Open** to approve this copy, following [Apple's instructions](https://support.apple.com/en-gb/102445). A warning-free download requires Apple Developer ID signing and notarization.
 
 ## Why Scene exists
 
@@ -35,7 +35,7 @@ Scene is still an early-stage project and is intentionally focused. It was creat
 ## Features
 
 - organize multiple scenes on a continuous timeline;
-- add 3D primitives, Blender files, images, and 2D text;
+- add 3D primitives, Blender files, images, videos, and 2D text; use videos as 3D planes, fixed 2D overlays, or full-frame scenes;
 - define shots, camera positions, and motion using timeline control points;
 - keep every motion path visible in the active scene, with objects in red and the camera in cyan;
 - click anywhere on a motion path to insert and drag a new control point;

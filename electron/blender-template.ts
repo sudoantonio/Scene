@@ -55,6 +55,51 @@ def make_material(data):
         principled.inputs["Roughness"].default_value = 0.65
     return material
 
+def is_video_path(value):
+    return Path(value).suffix.lower() in (".mp4", ".m4v", ".mov", ".webm")
+
+def load_visual_image(value):
+    image = bpy.data.images.load(str(asset_path(value)), check_existing=True)
+    if is_video_path(value): image.source = "MOVIE"
+    return image
+
+def first_visible_frame(data):
+    return min((key["frame"] for key in data.get("keyframes", []) if key["property"] == "visibility" and key["value"] is True), default=settings["frameStart"])
+
+def configure_movie_texture(texture, image, start_frame, duration):
+    if image.source != "MOVIE": return
+    texture.image_user.use_auto_refresh = True
+    texture.image_user.frame_start = start_frame
+    texture.image_user.frame_duration = max(1, round(duration * settings["fps"]))
+
+def overlay_material(name, color, image=None, start_frame=1, duration=0):
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    nodes.clear()
+    output = nodes.new("ShaderNodeOutputMaterial")
+    emission = nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = hex_color(color)
+    emission.inputs["Strength"].default_value = 1
+    if image is None:
+        links.new(emission.outputs[0], output.inputs["Surface"])
+    else:
+        texture = nodes.new("ShaderNodeTexImage")
+        texture.image = image
+        configure_movie_texture(texture, image, start_frame, duration)
+        transparent = nodes.new("ShaderNodeBsdfTransparent")
+        mix = nodes.new("ShaderNodeMixShader")
+        links.new(texture.outputs["Color"], emission.inputs["Color"])
+        links.new(texture.outputs["Alpha"], mix.inputs[0])
+        links.new(transparent.outputs[0], mix.inputs[1])
+        links.new(emission.outputs[0], mix.inputs[2])
+        links.new(mix.outputs[0], output.inputs["Surface"])
+        if hasattr(material, "surface_render_method"):
+            material.surface_render_method = "DITHERED"
+        elif hasattr(material, "blend_method"):
+            material.blend_method = "BLEND"
+    return material
+
 def create_object(data, suffix="", text_override=None):
     kind = data["kind"]
     name = data["name"] + suffix
@@ -92,10 +137,10 @@ def create_object(data, suffix="", text_override=None):
         obj = bpy.context.object
     obj.name = name
     if kind == "plane" and data.get("asset", {}).get("sourcePath"):
-        image = bpy.data.images.load(str(asset_path(data["asset"]["sourcePath"])), check_existing=True)
-        aspect = image.size[0] / max(1, image.size[1])
+        image = load_visual_image(data["asset"]["sourcePath"])
+        aspect = data["asset"].get("previewScale", 1) if image.source == "MOVIE" else image.size[0] / max(1, image.size[1])
         for vertex in obj.data.vertices: vertex.co.x *= aspect
-        obj.data.materials.append(overlay_material(name, "#ffffff", image))
+        obj.data.materials.append(overlay_material(name, "#ffffff", image, first_visible_frame(data), data["asset"].get("duration", 0)))
     elif kind in ("cube", "sphere", "cylinder", "cone", "plane", "text"):
         obj.data.materials.append(make_material(data))
     obj["abaco_id"] = data["id"]
@@ -372,10 +417,10 @@ for cut_index, cut in enumerate(cuts):
         for imported in set(bpy.data.objects) - before:
             imported["abaco_background_scene"] = cut["id"]
             visibility_window(imported, start, end)
-    elif background["kind"] == "image":
+    elif background["kind"] in ("image", "video"):
         camera = objects.get(cut["cameraId"])
         if not camera: continue
-        image = bpy.data.images.load(str(background_path), check_existing=True)
+        image = load_visual_image(background.get("path", ""))
         mesh = bpy.data.meshes.new("ABACO • Sfondo")
         mesh.from_pydata([(-1,-1,0), (1,-1,0), (1,1,0), (-1,1,0)], [], [(0,1,2,3)])
         panel = bpy.data.objects.new("ABACO • Sfondo • " + str(cut_index + 1), mesh)
@@ -391,6 +436,7 @@ for cut_index, cut in enumerate(cuts):
         principled = nodes.get("Principled BSDF")
         texture = nodes.new("ShaderNodeTexImage")
         texture.image = image
+        configure_movie_texture(texture, image, start, (end - start) / settings["fps"])
         links.new(texture.outputs["Color"], principled.inputs["Base Color"])
         if "Emission Color" in principled.inputs:
             links.new(texture.outputs["Color"], principled.inputs["Emission Color"])
@@ -399,32 +445,6 @@ for cut_index, cut in enumerate(cuts):
         panel["abaco_background_scene"] = cut["id"]
         visibility_window(panel, start, end)
 
-def overlay_material(name, color, image=None):
-    material = bpy.data.materials.new(name)
-    material.use_nodes = True
-    nodes, links = material.node_tree.nodes, material.node_tree.links
-    nodes.clear()
-    output = nodes.new("ShaderNodeOutputMaterial")
-    emission = nodes.new("ShaderNodeEmission")
-    emission.inputs["Color"].default_value = hex_color(color)
-    emission.inputs["Strength"].default_value = 1
-    if image is None:
-        links.new(emission.outputs[0], output.inputs["Surface"])
-    else:
-        texture = nodes.new("ShaderNodeTexImage")
-        texture.image = image
-        transparent = nodes.new("ShaderNodeBsdfTransparent")
-        mix = nodes.new("ShaderNodeMixShader")
-        links.new(texture.outputs["Color"], emission.inputs["Color"])
-        links.new(texture.outputs["Alpha"], mix.inputs[0])
-        links.new(transparent.outputs[0], mix.inputs[1])
-        links.new(emission.outputs[0], mix.inputs[2])
-        links.new(mix.outputs[0], output.inputs["Surface"])
-        if hasattr(material, "surface_render_method"):
-            material.surface_render_method = "DITHERED"
-        elif hasattr(material, "blend_method"):
-            material.blend_method = "BLEND"
-    return material
 
 def screen_layer_object(data, name, body=None):
     if data["kind"] == "text":
@@ -441,8 +461,8 @@ def screen_layer_object(data, name, body=None):
         curve.materials.append(overlay_material(name, data["color"]))
         aspect = 1
     else:
-        image = bpy.data.images.load(str(asset_path(data["asset"]["sourcePath"])), check_existing=True)
-        aspect = image.size[1] / max(1, image.size[0])
+        image = load_visual_image(data["asset"]["sourcePath"])
+        aspect = 1 / max(.001, data["asset"].get("previewScale", 1)) if image.source == "MOVIE" else image.size[1] / max(1, image.size[0])
         top, right, bottom, left = data.get("screenCrop", [0, 0, 0, 0])
         corners = [(left, bottom), (1 - right, bottom), (1 - right, 1 - top), (left, 1 - top)]
         mesh = bpy.data.meshes.new(name)
@@ -452,7 +472,7 @@ def screen_layer_object(data, name, body=None):
             for loop_index in polygon.loop_indices:
                 uv.data[loop_index].uv = corners[mesh.loops[loop_index].vertex_index]
         obj = bpy.data.objects.new(name, mesh)
-        mesh.materials.append(overlay_material(name, "#ffffff", image))
+        mesh.materials.append(overlay_material(name, "#ffffff", image, first_visible_frame(data), data["asset"].get("duration", 0)))
     scene.collection.objects.link(obj)
     obj["abaco_id"] = data["id"]
     obj["abaco_screen_space"] = True

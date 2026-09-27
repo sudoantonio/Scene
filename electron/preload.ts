@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('abaco', {
     return () => ipcRenderer.removeListener('audio:transcribe:progress', listener);
   },
   chooseBlendAsset: () => ipcRenderer.invoke('blendAsset:choose'),
+  chooseVideo: () => ipcRenderer.invoke('video:choose'),
+  videoSource: (filePath: string) => ipcRenderer.invoke('video:source', filePath),
   getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),
   importDroppedAsset: (filePath: string) => ipcRenderer.invoke('asset:importDrop', filePath),
   ensureBlendAssetProxy: (asset: { sourcePath: string; proxyPath: string }) => ipcRenderer.invoke('blendAsset:ensureProxy', asset),

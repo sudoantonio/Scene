@@ -5,12 +5,14 @@ import { writeAiBundle } from './ai-bundle';
 import { planDirection } from '../src/domain/direction-planner';
 import { assertAnimationHandoff } from '../src/domain/direction-integrity';
 import { prepareAnimationProject, buildAnimationBrief } from '../src/domain/animation-handoff';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, safeStorage, shell, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import OpenAI from 'openai';
 import { ProjectSchema, BlenderPlanSchema, type AbacoProject, type BlenderPlan } from '../src/domain/schema';
 import { ASTRA_INSTRUCTIONS, blenderPlanJsonSchema } from '../src/domain/ai-contract';
@@ -32,6 +34,10 @@ type LayaRuntime = Awaited<ReturnType<(typeof import('@receptron/laya'))['Laya']
 let layaRuntimePromise: Promise<LayaRuntime> | null = null;
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
 let latestPreviewState: PreviewState | null = null;
+const videoMimeTypes: Record<string, string> = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' };
+const videoTokens = new Map<string, string>();
+const tokenByVideoPath = new Map<string, string>();
+protocol.registerSchemesAsPrivileged([{ scheme: 'scene-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }]);
 type MenuCommand = 'new' | 'open' | 'save' | 'undo' | 'redo' | 'export-astra' | 'export-direct' | 'export-ai-folder' | 'settings';
 
 function loadLayaRuntime(onProgress: (progress: { file: string; received: number; total: number | null }) => void) {
@@ -222,7 +228,7 @@ async function makePortableProject(project: AbacoProject, root: string) {
       if (object.asset.sourcePath) object.asset.sourcePath = await copyAsset(object.asset.sourcePath, 'modelli', object.id);
       if (object.asset.proxyPath) object.asset.proxyPath = await copyAsset(object.asset.proxyPath, 'anteprime', `${object.id}-preview`);
     } else if (object.kind === 'plane' && (object.asset.sourcePath || object.asset.proxyPath)) {
-      const relative = await copyAsset(object.asset.sourcePath, 'immagini', object.id, object.asset.proxyPath);
+      const relative = await copyAsset(object.asset.sourcePath, videoMimeTypes[path.extname(object.asset.sourcePath).toLowerCase()] ? 'video' : 'immagini', object.id, object.asset.proxyPath);
       object.asset.sourcePath = relative;
       object.asset.proxyPath = relative;
     }
@@ -359,7 +365,24 @@ async function createWindow() {
   else await mainWindow.loadURL('http://localhost:5173');
 }
 
-app.whenReady().then(() => { installApplicationMenu(); return createWindow(); });
+app.whenReady().then(() => {
+  protocol.handle('scene-media', async (request) => {
+    const filePath = videoTokens.get(new URL(request.url).pathname.slice(1));
+    if (!filePath) return new Response('Video unavailable', { status: 404 });
+    const size = (await fs.stat(filePath)).size;
+    const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.get('range') ?? '');
+    const start = range ? Number(range[1]) : 0;
+    const end = range && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+    if (start >= size || end < start) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+    const stream = createReadStream(filePath, { start, end });
+    request.signal.addEventListener('abort', () => stream.destroy(), { once: true });
+    const headers = new Headers({ 'Access-Control-Allow-Origin': '*', 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1), 'Content-Type': videoMimeTypes[path.extname(filePath).toLowerCase()] });
+    if (range) headers.set('Content-Range', `bytes ${start}-${end}/${size}`);
+    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status: range ? 206 : 200, headers });
+  });
+  installApplicationMenu();
+  return createWindow();
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (!mainWindow) createWindow(); });
 
@@ -459,6 +482,21 @@ ipcMain.handle('asset:load', async (_event, filePath: string) => {
   if (extension !== '.glb') return imageFileDataUrl(filePath);
   const buffer = await fs.readFile(filePath);
   return `data:model/gltf-binary;base64,${buffer.toString('base64')}`;
+});
+
+ipcMain.handle('video:choose', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Add video', filters: [{ name: 'Video', extensions: ['mp4', 'm4v', 'mov', 'webm'] }] });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const sourcePath = path.resolve(result.filePaths[0]);
+  return { sourcePath, name: path.basename(sourcePath, path.extname(sourcePath)) };
+});
+ipcMain.handle('video:source', async (_event, incomingPath: string) => {
+  if (typeof incomingPath !== 'string' || !incomingPath) throw new Error('Invalid video path.');
+  const filePath = path.resolve(incomingPath);
+  if (!videoMimeTypes[path.extname(filePath).toLowerCase()] || !(await fs.stat(filePath)).isFile()) throw new Error('Video file unavailable or unsupported.');
+  let token = tokenByVideoPath.get(filePath);
+  if (!token) { token = crypto.randomUUID(); tokenByVideoPath.set(filePath, token); videoTokens.set(token, filePath); }
+  return `scene-media://video/${token}`;
 });
 ipcMain.handle('font:load', async (_event, font: FontId) => {
   const file = systemFontFile(font);
@@ -605,8 +643,9 @@ ipcMain.handle('asset:importDrop', async (_event, incomingPath: string) => {
   const extension = path.extname(filePath).toLowerCase();
   if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) return { kind: 'image' as const, path: filePath, name: path.basename(filePath) };
   if (['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'].includes(extension)) return { kind: 'audio' as const, sourcePath: filePath, name: path.basename(filePath, extension) };
+  if (videoMimeTypes[extension]) return { kind: 'video' as const, sourcePath: filePath, name: path.basename(filePath, extension) };
   if (extension === '.blend') return { kind: 'blend' as const, asset: await importBlendAsset(filePath) };
-  throw new Error(`Unsupported file: ${path.basename(filePath)}. Use an image, audio file, or .blend asset.`);
+  throw new Error(`Unsupported file: ${path.basename(filePath)}. Use an image, video, audio file, or .blend asset.`);
 });
 
 ipcMain.handle('blendAsset:ensureProxy', async (_event, asset: { sourcePath: string; proxyPath: string; pose?: Record<string, [number, number, number]> }) => {

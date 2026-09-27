@@ -84,8 +84,10 @@ export async function collectPortableAssets(project: AbacoProject, root: string,
       asset.sourcePath = await copyAsset(asset.sourcePath, 'audio', object.name, asset.proxyPath);
       asset.proxyPath = '';
     } else if (asset.sourcePath || asset.proxyPath) {
-      const relative = await copyAsset(asset.sourcePath, 'immagini', object.name, asset.proxyPath);
-      const preview = asset.proxyPath ? await copyAsset(asset.proxyPath, 'anteprime', `${object.name}-preview`, asset.sourcePath) : relative;
+      const video = /\.(mp4|m4v|mov|webm)$/i.test(asset.sourcePath);
+      const relative = await copyAsset(asset.sourcePath, video ? 'video' : 'immagini', object.name, asset.proxyPath);
+      const preview = video ? relative : asset.proxyPath ? await copyAsset(asset.proxyPath, 'anteprime', `${object.name}-preview`, asset.sourcePath) : relative;
+      if (video && object.screenSpace) warnings.push(`${object.name}: video 2D originale incluso; i suoi fotogrammi non sono stati convertiti in PNG montati.`);
       asset.sourcePath = relative; asset.proxyPath = preview;
     }
   }

@@ -14,6 +14,7 @@ import AudioPlayback from './components/AudioPlayback';
 import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
 import { inspectAudio } from './domain/audio';
+import { inspectVideo } from './domain/video';
 import type { ObjectKind } from './domain/schema';
 
 const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Direct export without AI changes.', assumptions: [], warnings: [], operations: [] });
@@ -109,6 +110,10 @@ export default function App() {
         } else if (asset.kind === 'audio') {
           const source = await window.abaco.loadAsset(asset.sourcePath);
           useEditor.getState().addAudio({ ...asset, ...await inspectAudio(source) });
+        } else if (asset.kind === 'video') {
+          const metadata = await inspectVideo(asset.sourcePath);
+          if (event.altKey) useEditor.getState().addVideoScene({ ...asset, duration: metadata.duration });
+          else useEditor.getState().addVideo({ ...asset, duration: metadata.duration, aspectRatio: metadata.aspectRatio }, event.shiftKey ? 'screen' : 'world');
         } else useEditor.getState().addBlendAsset(asset.asset);
         imported += 1;
       } catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
@@ -352,7 +357,7 @@ export default function App() {
   const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
   const dockInspectorBesideTimeline = collapsed.timeline && !collapsed.right;
   return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={(event) => { void onDrop(event); }} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
-    {dropActive && <div className="asset-drop-overlay" aria-hidden="true">Drop to add · images become 3D · hold Shift for 2D</div>}
+    {dropActive && <div className="asset-drop-overlay" aria-hidden="true">Drop to add · images and video become 3D · Shift: 2D · Option: video scene</div>}
     <AudioPlayback />
     <div className="slim-headbar">
       <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
