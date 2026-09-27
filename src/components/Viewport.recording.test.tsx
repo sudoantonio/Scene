@@ -136,6 +136,20 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(container.querySelectorAll('.live-camera-preview')).toHaveLength(1);
   });
 
+  it('attende la fine di modifiche ravvicinate prima di rigenerare le miniature', () => {
+    act(() => useEditor.setState({ cameraView: false }));
+    const { container } = render(<Viewport />);
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
+    act(() => useEditor.getState().addObject('cube'));
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(500));
+    act(() => useEditor.getState().addObject('sphere'));
+    act(() => vi.advanceTimersByTime(649));
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(1));
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
+  });
+
   it('mantiene visibili i controlli esterni anche senza una selezione', () => {
     render(<Viewport />);
     expect(screen.getByLabelText('Transform tool')).toBeInTheDocument();

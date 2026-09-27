@@ -302,6 +302,14 @@ export default function App() {
   }, [dirty, project.name]);
 
   useEffect(() => {
+    const status = window.abaco?.getRecoveryStatus;
+    if (!status) return;
+    void status().then((recovered) => {
+      if (recovered) notify('info', 'La vista grafica è stata riavviata e la bozza locale è stata ripristinata. Controlla le ultime modifiche.');
+    });
+  }, []);
+
+  useEffect(() => {
     const openMotionEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
     const openAudioEditor = () => { setInspectorPanel('edit'); setCollapsed((value) => ({ ...value, right: false })); };
     window.addEventListener('abaco:edit-motion', openMotionEditor);

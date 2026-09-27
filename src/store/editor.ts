@@ -1692,7 +1692,7 @@ if (typeof localStorage !== 'undefined') {
   useEditor.subscribe((state) => {
     if (state.project === lastProject) return;
     lastProject = state.project;
-    if (draftTimer) window.clearTimeout(draftTimer);
+    if (draftTimer) return;
     draftTimer = window.setTimeout(() => {
       try { localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(lastProject)); } catch { /* spazio locale non disponibile */ }
       draftTimer = undefined;

@@ -10,6 +10,7 @@ type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'da
 declare global {
   interface Window {
     abaco?: {
+      getRecoveryStatus(): Promise<boolean>;
       openProject(): Promise<{ project: AbacoProject; path: string } | null>;
       saveProject(project: AbacoProject, path?: string): Promise<{ project: AbacoProject; path: string } | null>;
       exportAiFolder(project: AbacoProject, projectPath?: string, editedMedia?: EditedMedia): Promise<{ directory: string; files: number; warnings: string[] } | null>;

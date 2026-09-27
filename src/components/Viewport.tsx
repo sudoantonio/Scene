@@ -954,7 +954,13 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCap
 }
 
 function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark, paused }: { projectId: string; scenes: CameraCut[]; objects: SceneObject[]; aspect: number; dark: boolean; paused: boolean }) {
-  const signature = useMemo(() => scenes.map((scene) => `${scene.id}:${thumbnailRevision(scene, objects)}`).join('||'), [scenes, objects]);
+  const [ready, setReady] = useState(() => ({ scenes, objects, signature: scenes.map((scene) => `${scene.id}:${thumbnailRevision(scene, objects)}`).join('||') }));
+  useEffect(() => {
+    if (paused || (ready.scenes === scenes && ready.objects === objects)) return;
+    const timer = window.setTimeout(() => setReady({ scenes, objects, signature: scenes.map((scene) => `${scene.id}:${thumbnailRevision(scene, objects)}`).join('||') }), 650);
+    return () => window.clearTimeout(timer);
+  }, [paused, ready.scenes, ready.objects, scenes, objects]);
+  const signature = ready.signature;
   const [job, setJob] = useState({ signature, index: 0 });
   useEffect(() => {
     if (job.signature !== signature) setJob({ signature, index: 0 });
@@ -962,7 +968,7 @@ function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark, paused 
   const index = job.signature === signature ? job.index : 0;
   const scene = scenes[index];
   const complete = useMemo(() => () => setJob((current) => current.signature === signature ? { ...current, index: current.index + 1 } : current), [signature]);
-  if (!scene || paused) return null;
+  if (!scene || paused || ready.scenes !== scenes || ready.objects !== objects) return null;
   return <div className="thumbnail-renderers" aria-hidden="true"><SceneThumbnailRenderer projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} onCaptured={complete} /></div>;
 }
 const MemoSceneThumbnailQueue = memo(SceneThumbnailQueue);

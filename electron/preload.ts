@@ -5,6 +5,7 @@ import type { JevActionInput, JevActionPlan } from '../src/domain/jev-action';
 import type { FontId } from '../src/domain/text-style';
 
 contextBridge.exposeInMainWorld('abaco', {
+  getRecoveryStatus: (): Promise<boolean> => ipcRenderer.invoke('app:recovery-status'),
   openProject: () => ipcRenderer.invoke('project:open'),
   saveProject: (project: AbacoProject, path?: string) => ipcRenderer.invoke('project:save', { project, path }),
   exportAiFolder: (project: AbacoProject, projectPath?: string, editedMedia?: EditedMedia) => ipcRenderer.invoke('project:exportAiFolder', { project, projectPath, editedMedia }),

@@ -30,6 +30,8 @@ type Settings = { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'hi
 const defaults: Settings = { reasoning: 'medium' };
 let mainWindow: BrowserWindow | null = null;
 let previewWindow: BrowserWindow | null = null;
+let rendererCrashTimes: number[] = [];
+let rendererRecovered = false;
 type LayaRuntime = Awaited<ReturnType<(typeof import('@receptron/laya'))['Laya']['load']>>;
 let layaRuntimePromise: Promise<LayaRuntime> | null = null;
 type PreviewState = { project: AbacoProject; frame: number; theme: 'light' | 'dark' };
@@ -354,6 +356,28 @@ async function createWindow() {
     mainWindow = null;
     if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
   });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return;
+    void fs.appendFile(path.join(app.getPath('userData'), 'renderer-crashes.log'), `${new Date().toISOString()} ${details.reason} ${details.exitCode}\n`).catch(() => undefined);
+    rendererCrashTimes = rendererCrashTimes.filter((time) => Date.now() - time < 60_000);
+    rendererCrashTimes.push(Date.now());
+    if (rendererCrashTimes.length <= 2) {
+      rendererRecovered = true;
+      setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload(); }, 600);
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
+      void dialog.showMessageBox(mainWindow, {
+        type: 'error', title: 'Scene', message: 'La vista grafica si è chiusa più volte.',
+        detail: 'Puoi riprovare a caricare la bozza locale. Controlla le ultime modifiche dopo il ripristino.',
+        buttons: ['Riprova', 'Chiudi'], defaultId: 0, cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0 && mainWindow && !mainWindow.isDestroyed()) {
+          rendererCrashTimes = [];
+          rendererRecovered = true;
+          mainWindow.webContents.reload();
+        } else mainWindow?.close();
+      });
+    }
+  });
   let shiftDown = false;
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     const next = Boolean(input.shift);
@@ -382,6 +406,12 @@ app.whenReady().then(() => {
   });
   installApplicationMenu();
   return createWindow();
+});
+
+ipcMain.handle('app:recovery-status', () => {
+  const recovered = rendererRecovered;
+  rendererRecovered = false;
+  return recovered;
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (!mainWindow) createWindow(); });

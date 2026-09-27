@@ -675,19 +675,17 @@ describe('scene indipendenti', () => {
     expect(evaluateTransform(replacement, 72).position).toEqual([6, -2, 1]);
     expect(replacement.sceneIds).toEqual([sceneId]);
   });
-  it('salva localmente anche la posizione di un progetto senza file', () => {
-    vi.useFakeTimers();
+  it('salva localmente anche la posizione di un progetto senza file', async () => {
     localStorage.removeItem('abaco-animatic-project-v1');
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
     useEditor.getState().setTransform(cubeId, { position: [2.5, -1, 3], rotation: [0, 0, 0], scale: [1, 1, 1] });
     expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === cubeId)!, 1).position).toEqual([2.5, -1, 3]);
-    vi.advanceTimersByTime(400);
+    await new Promise((resolve) => setTimeout(resolve, 400));
     const saved = ProjectSchema.parse(JSON.parse(localStorage.getItem('abaco-animatic-project-v1')!));
     const cube = saved.objects.find((object) => object.id === cubeId)!;
     expect(evaluateTransform(cube, 1).position).toEqual([2.5, -1, 3]);
-    vi.useRealTimers();
   });
 
   it('mantiene una sola camera nel progetto', () => {
