@@ -333,6 +333,8 @@ input:focus, textarea:focus, select:focus { border-color: #b8b8b2; box-shadow: 0
 .size-control { margin-top: 13px; }
 .size-control > div { display: flex; justify-content: space-between; align-items: center; color: #888680; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
 .size-control strong { color: #66645f; font-size: 10px; font-weight: 500; }
+.size-control .size-value { display: inline-flex; align-items: center; gap: 2px; color: #aaa; }
+.size-control .size-value input { width: 55px; padding: 2px 3px; text-align: right; font-size: 11px; }
 .size-control input[type=range] { width: 100%; min-height: 22px; padding: 0; accent-color: #55534e; background: transparent; border: 0; box-shadow: none; }
 .scene-note textarea { min-height: 54px; }
 .camera-zoom { margin-top: 14px; padding: 10px; background: #fafaf9; border: 1px solid #e7e7e3; border-radius: 6px; }
@@ -1485,6 +1487,8 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 /* 0.51 · presenza e movimento sono tracce distinte */
 .presence-track { background: #fafcfb; }
 .presence-segment { position: absolute; z-index: 2; top: 8px; bottom: 8px; min-width: 24px; padding: 0 8px; display: flex; align-items: center; overflow: hidden; color: #67716a; background: #edf2ee; border: 1px solid #d2ddd4; border-radius: 3px; font-size: 9px; text-align: left; }
+.presence-segment, .recorded-motion-segment, .subtitle-segment { cursor: grab; }
+.presence-segment:active, .recorded-motion-segment:active, .subtitle-segment:active { cursor: grabbing; }
 .presence-segment.hidden { opacity: .18; }
 .presence-segment .segment-mode { margin-left: 29px; }
 .movement-label { padding-left: 31px; color: #9a5656; background: #fffafa; }
@@ -1740,10 +1744,9 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .screen-rotate-handle { left: 50%; top: -32px; border-radius: 50%; cursor: grab; transform: translateX(-50%); }
 .screen-rotate-handle:active { cursor: grabbing; }
 
-/* Controlli della vista camera ancorati appena dentro il frame. */
-.camera-mode .view-toggle { left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
-.camera-mode .viewport-top-right { right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
-.camera-mode .viewport-bottom-left { left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px); bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px); }
+/* I controlli restano ai bordi del pannello anche quando il frame camera è stretto. */
+.camera-mode .view-toggle span, .camera-mode .center-shot.center-subject span { display: none; }
+.camera-mode .viewport-bottom-left { flex-direction: column-reverse; align-items: flex-start; }
 .camera-mode .camera-drone-hint { right: 8px; bottom: 8px; }
 
 /* Palette clip ispirata a Premiere: camera blu, presenza verde, movimento rosso. */

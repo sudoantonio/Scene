@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createProject, createSceneObject, defaultBackground, defaultCameraFraming, defaultLighting, isValidAnimationValue, ProjectSchema, SceneObjectSchema, type AbacoProject, type AnimProperty, type BackgroundSettings, type BlenderPlan, type Interpolation, type KeyframeValue, type LightingSettings, type ObjectKind, type SceneObject, type TimelineCommentScope, type Transform, type Vec3 } from '../domain/schema';
 import { applyPlan, evaluateProperty, evaluateTransform } from '../domain/animation';
 import { groundedPositionZ } from '../domain/ground';
+import { isVideoFile } from '../domain/video';
 import { controllerOffset } from '../domain/controller-pose';
 import { moveGroupMembers } from '../domain/group-transform';
 
@@ -72,11 +73,13 @@ type EditorState = {
   addVideoScene(asset: { sourcePath: string; name: string; duration: number }): void;
   addAudio(asset: { sourcePath: string; name: string; duration: number; waveform: number[] }): void;
   trimAudioOnTimeline(id: string, edge: 'start' | 'end', deltaFrames: number): void;
+  moveAudioOnTimeline(id: string, startFrame: number): void;
   addBlendAsset(asset: { sourcePath: string; proxyPath: string; collectionName: string; name: string; boundsCenter: Vec3; previewScale: number; groundOffset: number; controllers?: SceneObject['asset']['controllers'] }): void;
   setControllerOffset(id: string, name: string, offset: Vec3): void;
   replaceObject(id: string, replacement: { kind: ObjectKind; name?: string; text?: string; screenSpace?: boolean; asset?: SceneObject['asset'] }): void;
   addShot(): void;
   splitScene(): void;
+  splitObjectClip(objectId: string, sceneId?: string): void;
   deleteScene(id: string): void;
   resizeScene(id: string, durationFrames: number): void;
   setTransitionMode(objectId: string, sceneId: string, mode: Interpolation): void;
@@ -98,6 +101,7 @@ type EditorState = {
   deleteObject(id: string): void;
   duplicateObjectsToScene(objectIds: string[], sceneId: string): string[];
   resizeObjectPresence(objectId: string, sceneId: string, startFrame: number, endFrame: number): void;
+  moveObjectPresence(objectId: string, sceneId: string, startFrame: number): void;
   deleteObjectFromScene(objectId: string, sceneId: string): void;
   deleteMotionFromScene(objectId: string, sceneId: string): void;
   setTransform(id: string, transform: Transform): void;
@@ -143,9 +147,10 @@ const normalizeProjectData = (project: AbacoProject) => {
     // Audio edits are authored data: loading must preserve trims, fades and presence.
     if (object.kind === 'audio') continue;
     if (object.kind !== 'plane') continue;
-    object.transform.scale = [THREE.MathUtils.clamp(object.transform.scale[0], .05, 12), THREE.MathUtils.clamp(object.transform.scale[1], .05, 12), 1];
+    const normalizePlaneSize = (value: number) => Math.max(.01, value);
+    object.transform.scale = [normalizePlaneSize(object.transform.scale[0]), normalizePlaneSize(object.transform.scale[1]), 1];
     for (const key of object.keyframes) {
-      if (key.property === 'scale' && Array.isArray(key.value)) key.value = [THREE.MathUtils.clamp(key.value[0], .05, 12), THREE.MathUtils.clamp(key.value[1], .05, 12), 1];
+      if (key.property === 'scale' && Array.isArray(key.value)) key.value = [normalizePlaneSize(key.value[0]), normalizePlaneSize(key.value[1]), 1];
     }
   }
   const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
@@ -381,6 +386,47 @@ const syncScopedCommentRanges = (project: AbacoProject) => {
   }
 };
 
+const extendSceneToEnd = (project: AbacoProject, sceneId: string, requestedEnd: number) => {
+  const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
+  const index = scenes.findIndex((scene) => scene.id === sceneId);
+  if (index < 0) return;
+  const boundary = scenes[index + 1]?.frame ?? project.settings.frameEnd + 1;
+  const delta = Math.max(0, Math.round(requestedEnd) - boundary);
+  if (!delta) return;
+  ensureSceneSnapshots(project);
+  for (const scene of project.cameraCuts) if (scene.frame >= boundary) scene.frame += delta;
+  for (const object of project.objects) {
+    for (const key of object.keyframes) {
+      const audioClipEndsHere = object.kind === 'audio' && key.property === 'visibility' && key.frame === boundary && key.value === false
+        && object.keyframes.some((prior) => prior.property === 'visibility' && prior.value === true && prior.frame < boundary);
+      if (key.frame >= boundary && !audioClipEndsHere) key.frame += delta;
+    }
+    for (const key of object.asset.controllerKeys ?? []) if (key.frame >= boundary) key.frame += delta;
+    for (const note of object.sceneNotes) if (note.frame >= boundary) note.frame += delta;
+  }
+  for (const comment of project.comments) {
+    if (comment.startFrame >= boundary) { comment.startFrame += delta; comment.endFrame += delta; }
+    else if (comment.endFrame >= boundary) comment.endFrame += delta;
+  }
+  mapDirectionFrames(project, frame => frame >= boundary ? frame + delta : frame);
+  project.settings.frameEnd += delta;
+  syncScopedCommentRanges(project);
+};
+
+const addVideoAudioTrack = (project: AbacoProject, sourcePath: string, name: string, duration: number, startFrame: number, linkedVideoId?: string) => {
+  const audio = createSceneObject('audio', project.objects.filter((item) => item.kind === 'audio').length + 1);
+  audio.name = `${name} · Audio`;
+  audio.asset.sourcePath = sourcePath;
+  audio.asset.linkedVideoId = linkedVideoId;
+  audio.audio.duration = duration;
+  audio.audio.trimEnd = duration;
+  audio.sceneIds = [];
+  audio.visible = false;
+  putKey(audio, startFrame, 'visibility', true, 'constant');
+  putKey(audio, startFrame + Math.max(1, Math.round(duration * project.settings.fps)), 'visibility', false, 'constant');
+  project.objects.push(audio);
+};
+
 export const useEditor = create<EditorState>((set, get) => {
   let copiedObjects: SceneObject[] = [];
   let copiedGroups: AbacoProject['groups'] = [];
@@ -600,12 +646,18 @@ export const useEditor = create<EditorState>((set, get) => {
       const next = snapshot(state.project);
       const sceneFrame = activeSceneStart(next, state.currentFrame);
       const scene = next.cameraCuts.find((cut) => cut.frame === sceneFrame);
+      const clipStart = Math.max(sceneFrame, Math.round(state.currentFrame));
       putKey(object, sceneFrame, 'position', object.transform.position);
       putKey(object, sceneFrame, 'rotation', object.transform.rotation);
       putKey(object, sceneFrame, 'scale', object.transform.scale);
       if (scene) makeObjectLocalToScene(next, object, scene.id);
+      if (clipStart > sceneFrame) {
+        putKey(object, sceneFrame, 'visibility', false, 'constant');
+        putKey(object, clipStart, 'visibility', true, 'constant');
+      }
       next.objects.push(object);
-      if (!next.cameraCuts.some((cut) => cut.frame > sceneFrame)) next.settings.frameEnd = Math.max(next.settings.frameEnd, sceneFrame + Math.max(1, Math.round(asset.duration * next.settings.fps)) - 1);
+      if (scene) extendSceneToEnd(next, scene.id, clipStart + Math.max(1, Math.round(asset.duration * next.settings.fps)));
+      addVideoAudioTrack(next, asset.sourcePath, asset.name, asset.duration, clipStart, object.id);
       commit(next);
       set({ selectedId: object.id, selectedIds: [object.id], gizmoMode: 'translate' });
     },
@@ -618,6 +670,7 @@ export const useEditor = create<EditorState>((set, get) => {
       cut.name = asset.name;
       cut.background = { kind: 'video', path: asset.sourcePath, name: asset.name };
       next.settings.frameEnd = cut.frame + Math.max(1, Math.round(asset.duration * next.settings.fps)) - 1;
+      addVideoAudioTrack(next, asset.sourcePath, asset.name, asset.duration, cut.frame);
       for (const object of next.objects) if (object.kind !== 'camera' && object.kind !== 'audio' && !object.kind.includes('light')) removeObjectFromScene(next, object.id, cut.id);
       commit(next);
     },
@@ -770,6 +823,52 @@ export const useEditor = create<EditorState>((set, get) => {
       renameScenes(next);
       syncScopedCommentRanges(next);
       commit(next);
+    },
+    splitObjectClip: (objectId, sceneId) => {
+      const state = get();
+      const next = snapshot(state.project);
+      const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
+      if (!object) return;
+      const scene = sceneId ? sceneRange(next, sceneId) : undefined;
+      const bounds: [number, number] = object.kind === 'audio'
+        ? [next.settings.frameStart, next.settings.frameEnd + 1]
+        : scene ? [scene.scene.frame, scene.end] : [next.settings.frameStart, next.settings.frameEnd + 1];
+      const presence = objectPresenceRange(object, bounds[0], bounds[1]);
+      const cut = Math.round(state.currentFrame);
+      if (!presence || cut <= presence[0] || cut >= presence[1]) return;
+      const right = structuredClone(object);
+      right.id = crypto.randomUUID();
+      right.name = `${object.name} (2)`;
+      if (object.kind === 'audio') {
+        const sourceCut = object.audio.trimStart + (cut - presence[0]) / next.settings.fps;
+        const sourceEnd = object.audio.trimEnd > object.audio.trimStart ? object.audio.trimEnd : object.audio.duration;
+        object.audio.trimEnd = sourceCut;
+        right.audio.trimStart = sourceCut;
+        right.audio.trimEnd = sourceEnd;
+        for (const part of [object, right]) {
+          part.visible = false;
+          part.keyframes = part.keyframes.filter((key) => key.property !== 'visibility');
+        }
+        putKey(object, presence[0], 'visibility', true, 'constant');
+        putKey(object, cut, 'visibility', false, 'constant');
+        putKey(right, cut, 'visibility', true, 'constant');
+        putKey(right, presence[1], 'visibility', false, 'constant');
+      } else {
+        ensureSceneSnapshots(next);
+        if (isVideoFile(object.asset.sourcePath)) right.asset.sourceOffset = (object.asset.sourceOffset ?? 0) + (cut - presence[0]) / next.settings.fps;
+        right.sceneIds = sceneId ? [sceneId] : [];
+        right.visible = false;
+        right.keyframes = right.keyframes.filter((key) => key.property !== 'visibility');
+        putKey(right, cut, 'visibility', true, 'constant');
+        putKey(right, presence[1], 'visibility', false, 'constant');
+        object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility' || key.frame < bounds[0] || key.frame >= bounds[1]);
+        putKey(object, bounds[0], 'visibility', presence[0] === bounds[0], 'constant');
+        if (presence[0] > bounds[0]) putKey(object, presence[0], 'visibility', true, 'constant');
+        putKey(object, cut, 'visibility', false, 'constant');
+      }
+      next.objects.push(right);
+      commit(next);
+      set({ selectedId: right.id, selectedIds: [right.id] });
     },
     deleteScene: (id) => {
       const state = get();
@@ -1008,6 +1107,22 @@ export const useEditor = create<EditorState>((set, get) => {
       putKey(object, clipEnd, 'visibility', false, 'constant');
       commit(next);
     },
+    moveAudioOnTimeline: (id, requestedStart) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === id && item.kind === 'audio');
+      if (!object) return;
+      const range = objectPresenceRange(object, next.settings.frameStart, next.settings.frameEnd + 1);
+      if (!range) return;
+      const duration = range[1] - range[0];
+      const startFrame = Math.max(next.settings.frameStart, Math.round(requestedStart));
+      if (startFrame === range[0]) return;
+      next.settings.frameEnd = Math.max(next.settings.frameEnd, startFrame + duration - 1);
+      object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility');
+      object.visible = false;
+      putKey(object, startFrame, 'visibility', true, 'constant');
+      putKey(object, startFrame + duration, 'visibility', false, 'constant');
+      commit(next);
+    },
     setControllerOffset: (id, name, offset) => {
       if (!offset.every(Number.isFinite)) return;
       const state = get();
@@ -1145,6 +1260,10 @@ export const useEditor = create<EditorState>((set, get) => {
     resizeObjectPresence: (objectId, sceneId, requestedStart, requestedEnd) => {
       const next = snapshot(get().project);
       const object = next.objects.find((item) => item.id === objectId && item.kind !== 'camera' && !item.kind.includes('light'));
+      if (object && isVideoFile(object.asset.sourcePath) && object.asset.duration) {
+        const videoFrames = Math.max(1, Math.round((object.asset.duration - (object.asset.sourceOffset ?? 0)) * next.settings.fps));
+        extendSceneToEnd(next, sceneId, Math.min(Math.round(requestedEnd), Math.round(requestedStart) + videoFrames));
+      }
       const scenes = next.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
       const sourceIndex = scenes.findIndex((scene) => scene.id === sceneId);
       if (!object || sourceIndex < 0) return;
@@ -1152,7 +1271,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const projectStart = next.settings.frameStart;
       const projectEnd = next.settings.frameEnd + 1;
       const startFrame = Math.max(projectStart, Math.min(projectEnd - 1, Math.round(requestedStart)));
-      const endFrame = Math.max(startFrame + 1, Math.min(projectEnd, Math.round(requestedEnd)));
+      const videoEnd = object && isVideoFile(object.asset.sourcePath) && object.asset.duration ? startFrame + Math.max(1, Math.round((object.asset.duration - (object.asset.sourceOffset ?? 0)) * next.settings.fps)) : projectEnd;
+      const endFrame = Math.max(startFrame + 1, Math.min(projectEnd, videoEnd, Math.round(requestedEnd)));
       const sceneIndexAt = (frame: number) => scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? projectEnd));
       const firstIndex = Math.min(sourceIndex, Math.max(0, sceneIndexAt(startFrame)));
       const lastIndex = Math.max(sourceIndex, Math.max(0, sceneIndexAt(endFrame - 1)));
@@ -1168,6 +1288,25 @@ export const useEditor = create<EditorState>((set, get) => {
         if (visibleEnd < sceneEnd) putKey(object, visibleEnd, 'visibility', false, 'constant');
         if (object.sceneIds.length && !object.sceneIds.includes(scene.id)) object.sceneIds.push(scene.id);
       }
+      commit(next);
+    },
+    moveObjectPresence: (objectId, sceneId, requestedStart) => {
+      const next = snapshot(get().project);
+      const object = next.objects.find((item) => item.id === objectId && item.kind !== 'audio' && item.kind !== 'camera' && !item.kind.includes('light'));
+      const originalRange = sceneRange(next, sceneId);
+      if (!object || !originalRange) return;
+      const presence = objectPresenceRange(object, originalRange.scene.frame, originalRange.end);
+      if (!presence) return;
+      const duration = presence[1] - presence[0];
+      const startFrame = Math.max(originalRange.scene.frame, Math.round(requestedStart));
+      if (startFrame === presence[0]) return;
+      extendSceneToEnd(next, sceneId, startFrame + duration);
+      const range = sceneRange(next, sceneId)!;
+      ensureSceneSnapshots(next);
+      object.keyframes = object.keyframes.filter((key) => key.property !== 'visibility' || key.frame < range.scene.frame || key.frame >= range.end);
+      putKey(object, range.scene.frame, 'visibility', startFrame === range.scene.frame, 'constant');
+      if (startFrame > range.scene.frame) putKey(object, startFrame, 'visibility', true, 'constant');
+      if (startFrame + duration < range.end) putKey(object, startFrame + duration, 'visibility', false, 'constant');
       commit(next);
     },
     deleteObjectFromScene: (objectId, sceneId) => {
@@ -1319,7 +1458,7 @@ export const useEditor = create<EditorState>((set, get) => {
       let object = next.objects.find((item) => item.id === id);
       if (scene && object?.kind === 'camera' && scene.cameraId === object.id) object = makeSceneCameraExclusive(next, scene);
       if (!object) return;
-      if (object.kind === 'plane') transform = { ...transform, scale: [THREE.MathUtils.clamp(transform.scale[0], .05, 12), THREE.MathUtils.clamp(transform.scale[1], .05, 12), 1] };
+      if (object.kind === 'plane') transform = { ...transform, scale: [Math.max(.01, transform.scale[0]), Math.max(.01, transform.scale[1]), 1] };
       const motionActive = state.recordingMotion?.objectId === id && state.recordingMotion.sceneId === scene?.id;
       const session = scene && state.recordingSession?.sceneId === scene.id ? state.recordingSession : undefined;
       const sessionActive = Boolean(session) && object.kind !== 'audio' && !object.kind.includes('light');
@@ -1481,6 +1620,7 @@ export const useEditor = create<EditorState>((set, get) => {
     resizeMotionRange: (objectId, sceneId, requestedStart, requestedEnd) => {
       const next = snapshot(get().project);
       const object = next.objects.find((item) => item.id === objectId);
+      extendSceneToEnd(next, sceneId, requestedEnd);
       const range = sceneRange(next, sceneId);
       if (!object || !range) return;
       ensureSceneSnapshots(next);

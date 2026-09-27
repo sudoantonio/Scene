@@ -48,7 +48,7 @@ describe('AbacoSceneV1', () => {
     expect(ProjectSchema.parse(project).objects.at(-1)?.asset.previewScale).toBe(.5);
   });
 
-  it('recupera un piano con una scala corrotta senza coprire la scena', () => {
+  it('mantiene lo zoom ampio di un piano e blocca lo spessore sull’asse Z', () => {
     const project = createProject();
     const plane = createSceneObject('plane', 1);
     plane.transform.scale = [500, 300, 80];
@@ -56,8 +56,8 @@ describe('AbacoSceneV1', () => {
     project.objects.push(plane);
     useEditor.getState().loadProject(project, '/tmp/piano.abaco.json');
     const recovered = useEditor.getState().project.objects.find((object) => object.id === plane.id)!;
-    expect(recovered.transform.scale).toEqual([12, 12, 1]);
-    expect(recovered.keyframes[0].value).toEqual([12, 12, 1]);
+    expect(recovered.transform.scale).toEqual([500, 300, 1]);
+    expect(recovered.keyframes[0].value).toEqual([800, 900, 1]);
   });
 
   it('chiude i piccoli vuoti artificiali degli elementi al confine tra scene', () => {

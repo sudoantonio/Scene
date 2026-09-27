@@ -150,6 +150,29 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
   });
 
+  it('sposta un testo oltre il frame e ingrandisce una foto 2D senza limite di zoom', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    act(() => useEditor.getState().addObject('text'));
+    const textId = useEditor.getState().selectedId!;
+    const { container } = render(<Viewport />);
+    const textLayer = container.querySelector('.screen-space-layer')!;
+    fireEvent.pointerDown(textLayer, { button: 0, pointerId: 31, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 31, clientX: 1100, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 31, clientX: 1100, clientY: 100 });
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === textId)!, 1).position[0]).toBeGreaterThan(1.6);
+
+    act(() => useEditor.getState().addImage({ sourcePath: '/tmp/picture.png', dataUrl: 'data:image/png;base64,AA==', name: 'Picture' }, 'screen'));
+    const imageId = useEditor.getState().selectedId!;
+    const imageLayer = [...container.querySelectorAll('.screen-space-layer')].at(-1)!;
+    const handle = imageLayer.querySelector('.screen-resize-handle')!;
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 32, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 32, clientX: 2000, clientY: 2000 });
+    fireEvent.pointerUp(window, { pointerId: 32, clientX: 2000, clientY: 2000 });
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === imageId)!, 1).scale[0]).toBeGreaterThan(12);
+    width.mockRestore(); height.mockRestore();
+  });
+
   it('mantiene visibili i controlli esterni anche senza una selezione', () => {
     render(<Viewport />);
     expect(screen.getByLabelText('Transform tool')).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject } from '../domain/schema';
+import { objectPresenceRange } from '../domain/presence';
 import { useEditor } from '../store/editor';
 import Timeline from './Timeline';
 
@@ -14,6 +15,43 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const motionFrames = () => useEditor.getState().project.objects[0].keyframes.filter(k => k.property === 'position' && k.purpose === 'motion').map(k => k.frame).sort((a, b) => a - b);
 
 describe('Punti e maniglie del movimento', () => {
+  it('sposta un blocco audio trascinandone il corpo senza alterarne la durata', () => {
+    useEditor.getState().addAudio({ sourcePath: '/sound.wav', name: 'Audio', duration: 1, waveform: [] });
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    const { container } = render(<Timeline />);
+    vi.spyOn(container.querySelector('.presence-track')!, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
+    fireEvent.pointerDown(container.querySelector('.audio-layer')!, { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 220 });
+    fireEvent.pointerUp(window, { clientX: 220 });
+    expect(objectPresenceRange(useEditor.getState().project.objects.find((item) => item.id === audio.id)!, 1, 73)).toEqual([32, 56]);
+  });
+
+  it('taglia solo il blocco selezionato e non la scena', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    useEditor.getState().setFrame(25);
+    const { container } = render(<Timeline />);
+    fireEvent.click(container.querySelector('.presence-segment:not(.audio-layer)')!);
+    useEditor.getState().setFrame(25);
+    fireEvent.click(screen.getByRole('button', { name: 'Split clip at playhead' }));
+    expect(useEditor.getState().project.cameraCuts).toHaveLength(1);
+    expect(useEditor.getState().project.objects.filter((object) => object.name.startsWith('Clip'))).toHaveLength(2);
+  });
+  it('allunga scena e barra del video trascinando la maniglia oltre la fine attuale', () => {
+    useEditor.getState().setFrame(1);
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 2, aspectRatio: 1 }, 'screen');
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().resizeScene(scene.id, 24);
+    const { container } = render(<Timeline />);
+    const track = container.querySelector('.presence-track')!;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ width: 720 } as DOMRect);
+    const handle = container.querySelector('.presence-resize-handle.end')!;
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 900 });
+    fireEvent.pointerUp(window, { clientX: 900 });
+    expect(useEditor.getState().project.settings.frameEnd).toBe(48);
+    expect(container.querySelector('.presence-segment')?.getAttribute('title')).toContain('frame 1–48');
+  });
+
   it('mostra un audio lungo come clip unica con la sua waveform oltre i confini scena', () => {
     useEditor.getState().addShot();
     useEditor.getState().setFrame(60);

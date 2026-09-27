@@ -73,6 +73,8 @@ export const SceneObjectSchema = z.object({
     boundsCenter: Vec3Schema.default([0, 0, 0]),
     previewScale: z.number().finite().positive().default(1),
     duration: z.number().finite().nonnegative().optional(),
+    sourceOffset: z.number().finite().nonnegative().optional(),
+    linkedVideoId: z.string().uuid().optional(),
     groundOffset: z.number().finite().nonnegative().default(1),
     controllers: z.array(z.object({ name: z.string().min(1), position: Vec3Schema, worldPosition: Vec3Schema.optional(), worldBasis: z.tuple([Vec3Schema, Vec3Schema, Vec3Schema]).optional(), morphTargets: z.tuple([z.string(), z.string(), z.string()]).optional(), morphStep: z.number().positive().optional() })).optional(),
     controllerKeys: z.array(z.object({ name: z.string().min(1), frame: z.number().int().positive(), offset: Vec3Schema, source: z.enum(['user', 'ai']).optional(), directionActionId: z.string().uuid().optional(), interpolation: InterpolationSchema.optional() })).optional(),

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { audioStateAt } from '../domain/media-timeline';
 import { inspectAudio } from '../domain/audio';
+import { isVideoFile } from '../domain/video';
 import { useEditor } from '../store/editor';
 
 type Player = { element: HTMLAudioElement; sourcePath: string };
@@ -23,12 +24,12 @@ export default function AudioPlayback() {
       current?.element.pause();
       void (async () => {
         try {
-          const source = window.abaco ? await window.abaco.loadAsset(sound.asset.sourcePath) : sound.asset.sourcePath;
+          const source = window.abaco ? await (isVideoFile(sound.asset.sourcePath) ? window.abaco.videoSource(sound.asset.sourcePath) : window.abaco.loadAsset(sound.asset.sourcePath)) : sound.asset.sourcePath;
           if (cancelled) return;
           const element = new Audio(source);
           element.preload = 'auto';
           players.current.set(sound.id, { element, sourcePath: sound.asset.sourcePath });
-          if (sound.audio.waveform.length < Math.min(8192, Math.max(120, Math.ceil(sound.audio.duration * 60)))) {
+          if (!isVideoFile(sound.asset.sourcePath) && sound.audio.waveform.length < Math.min(8192, Math.max(120, Math.ceil(sound.audio.duration * 60)))) {
             const analysis = await inspectAudio(source);
             const latest = useEditor.getState().project.objects.find((object) => object.id === sound.id && object.kind === 'audio');
             if (latest) useEditor.getState().updateObject(sound.id, { audio: { ...latest.audio, duration: analysis.duration, trimEnd: latest.audio.trimEnd > latest.audio.trimStart ? latest.audio.trimEnd : analysis.duration, waveform: analysis.waveform } });

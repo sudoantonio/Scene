@@ -193,6 +193,16 @@ describe('Pannelli contestuali', () => {
     expect(body).toContainElement(screen.getByText('Advanced values'));
   });
 
+  it('accetta una dimensione 2D oltre il limite precedente anche dal pannello', () => {
+    useEditor.getState().addImage({ sourcePath: '/tmp/photo.png', dataUrl: 'data:image/png;base64,AA==', name: 'Photo' }, 'screen');
+    const id = useEditor.getState().selectedId!;
+    render(<Inspector panel="edit" onPanelChange={vi.fn()} />);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Element size percent' }), { target: { value: '2000' } });
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === id)!, 1).scale).toEqual([20, 20, 1]);
+    act(() => useEditor.getState().loadProject(useEditor.getState().project, '/tmp/scene.abaco.json'));
+    expect(evaluateTransform(useEditor.getState().project.objects.find((object) => object.id === id)!, 1).scale).toEqual([20, 20, 1]);
+  });
+
   it('appoggia un elemento selezionato sul piano', () => {
     useEditor.getState().addObject('cube');
     const id = useEditor.getState().selectedId!;

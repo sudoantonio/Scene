@@ -37,6 +37,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
   const selectedAudio = project.objects.find((item) => item.id === selectedId && item.kind === 'audio');
   const object = project.objects.find((item) => item.id === selectedId && item.kind !== 'audio' && item.kind !== 'camera' && !item.kind.includes('light'));
   const transform = object ? evaluateTransform(object, frame) : undefined;
+  const elementSize = transform && object ? object.kind === 'plane' ? transform.scale[0] : (transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3 : 1;
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   const sceneIndex = scenes.findIndex((scene, index) => frame >= scene.frame && frame < (scenes[index + 1]?.frame ?? project.settings.frameEnd + 1));
   const activeScene = scenes[sceneIndex] ?? scenes[0];
@@ -114,7 +115,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
           <div className="camera-sliders">
           {positionControls.map(([label, axis, min, max]) => <label key={`position-${axis}`}><span>{cameraView && axis === 2 ? 'Vertical' : label}</span><strong>{object.screenSpace ? `${Math.round(positionValues![axis] * 100)}%` : `${positionValues![axis].toFixed(1)} m`}</strong><input aria-label={`${label} element`} title={cameraView && axis === 1 ? 'Increase to move the character away from the camera' : undefined} type="range" min={cameraView && axis === 1 && !object.screenSpace ? .1 : Math.min(min, positionValues![axis])} max={Math.max(max, positionValues![axis])} step={object.screenSpace ? '.01' : '0.1'} value={positionValues![axis]} onChange={(event) => changeTransformAxis('position', axis, Number(event.target.value))} /></label>)}
           </div>
-          <div className="size-control"><div><span>Size</span><strong>{Math.round(((transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3) * 100)}%</strong></div><input aria-label="Element size" type="range" min="0.1" max="4" step="0.05" value={(transform.scale[0] + transform.scale[1] + transform.scale[2]) / 3} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
+          <div className="size-control"><div><span>Size</span><label className="size-value"><input aria-label="Element size percent" type="number" min="1" step="10" value={Math.round(elementSize * 100)} onChange={(event) => { const size = Number(event.target.value) / 100; if (size > 0) changeTransform('scale', [size, size, size]); }} /><span>%</span></label></div><input aria-label="Element size" type="range" min="0.01" max={Math.max(4, elementSize * 2)} step="0.05" value={elementSize} onChange={(event) => { const size = Number(event.target.value); changeTransform('scale', [size, size, size]); }} /></div>
           {!object.screenSpace && <button className="subtle align-ground" onClick={() => alignObjectToGround(object.id)}><MoveDown size={13} /> Place on ground</button>}
         </InspectorGroup>
 

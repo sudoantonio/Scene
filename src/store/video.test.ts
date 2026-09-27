@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluateProperty } from '../domain/animation';
 import { createProject, ProjectSchema } from '../domain/schema';
+import { objectPresenceRange } from '../domain/presence';
 import { syncVideo, videoTime } from '../domain/video';
 import { hydratePortableProject, projectForStorage } from '../../electron/project-storage';
 import { useEditor } from './editor';
@@ -24,6 +25,90 @@ describe('video in the editor', () => {
     const video = useEditor.getState().project.objects.find((object) => object.name === 'Overlay')!;
     expect(video.screenSpace).toBe(true);
     expect(video.asset.sourcePath).toBe('/tmp/clip.webm');
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio' && object.asset.linkedVideoId === video.id)!;
+    expect(audio.asset.sourcePath).toBe(video.asset.sourcePath);
+    expect(audio.audio.duration).toBe(2);
+  });
+
+  it('places the whole video and its separate audio at the playhead', () => {
+    useEditor.getState().setFrame(25);
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 4, aspectRatio: 1 }, 'screen');
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const video = project.objects.find((object) => object.name === 'Clip')!;
+    const audio = project.objects.find((object) => object.asset.linkedVideoId === video.id)!;
+    expect(objectPresenceRange(video, 1, project.settings.frameEnd + 1)).toEqual([25, 121]);
+    expect(objectPresenceRange(audio, 1, project.settings.frameEnd + 1)).toEqual([25, 121]);
+    expect(project.settings.frameEnd).toBe(120);
+  });
+
+  it('moves a full-length video later and extends its scene without shortening the block', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const video = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().moveObjectPresence(video.id, scene.id, 25);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    expect(project.settings.frameEnd).toBe(96);
+    expect(objectPresenceRange(project.objects.find((object) => object.id === video.id)!, 1, 97)).toEqual([25, 97]);
+    expect(objectPresenceRange(project.objects.find((object) => object.asset.linkedVideoId === video.id)!, 1, 97)).toEqual([1, 73]);
+  });
+
+  it('splits only the selected video and continues the source time in the second part', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const original = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    const scene = useEditor.getState().project.cameraCuts[0];
+    useEditor.getState().setFrame(25);
+    useEditor.getState().splitObjectClip(original.id, scene.id);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const first = project.objects.find((object) => object.id === original.id)!;
+    const second = project.objects.find((object) => object.name === 'Clip (2)')!;
+    const audio = project.objects.find((object) => object.asset.linkedVideoId === first.id)!;
+    expect(project.cameraCuts).toHaveLength(1);
+    expect(objectPresenceRange(first, 1, 73)).toEqual([1, 25]);
+    expect(objectPresenceRange(second, 1, 73)).toEqual([25, 73]);
+    expect(second.asset.sourceOffset).toBe(1);
+    expect(videoTime(25, 25, 24, 3, second.asset.sourceOffset)).toBe(1);
+    expect(objectPresenceRange(audio, 1, 73)).toEqual([1, 73]);
+  });
+
+  it('splits an audio block into independently editable source ranges', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const audio = useEditor.getState().project.objects.find((object) => object.kind === 'audio')!;
+    useEditor.getState().setFrame(25);
+    useEditor.getState().splitObjectClip(audio.id);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const first = project.objects.find((object) => object.id === audio.id)!;
+    const second = project.objects.find((object) => object.name === `${audio.name} (2)`)!;
+    expect(first.audio.trimEnd).toBe(1);
+    expect(second.audio.trimStart).toBe(1);
+    expect(objectPresenceRange(first, 1, 73)).toEqual([1, 25]);
+    expect(objectPresenceRange(second, 1, 73)).toEqual([25, 73]);
+  });
+
+  it('extends an earlier scene and shifts later scenes when a new video lasts longer', () => {
+    useEditor.getState().addShot();
+    const before = useEditor.getState().project;
+    const nextSceneFrame = before.cameraCuts[1].frame;
+    const oldEnd = before.settings.frameEnd;
+    useEditor.getState().setFrame(1);
+    useEditor.getState().addVideo({ sourcePath: '/tmp/long.mp4', name: 'Long clip', duration: 5, aspectRatio: 1 }, 'screen');
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const video = project.objects.find((object) => object.name === 'Long clip')!;
+    expect(project.cameraCuts[1].frame).toBe(nextSceneFrame + 48);
+    expect(project.settings.frameEnd).toBe(oldEnd + 48);
+    expect(objectPresenceRange(video, 1, project.cameraCuts[1].frame)).toEqual([1, 121]);
+    expect(evaluateProperty(video, 'visibility', project.cameraCuts[1].frame)).toBe(false);
+  });
+
+  it('expands a shortened scene when the video end handle reaches its natural duration', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 2, aspectRatio: 1 }, 'screen');
+    const scene = useEditor.getState().project.cameraCuts[0];
+    const video = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
+    useEditor.getState().resizeScene(scene.id, 24);
+    useEditor.getState().resizeObjectPresence(video.id, scene.id, 1, 200);
+    const project = ProjectSchema.parse(useEditor.getState().project);
+    const updated = project.objects.find((object) => object.id === video.id)!;
+    expect(project.settings.frameEnd).toBe(48);
+    expect(objectPresenceRange(updated, 1, 49)).toEqual([1, 49]);
   });
 
   it('creates a video-only scene without deleting 3D objects from earlier scenes', () => {

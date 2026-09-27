@@ -451,6 +451,7 @@ function useVideoSource(sourcePath: string) {
 
 function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame: number; muted: boolean }) {
   const source = useVideoSource(object.asset.sourcePath);
+  const hasSeparateAudio = useEditor((state) => state.project.objects.some((item) => item.kind === 'audio' && item.asset.linkedVideoId && item.asset.sourcePath === object.asset.sourcePath));
   const playing = useEditor((state) => state.isPlaying);
   const fps = useEditor((state) => state.project.settings.fps);
   const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
@@ -464,27 +465,27 @@ function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame
     element.src = source;
     element.preload = 'auto';
     element.playsInline = true;
-    element.muted = muted;
+    element.muted = muted || hasSeparateAudio;
     video.current = element;
     const next = new THREE.VideoTexture(element);
     next.colorSpace = THREE.SRGBColorSpace;
     setTexture(next);
     return () => { element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
-  }, [muted, source]);
+  }, [muted, hasSeparateAudio, source]);
   useEffect(() => {
     if (!video.current) return;
-    syncVideo(video.current, frame, startFrame, fps, duration, playing);
-  }, [duration, fps, frame, playing, source, startFrame]);
+    syncVideo(video.current, frame, startFrame, fps, duration, playing, object.asset.sourceOffset ?? 0);
+  }, [duration, fps, frame, playing, source, startFrame, object.asset.sourceOffset]);
   const aspect = THREE.MathUtils.clamp(object.asset.previewScale || 1, .1, 10);
   return <mesh castShadow><planeGeometry args={[2 * aspect, 2]} /><meshBasicMaterial map={texture ?? null} color={texture ? '#ffffff' : '#333333'} side={THREE.DoubleSide} toneMapped={false} /></mesh>;
 }
 
-function SyncedVideo({ sourcePath, frame, startFrame, fps, duration, muted = false, className }: { sourcePath: string; frame: number; startFrame: number; fps: number; duration: number; muted?: boolean; className?: string }) {
+function SyncedVideo({ sourcePath, frame, startFrame, fps, duration, sourceOffset = 0, muted = false, className }: { sourcePath: string; frame: number; startFrame: number; fps: number; duration: number; sourceOffset?: number; muted?: boolean; className?: string }) {
   const source = useVideoSource(sourcePath);
   const ref = useRef<HTMLVideoElement>(null);
   const playing = useEditor((state) => state.isPlaying);
-  useEffect(() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing); }, [duration, fps, frame, playing, source, startFrame]);
-  return <video ref={ref} className={className} src={source} crossOrigin="anonymous" playsInline preload="auto" muted={muted} onLoadedMetadata={() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing); }} />;
+  useEffect(() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing, sourceOffset); }, [duration, fps, frame, playing, source, startFrame, sourceOffset]);
+  return <video ref={ref} className={className} src={source} crossOrigin="anonymous" playsInline preload="auto" muted={muted} onLoadedMetadata={() => { if (ref.current) syncVideo(ref.current, frame, startFrame, fps, duration, playing, sourceOffset); }} />;
 }
 
 function MeshVisual({ object, frame, muted = false, hideText = false, onDragChange }: { object: SceneObject; frame: number; muted?: boolean; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
@@ -607,7 +608,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
   const commit = (snap = true) => {
     if (!ref.current) return;
     if (snap && mode === 'translate') ref.current.position.copy(snapToOtherObjects(ref.current.position));
-    const maximumScale = object.kind === 'plane' ? 12 : 20;
+    const maximumScale = object.kind === 'plane' ? Number.MAX_SAFE_INTEGER : 20;
     if (object.kind === 'plane') ref.current.scale.z = 1;
     const result: Transform = {
       position: ref.current.position.toArray().map((value) => Number(value.toFixed(4))) as Transform['position'],
@@ -691,10 +692,10 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     } else if (mode === 'rotate') {
       ref.current.rotation.set(drag.rotation.x + dy * 0.003, drag.rotation.y, drag.rotation.z + dx * 0.003);
     } else if (mode === 'scale') {
-      const factor = THREE.MathUtils.clamp(Math.exp((dx - dy) * 0.003), .1, 10);
+      const factor = object.kind === 'plane' ? Math.exp((dx - dy) * 0.003) : THREE.MathUtils.clamp(Math.exp((dx - dy) * 0.003), .1, 10);
       ref.current.scale.set(
-        THREE.MathUtils.clamp(drag.scale.x * factor, .05, object.kind === 'plane' ? 12 : 20),
-        THREE.MathUtils.clamp(drag.scale.y * factor, .05, object.kind === 'plane' ? 12 : 20),
+        THREE.MathUtils.clamp(drag.scale.x * factor, .01, object.kind === 'plane' ? Number.MAX_SAFE_INTEGER : 20),
+        THREE.MathUtils.clamp(drag.scale.y * factor, .01, object.kind === 'plane' ? Number.MAX_SAFE_INTEGER : 20),
         object.kind === 'plane' ? 1 : THREE.MathUtils.clamp(drag.scale.z * factor, .05, 20),
       );
     }
@@ -769,8 +770,8 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
       if (!ref.current) return;
       if (mode === 'translate' && viewTranslation && translationProxy.current) ref.current.position.copy(translationProxy.current.position);
       if (mode === 'scale' && object.kind === 'plane') {
-        ref.current.scale.x = THREE.MathUtils.clamp(ref.current.scale.x, .05, 12);
-        ref.current.scale.y = THREE.MathUtils.clamp(ref.current.scale.y, .05, 12);
+        ref.current.scale.x = Math.max(.01, ref.current.scale.x);
+        ref.current.scale.y = Math.max(.01, ref.current.scale.y);
         ref.current.scale.z = 1;
       }
       // Lo snap viene applicato una sola volta al rilascio. Applicarlo a ogni
@@ -1010,8 +1011,9 @@ export function ScreenAssetImage({ source, name = '' }: { source: string; name?:
 
 function ScreenAssetVideo({ object, frame, muted = false }: { object: SceneObject; frame: number; muted?: boolean }) {
   const fps = useEditor((state) => state.project.settings.fps);
+  const hasSeparateAudio = useEditor((state) => state.project.objects.some((item) => item.kind === 'audio' && item.asset.linkedVideoId && item.asset.sourcePath === object.asset.sourcePath));
   const startFrame = object.keyframes.filter((key) => key.property === 'visibility' && key.value === true).map((key) => key.frame).sort((a, b) => a - b)[0] ?? 1;
-  return <SyncedVideo sourcePath={object.asset.sourcePath} frame={frame} startFrame={startFrame} fps={fps} duration={object.asset.duration ?? 0} muted={muted} />;
+  return <SyncedVideo sourcePath={object.asset.sourcePath} frame={frame} startFrame={startFrame} fps={fps} duration={object.asset.duration ?? 0} sourceOffset={object.asset.sourceOffset ?? 0} muted={muted || hasSeparateAudio} />;
 }
 
 export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[]; frame: number }) {
@@ -1050,12 +1052,12 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       if (Math.hypot(dx, dy) < 4) return;
       let transform: Transform;
       if (interaction.mode === 'move') {
-        const x = THREE.MathUtils.clamp(start.position[0] + (dx * 2) / width, -1.6, 1.6);
-        const z = THREE.MathUtils.clamp(start.position[2] - (dy * 2) / height, -1.6, 1.6);
+        const x = start.position[0] + (dx * 2) / width;
+        const z = start.position[2] - (dy * 2) / height;
         transform = { ...start, position: [x, start.position[1], z] };
       } else if (interaction.mode === 'resize') {
         const distance = Math.max(8, Math.hypot(event.clientX - interaction.centerX, event.clientY - interaction.centerY));
-        const scale = Math.max(.1, Math.min(8, start.scale[0] * distance / interaction.distance));
+        const scale = Math.max(.01, start.scale[0] * distance / interaction.distance);
         transform = { ...start, scale: [scale, scale, scale] };
       } else {
         const angle = Math.atan2(event.clientY - interaction.centerY, event.clientX - interaction.centerX);
@@ -1998,7 +2000,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </Canvas>}
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
-    {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} />}
+    {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} muted={objects.some((item) => item.kind === 'audio' && item.asset.sourcePath === activeCut.background.path)} />}
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
     {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}

@@ -28,12 +28,12 @@ export async function inspectVideo(sourcePath: string): Promise<{ sourcePath: st
   });
 }
 
-export function videoTime(frame: number, startFrame: number, fps: number, duration: number) {
-  return Math.max(0, Math.min(Math.max(0, duration - .001), (frame - startFrame) / fps));
+export function videoTime(frame: number, startFrame: number, fps: number, duration: number, sourceOffset = 0) {
+  return Math.max(0, Math.min(Math.max(0, duration - .001), sourceOffset + (frame - startFrame) / fps));
 }
 
-export function syncVideo(element: HTMLVideoElement, frame: number, startFrame: number, fps: number, duration: number, playing: boolean) {
-  const expected = videoTime(frame, startFrame, fps, duration);
+export function syncVideo(element: HTMLVideoElement, frame: number, startFrame: number, fps: number, duration: number, playing: boolean, sourceOffset = 0) {
+  const expected = videoTime(frame, startFrame, fps, duration, sourceOffset);
   if (Math.abs(element.currentTime - expected) > (playing ? .18 : .5 / Math.max(1, fps))) {
     try { element.currentTime = expected; } catch { /* metadata is still loading */ }
   }
