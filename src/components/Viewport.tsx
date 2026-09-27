@@ -15,7 +15,7 @@ import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta
 import { controllerMotionPaths } from '../domain/controller-motion-path';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
 import { objectPresenceRange } from '../domain/presence';
-import { isVideoFile, videoTime } from '../domain/video';
+import { isVideoFile, syncVideo } from '../domain/video';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import headerLogo from '../assets/abaco-scene-header.png';
@@ -447,15 +447,6 @@ function useVideoSource(sourcePath: string) {
     return () => { active = false; };
   }, [sourcePath]);
   return source;
-}
-
-function syncVideo(element: HTMLVideoElement, frame: number, startFrame: number, fps: number, duration: number, playing: boolean) {
-  const expected = videoTime(frame, startFrame, fps, duration);
-  if (!playing || Math.abs(element.currentTime - expected) > .18) {
-    try { element.currentTime = expected; } catch { /* metadata is still loading */ }
-  }
-  if (playing && expected < duration - .02 && element.paused) void element.play().catch(() => undefined);
-  else element.pause();
 }
 
 function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame: number; muted: boolean }) {
@@ -962,8 +953,8 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCap
   </Canvas></div>;
 }
 
-function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark }: { projectId: string; scenes: CameraCut[]; objects: SceneObject[]; aspect: number; dark: boolean }) {
-  const signature = scenes.map((scene) => `${scene.id}:${thumbnailRevision(scene, objects)}`).join('||');
+function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark, paused }: { projectId: string; scenes: CameraCut[]; objects: SceneObject[]; aspect: number; dark: boolean; paused: boolean }) {
+  const signature = useMemo(() => scenes.map((scene) => `${scene.id}:${thumbnailRevision(scene, objects)}`).join('||'), [scenes, objects]);
   const [job, setJob] = useState({ signature, index: 0 });
   useEffect(() => {
     if (job.signature !== signature) setJob({ signature, index: 0 });
@@ -971,7 +962,7 @@ function SceneThumbnailQueue({ projectId, scenes, objects, aspect, dark }: { pro
   const index = job.signature === signature ? job.index : 0;
   const scene = scenes[index];
   const complete = useMemo(() => () => setJob((current) => current.signature === signature ? { ...current, index: current.index + 1 } : current), [signature]);
-  if (!scene) return null;
+  if (!scene || paused) return null;
   return <div className="thumbnail-renderers" aria-hidden="true"><SceneThumbnailRenderer projectId={projectId} scene={scene} objects={objects} aspect={aspect} dark={dark} onCaptured={complete} /></div>;
 }
 const MemoSceneThumbnailQueue = memo(SceneThumbnailQueue);
@@ -1979,7 +1970,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
   }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
     <div ref={stageRef} className="canvas-stage" style={videoScene ? { display: 'none' } : undefined} onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
-    {!videoScene && <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
+    {!videoScene && <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : cameraView ? [1, 1.5] : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={(event) => { if (event.button === 0 && !multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
       <SelectionAiAnchor />
@@ -2013,7 +2004,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       const camera = orbitRef.current?.object;
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : [8, -10, 7], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
     }} />}
-    {!recordingSession && !playing && <MemoSceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} />}
+    {!recordingSession && !playing && <MemoSceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} paused={cameraView} />}
     {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Back to free view" onClick={() => setCameraView(false)}><ArrowLeft size={15} /><span>Back</span></button>}
     {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
       <div className="camera-drone-hint" aria-label="Blender-style camera controls">

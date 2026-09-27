@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluateProperty } from '../domain/animation';
 import { createProject, ProjectSchema } from '../domain/schema';
-import { videoTime } from '../domain/video';
+import { syncVideo, videoTime } from '../domain/video';
 import { hydratePortableProject, projectForStorage } from '../../electron/project-storage';
 import { useEditor } from './editor';
 
@@ -55,5 +55,14 @@ describe('video in the editor', () => {
   it('seeks video time from timeline frames and stops at its end', () => {
     expect(videoTime(49, 25, 24, 2)).toBe(1);
     expect(videoTime(100, 25, 24, 2)).toBeCloseTo(1.999);
+  });
+
+  it('does not pause an already playing video on every timeline update', () => {
+    const play = vi.fn().mockResolvedValue(undefined);
+    const pause = vi.fn();
+    const video = { currentTime: 1, paused: false, play, pause } as unknown as HTMLVideoElement;
+    syncVideo(video, 49, 25, 24, 3, true);
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
   });
 });

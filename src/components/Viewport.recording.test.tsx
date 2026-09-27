@@ -114,13 +114,15 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     expect(screen.getByTitle('Image unavailable: Bozza')).toBeInTheDocument();
   });
 
-  it('usa un solo renderer WebGL per generare tutte le miniature', () => {
+  it('sospende le miniature nella vista camera e usa un solo renderer quando torna alla vista libera', () => {
     act(() => {
       useEditor.getState().addShot();
       useEditor.getState().addShot();
     });
     const { container } = render(<Viewport />);
     expect(useEditor.getState().project.cameraCuts).toHaveLength(3);
+    expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(0);
+    act(() => useEditor.getState().setCameraView(false));
     expect(container.querySelectorAll('.thumbnail-renderer')).toHaveLength(1);
   });
 

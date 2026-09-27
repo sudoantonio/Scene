@@ -15,8 +15,14 @@ export function evaluateProperty(object: SceneObject, property: AnimProperty, fr
   };
   const keys = object.keyframes.filter((key) => key.property === property).sort((a, b) => a.frame - b.frame);
   if (!keys.length || frame < keys[0].frame) return base[property];
-  const nextIndex = keys.findIndex((key) => key.frame > frame);
-  if (nextIndex < 0) return keys[keys.length - 1].value;
+  if (frame >= keys[keys.length - 1].frame) return keys[keys.length - 1].value;
+  let low = 0, high = keys.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (keys[middle].frame <= frame) low = middle + 1;
+    else high = middle;
+  }
+  const nextIndex = low;
   const previous = keys[nextIndex - 1];
   const next = keys[nextIndex];
   const holdUntil = Math.min(next.frame, previous.frame + (previous.holdFrames ?? 0));
