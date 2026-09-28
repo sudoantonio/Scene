@@ -909,7 +909,7 @@ describe('scene indipendenti', () => {
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 
-  it('elimina una scena richiudendo la timeline senza cambiare quella successiva', () => {
+  it('elimina una scena lasciando spazio vuoto senza spostare quelle successive', () => {
     useEditor.setState({ project: createProject(), currentFrame: 1, selectedId: undefined, past: [], future: [], dirty: false });
     useEditor.getState().addObject('cube');
     const cubeId = useEditor.getState().selectedId!;
@@ -920,10 +920,16 @@ describe('scene indipendenti', () => {
     useEditor.getState().deleteScene(scenes[1].id);
     const project = useEditor.getState().project;
     const cube = project.objects.find((object) => object.id === cubeId)!;
-    expect(project.cameraCuts.map((scene) => scene.frame).sort((a, b) => a - b)).toEqual([1, 73]);
-    expect(evaluateTransform(cube, 73).position).toEqual([9, 0, 0]);
-    expect(project.settings.frameEnd).toBe(144);
+    expect(project.cameraCuts.map((scene) => scene.frame).sort((a, b) => a - b)).toEqual([1, 73, 145]);
+    expect(project.cameraCuts.find((scene) => scene.id === scenes[1].id)?.isGap).toBe(true);
+    expect(evaluateTransform(cube, 145).position).toEqual([9, 0, 0]);
+    expect(project.settings.frameEnd).toBe(216);
     expect(() => ProjectSchema.parse(project)).not.toThrow();
+    useEditor.getState().resizeScene(scenes[0].id, 90);
+    const extended = useEditor.getState().project;
+    expect(extended.cameraCuts.find((scene) => scene.id === scenes[1].id)?.frame).toBe(91);
+    expect(extended.cameraCuts.find((scene) => scene.id === scenes[2].id)?.frame).toBe(145);
+    expect(extended.settings.frameEnd).toBe(216);
   });
 
   it('elimina soltanto il blocco scelto quando l’elemento è stato copiato nella scena successiva', () => {

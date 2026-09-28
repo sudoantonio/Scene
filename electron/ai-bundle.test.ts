@@ -41,6 +41,20 @@ describe('Portable AI folder',()=>{
   const o=createSceneObject('audio',1);o.asset.sourcePath='/missing/audio.wav';p.objects.push(o);
   await expect(writeAiBundle(p,root)).rejects.toThrow('File mancante');expect((await fs.readdir(root)).some(n=>n.endsWith('.tmp'))).toBe(false);expect(await fs.stat(first.directory)).toBeTruthy();
  });
+ it('exports a video audio track as a portable source and timing without decoding the movie',async()=>{
+  const root=await temp(),p=createProject();p.settings.frameEnd=24;p.settings.fps=24;
+  const source=path.join(root,'clip.mp4');await fs.writeFile(source,Buffer.from('movie fixture'));
+  const audio=createSceneObject('audio',1);audio.asset.sourcePath=source;audio.audio.duration=1;audio.audio.trimEnd=1;p.objects.push(audio);
+  const silent=encodeWav([new Float32Array(48000),new Float32Array(48000)],48000);
+  const clip={objectId:audio.id,name:audio.name,startFrame:1,endFrameExclusive:25,sourceStart:0,sourceEnd:1,loop:false,volume:1,fadeIn:0,fadeOut:0};
+  const media:EditedMedia={projectId:p.id,updatedAt:p.updatedAt,audioMix:silent,audioClips:[],videoAudioClips:[{objectId:audio.id,clip}],croppedImages:[],overlays:[]};
+  const out=await writeAiBundle(p,root,path.join(root,'source.json'),undefined,media);
+  const mounted=JSON.parse(await fs.readFile(path.join(out.directory,'MEDIA_MONTATI.json'),'utf8'));
+  expect(mounted.videoAudioClips).toMatchObject([{objectId:audio.id,startFrame:1,endFrameExclusive:25,editsAlreadyApplied:false}]);
+  expect(mounted.videoAudioClips[0].source).toMatch(/^assets\/audio\//);
+  expect(await fs.readFile(path.join(out.directory,mounted.videoAudioClips[0].source))).toEqual(Buffer.from('movie fixture'));
+  expect(out.warnings.join(' ')).toContain('videoAudioClips');
+ });
  it('exports subtitle text at the edited audio position for the AI and SRT',async()=>{
   const root=await temp(),p=createProject();p.settings.fps=10;p.settings.frameEnd=40;
   const audio=createSceneObject('audio',1);audio.asset.sourcePath=path.join(root,'voice.wav');

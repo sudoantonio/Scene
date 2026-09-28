@@ -374,7 +374,7 @@ const makeSceneCameraExclusive = (project: AbacoProject, scene: AbacoProject['ca
   return camera;
 };
 
-const renameScenes = (project: AbacoProject) => project.cameraCuts.sort((a, b) => a.frame - b.frame).forEach((scene, index) => { scene.name = `Scene ${index + 1}`; });
+const renameScenes = (project: AbacoProject) => { let index = 0; project.cameraCuts.sort((a, b) => a.frame - b.frame).forEach((scene) => { scene.name = scene.isGap ? 'Spazio vuoto' : `Scene ${++index}`; }); };
 const syncScopedCommentRanges = (project: AbacoProject) => {
   const scenes = project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
   for (const comment of project.comments) {
@@ -881,34 +881,28 @@ export const useEditor = create<EditorState>((set, get) => {
       ensureSceneSnapshots(next);
       const scene = scenes[index];
       const sceneEnd = scenes[index + 1]?.frame ?? next.settings.frameEnd + 1;
-      const duration = sceneEnd - scene.frame;
-      next.cameraCuts = next.cameraCuts.filter((cut) => cut.id !== id);
-      if (!next.cameraCuts.some((cut) => cut.cameraId === scene.cameraId)) next.objects = next.objects.filter((object) => object.id !== scene.cameraId);
+      if (scene.isGap) return;
+      const deletedCameraExclusive = !scenes.some((cut) => cut.id !== id && cut.cameraId === scene.cameraId);
+      scene.isGap = true;
+      scene.background = defaultBackground();
       // An empty sceneIds list means globally present. Remove objects local
       // only to the deleted scene before pruning their membership.
       next.objects = next.objects.filter((object) => !(object.sceneIds.length === 1 && object.sceneIds[0] === id));
-      for (const cut of next.cameraCuts) if (cut.frame >= sceneEnd) cut.frame -= duration;
       for (const object of next.objects) {
         object.sceneIds = object.sceneIds.filter((sceneId) => sceneId !== id);
         object.keyframes = object.keyframes
-          .filter((key) => key.frame < scene.frame || key.frame >= sceneEnd)
-          .map((key) => key.frame >= sceneEnd ? { ...key, frame: key.frame - duration } : key);
-        object.asset.controllerKeys = object.asset.controllerKeys?.filter(key => key.frame < scene.frame || key.frame >= sceneEnd).map(key => key.frame >= sceneEnd ? { ...key, frame: key.frame - duration } : key);
+          .filter((key) => key.frame < scene.frame || key.frame >= sceneEnd);
+        object.asset.controllerKeys = object.asset.controllerKeys?.filter(key => key.frame < scene.frame || key.frame >= sceneEnd);
         object.sceneNotes = object.sceneNotes
-          .filter((note) => note.frame < scene.frame || note.frame >= sceneEnd)
-          .map((note) => note.frame >= sceneEnd ? { ...note, frame: note.frame - duration } : note);
+          .filter((note) => note.frame < scene.frame || note.frame >= sceneEnd);
+        if (object.kind !== 'camera' && !object.kind.includes('light')) putKey(object, scene.frame, 'visibility', false, 'constant');
       }
       next.comments = next.comments
         .filter((comment) => comment.sceneId !== id && comment.fromSceneId !== id && comment.toSceneId !== id)
+        .filter((comment) => !deletedCameraExclusive || !comment.targetIds.includes(scene.cameraId))
         .filter((comment) => comment.targetIds.every((targetId) => next.objects.some((object) => object.id === targetId)))
-        .map((comment) => comment.startFrame >= sceneEnd
-          ? { ...comment, startFrame: comment.startFrame - duration, endFrame: comment.endFrame - duration }
-          : comment.endFrame >= scene.frame
-            ? { ...comment, endFrame: Math.max(comment.startFrame, comment.endFrame - duration) }
-            : comment);
+        .filter((comment) => comment.startFrame < scene.frame || comment.startFrame >= sceneEnd);
       next.directionPlans = next.directionPlans?.filter(plan => plan.sceneId !== id && next.objects.some(o => o.id === plan.objectId));
-      mapDirectionFrames(next, frame => frame >= sceneEnd ? frame - duration : frame);
-      next.settings.frameEnd = Math.max(next.settings.frameStart + 5, next.settings.frameEnd - duration);
       renameScenes(next);
       syncScopedCommentRanges(next);
       commit(next);
@@ -927,6 +921,16 @@ export const useEditor = create<EditorState>((set, get) => {
       const newDuration = Math.max(6, Math.round(requestedDuration));
       const delta = newDuration - oldDuration;
       if (!delta) return;
+      const following = scenes[index + 1];
+      if (!scene.isGap && following?.isGap) {
+        const gapEnd = scenes[index + 2]?.frame ?? next.settings.frameEnd + 1;
+        following.frame = Math.max(scene.frame + 6, Math.min(gapEnd - 6, oldBoundary + delta));
+        if (following.frame === oldBoundary) return;
+        syncScopedCommentRanges(next);
+        commit(next);
+        set({ currentFrame: Math.min(state.currentFrame, following.frame - 1) });
+        return;
+      }
       const newBoundary = oldBoundary + delta;
       if (delta < 0) {
         for (const object of next.objects) object.keyframes = object.keyframes.filter((key) => key.frame < newBoundary || key.frame >= oldBoundary);
@@ -1219,6 +1223,10 @@ export const useEditor = create<EditorState>((set, get) => {
       }
       const next = snapshot(state.project);
       next.objects = next.objects.filter((item) => item.id !== id);
+      if (isVideoFile(object.asset.sourcePath)) {
+        for (const video of next.objects) if (video.id === object.asset.linkedVideoId || (isVideoFile(video.asset.sourcePath) && video.asset.sourcePath === object.asset.sourcePath)) video.asset.audioManaged = true;
+        for (const scene of next.cameraCuts) if (scene.background.kind === 'video' && scene.background.path === object.asset.sourcePath) scene.background.audioManaged = true;
+      }
       next.comments = next.comments.flatMap((comment) => {
         if (!comment.targetIds.includes(id)) return [comment];
         const targetIds = comment.targetIds.filter((targetId) => targetId !== id);

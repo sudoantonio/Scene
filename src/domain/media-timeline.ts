@@ -9,7 +9,7 @@ export function visibilityIntervals(project: AbacoProject, object: SceneObject):
   for (let i = 0; i < boundaries.length - 1; i++) {
     const start = boundaries[i], end = boundaries[i + 1];
     const scene = scenes.filter(s => s.frame <= start).at(-1);
-    if (!evaluateProperty(object, 'visibility', start) || (object.sceneIds.length && (!scene || !object.sceneIds.includes(scene.id)))) continue;
+    if (!scene || scene.isGap || !evaluateProperty(object, 'visibility', start) || (object.sceneIds.length && !object.sceneIds.includes(scene.id))) continue;
     const previous = intervals.at(-1);
     if (previous?.[1] === start) previous[1] = end; else intervals.push([start, end]);
   }
@@ -86,7 +86,7 @@ export function editedCaptions(project: AbacoProject) {
         text: c.text, captionId: c.id, audioObjectId: object.id, audioName: object.name,
         sourceStartSeconds: from, sourceEndSeconds: from + localEnd - localStart,
         position: c.position ?? object.audio.captionStyle.position,
-        style: { color: object.audio.captionStyle.color, fontFamily: object.audio.captionStyle.fontFamily, size: object.audio.captionStyle.size },
+        style: { color: object.audio.captionStyle.color, fontFamily: object.audio.captionStyle.fontFamily, size: c.size ?? object.audio.captionStyle.size },
       }];
     })).flat();
   })).sort((a, b) => a.start - b.start);

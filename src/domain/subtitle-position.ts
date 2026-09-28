@@ -2,12 +2,11 @@ import type { SceneObject } from './schema';
 
 export type SubtitlePosition = [number, number];
 export const DEFAULT_SUBTITLE_POSITION: SubtitlePosition = [.5, .95];
-export const MIN_SUBTITLE_SIZE = .65;
-export const MAX_SUBTITLE_SIZE = 1.6;
+export const MIN_SUBTITLE_SIZE = .05;
 const LIMITS = { minX: .05, maxX: .95, minY: .08, maxY: .98 };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export const clampSubtitlePosition = ([x, y]: SubtitlePosition): SubtitlePosition => [clamp(x, LIMITS.minX, LIMITS.maxX), clamp(y, LIMITS.minY, LIMITS.maxY)];
-export const clampSubtitleSize = (size: number) => Number(clamp(size, MIN_SUBTITLE_SIZE, MAX_SUBTITLE_SIZE).toFixed(3));
+export const clampSubtitleSize = (size: number) => Number(Math.max(MIN_SUBTITLE_SIZE, Number.isFinite(size) ? size : MIN_SUBTITLE_SIZE).toFixed(3));
 
 export function moveSubtitlePosition(audio: SceneObject['audio'], captionId: string, requested: SubtitlePosition): SceneObject['audio'] {
   const caption = audio.captions.find((item) => item.id === captionId);

@@ -123,10 +123,11 @@ export async function writeAiBundle(project: AbacoProject, parent: string, proje
   await fs.mkdir(stage);
   try {
     const { project: portable, warnings } = await collectPortableAssets(prepared, stage, projectPath, packBlend);
-    await writeEditedMedia(stage, prepared, editedMedia);
+    await writeEditedMedia(stage, portable, editedMedia);
     await fs.writeFile(path.join(stage, 'CAMERE.json'), JSON.stringify(exportCameraTimeline(prepared), null, 2));
     await fs.writeFile(path.join(stage, 'IMPORTA_CAMERE.py'), IMPORT_CAMERA_SCRIPT);
     const warn = [...(portable.animationHandoff?.issues.filter(i => i.severity !== 'info').map(i => i.message) ?? []), ...warnings];
+    if (editedMedia?.videoAudioClips?.length) warn.push('Le tracce audio dei video sono incluse come sorgenti e intervalli in MEDIA_MONTATI.json (videoAudioClips). Applicare tagli, volume e dissolvenze indicati prima del mix finale; AUDIO_MONTATO.wav contiene solo le altre tracce audio.');
     await fs.writeFile(path.join(stage, 'project.abaco.json'), JSON.stringify(portable, null, 2));
     await fs.writeFile(path.join(stage, 'ISTRUZIONI_ANIMAZIONE.md'), buildAnimationBrief(portable));
     if (portable.animationStandard) await fs.writeFile(path.join(stage, 'STANDARD_ANIMAZIONE_ALLEGATO.md'), portable.animationStandard.content);

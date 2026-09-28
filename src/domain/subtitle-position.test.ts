@@ -13,9 +13,9 @@ const makeAudio = () => {
 
 describe('Subtitle spatial position', () => {
   it('bounds a subtitle handle drag to supported saved sizes', () => {
-    expect(clampSubtitleSize(.2)).toBe(.65);
+    expect(clampSubtitleSize(.02)).toBe(.05);
     expect(clampSubtitleSize(1.23456)).toBe(1.235);
-    expect(clampSubtitleSize(4)).toBe(1.6);
+    expect(clampSubtitleSize(4)).toBe(4);
   });
   it('moves the shared position and all individual overrides together by default', () => {
     const audio = makeAudio();

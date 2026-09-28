@@ -180,6 +180,7 @@
 .app-shell .timeline .scene-clip { top: var(--timeline-clip-inset); bottom: var(--timeline-clip-inset); }
 .app-shell .timeline .scene-image { border-radius: inherit; }
 .app-shell .timeline .scene-clip.active { box-shadow: none !important; filter: brightness(1.08); }
+.app-shell .timeline .scene-clip.scene-gap, .app-shell .timeline .scene-clip.scene-gap .scene-image { background: repeating-linear-gradient(135deg, #2d2d2d, #2d2d2d 8px, #393939 8px, #393939 16px) !important; color: #ddd !important; }
 .app-shell .timeline :is(.scene-clip, .scene-image, .presence-segment, .recorded-motion-segment, .motion-segment) { border: 0 !important; }
 .app-shell .timeline :is(.scene-image, .presence-segment, .recorded-motion-segment, .motion-segment).selected-block {
   box-shadow: inset 0 0 0 2px var(--premiere-accent, #dfab01) !important;
@@ -468,19 +469,19 @@
 .app-shell .live-camera-preview-collapsed { position: absolute; z-index: 5; right: 12px; bottom: 12px; width: 34px; height: 34px; min-height: 0; padding: 0; display: grid; place-items: center; color: var(--ui-text); background: var(--ui-surface); border: 1px solid var(--ui-edge); border-radius: 9px; box-shadow: 0 5px 18px rgba(0,0,0,.18); }
 .app-shell .live-camera-preview-collapsed:hover { background: var(--ui-hover); color: var(--premiere-accent, #dfab01); }
 
-/* In modalità Frame i controlli restano ancorati ai bordi interni. */
+/* In modalità Frame i controlli restano nel pannello, fuori dal video. */
 .app-shell .camera-mode .view-toggle {
-  left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
-  top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+  left: 12px;
+  top: 12px;
 }
 .app-shell .camera-mode .viewport-top-right {
   left: auto;
-  right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
-  top: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+  right: 12px;
+  top: 12px;
 }
 .app-shell .camera-mode .viewport-bottom-left {
-  left: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
-  bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+  left: 12px;
+  bottom: 12px;
 }
 
 /* Define the two work surfaces without making the editor feel boxed-in. */
@@ -722,8 +723,8 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .motion-path-visibility.active { color: var(--ui-text); background: var(--ui-raised); }
 .app-shell .viewport-bottom-right { position: absolute; z-index: 5; right: 12px; bottom: 12px; display: flex; align-items: center; }
 .app-shell .camera-mode .viewport-bottom-right {
-  right: calc(50% - var(--camera-frame-width, 0px) / 2 + 8px);
-  bottom: calc(50% - var(--camera-frame-height, 0px) / 2 + 8px);
+  right: 12px;
+  bottom: 12px;
 }
 
 /* L'input AI può ridursi a un solo pulsante senza coprire la scena. */
@@ -1243,7 +1244,7 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .caption-position-hint { margin: 5px 0 11px; color: var(--ui-muted); font-size: 9px; }
 .app-shell .audio-caption-row.selected .audio-caption-combined { border-color: #d3a736; }
 .app-shell .subtitle-segment.selected-block { box-shadow: inset 0 0 0 1px #f0c547 !important; }
-.app-shell .viewport-subtitle { width: max-content; max-width: var(--camera-frame-width); padding: 0 2%; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; }
+.app-shell .viewport-subtitle { width: max-content; max-width: var(--camera-frame-width); padding: 0; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; overflow-wrap: anywhere; }
 .app-shell .viewport-subtitle.dragging { cursor: grabbing; }
 .app-shell .viewport-subtitle.selected { outline: 1px dashed rgba(240,197,71,.82); outline-offset: 4px; border-radius: 2px; }
 .app-shell .viewport-subtitle-resize-handle { position: absolute; right: -12px; bottom: -12px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid #2b2514; border-radius: 3px; background: #f0c547; box-shadow: 0 0 0 1px rgba(255,255,255,.85); cursor: nwse-resize; pointer-events: auto; touch-action: none; }

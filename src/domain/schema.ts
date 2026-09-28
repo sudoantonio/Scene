@@ -91,8 +91,8 @@ export const SceneObjectSchema = z.object({
     fadeIn: z.number().finite().nonnegative().default(0),
     fadeOut: z.number().finite().nonnegative().default(0),
     waveform: z.array(z.number().finite().min(0).max(1)).max(8192).default([]),
-    captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string(), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).optional() })).default([]),
-    captionStyle: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as [FontId, ...FontId[]]), size: z.number().min(.65).max(1.6), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).default([.5, .95]) }).default({ color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }),
+    captions: z.array(z.object({ id: z.string().uuid(), start: z.number().finite().nonnegative(), end: z.number().finite().nonnegative(), text: z.string(), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).optional(), size: z.number().finite().min(.05).optional() })).default([]),
+    captionStyle: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as [FontId, ...FontId[]]), size: z.number().finite().min(.05), position: z.tuple([z.number().min(.05).max(.95), z.number().min(.08).max(.98)]).default([.5, .95]) }).default({ color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }),
     applyCaptionPositionToAll: z.boolean().default(true),
     showCaptions: z.boolean().default(true),
   }).default({ duration: 0, volume: 1, muted: false, loop: false, trimStart: 0, trimEnd: 0, fadeIn: 0, fadeOut: 0, waveform: [], captions: [], captionStyle: { color: '#ffffff', fontFamily: 'system', size: 1, position: [.5, .95] }, applyCaptionPositionToAll: true, showCaptions: true }),
@@ -163,6 +163,7 @@ export const defaultCameraFraming = (): CameraFraming => ({ target: [0, 0, 1], d
 export const CameraCutSchema = z.object({
   id: z.string().uuid(),
   cameraId: z.string().uuid(),
+  isGap: z.boolean().optional(),
   frame: z.number().int().positive(),
   source: z.enum(['user', 'ai']).default('user'),
   commentIds: z.array(z.string().uuid()).default([]),

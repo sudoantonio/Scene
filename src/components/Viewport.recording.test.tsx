@@ -89,14 +89,16 @@ describe('REC camera dopo il cambio scena nella vista camera', () => {
     fireEvent.pointerDown(subtitle, { button: 0, pointerId: 20, clientX: 100, clientY: 100 });
     fireEvent.pointerUp(window, { pointerId: 20, clientX: 100, clientY: 100 });
     const handle = screen.getByRole('separator', { name: 'Resize subtitle' });
+    const originalFontSize = subtitle.style.fontSize;
     fireEvent.pointerDown(handle, { button: 0, pointerId: 21, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(window, { pointerId: 21, clientX: 170, clientY: 170 });
-    expect(subtitle.style.fontSize).not.toContain('32px');
+    expect(subtitle.style.fontSize).not.toBe(originalFontSize);
     expect(useEditor.getState().project.objects.find((object) => object.id === audio.id)!.audio.captionStyle.size).toBe(1);
     fireEvent.pointerUp(window, { pointerId: 21, clientX: 170, clientY: 170 });
     const saved = useEditor.getState().project.objects.find((object) => object.id === audio.id)!;
-    expect(saved.audio.captionStyle.size).toBeGreaterThan(1);
-    expect(saved.audio.captionStyle.size).toBeLessThanOrEqual(1.6);
+    expect(saved.audio.captionStyle.size).toBe(1);
+    expect(saved.audio.captions[0].size).toBeGreaterThan(1);
+    expect(saved.audio.captions[0].size).toBeLessThan(3);
     width.mockRestore(); height.mockRestore();
   });
 

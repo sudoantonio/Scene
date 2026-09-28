@@ -7,6 +7,7 @@ export type EditedMedia = {
   projectId: string; updatedAt: string;
   audioMix?: Uint8Array;
   audioClips: Array<{ clip: AudioClip; wav: Uint8Array }>;
+  videoAudioClips?: Array<{ clip: AudioClip; objectId: string }>;
   overlays: Array<{ objectId: string; states: Array<{ startFrame: number; endFrameExclusive: number; image: number; text?: string }>; images: string[] }>;
   croppedImages: Array<{ objectId: string; png: string }>;
 };
@@ -23,7 +24,7 @@ const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, re
 
 /** Bake the actual edit. Source project/assets are preserved separately for further editing. */
 export async function prepareEditedMedia(project: AbacoProject, loadAsset: (source: string) => Promise<string>, progress?: (text: string) => void): Promise<EditedMedia> {
-  const result: EditedMedia = { projectId: project.id, updatedAt: project.updatedAt, audioClips: [], overlays: [], croppedImages: [] };
+  const result: EditedMedia = { projectId: project.id, updatedAt: project.updatedAt, audioClips: [], videoAudioClips: [], overlays: [], croppedImages: [] };
   const { frameStart, frameEnd, fps, resolutionX: width, resolutionY: height } = project.settings;
   const sounds = project.objects.filter(o => o.kind === 'audio');
   if (sounds.length) {
@@ -34,6 +35,10 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
     const mix = [new Float32Array(count), new Float32Array(count)];
     for (const object of sounds) {
       if (object.audio.muted || !visibilityIntervals(project, object).length) continue;
+      if (/\.(mp4|m4v|mov|webm)$/i.test(object.asset.sourcePath)) {
+        for (const clip of audioClips(project, object, object.audio.duration)) result.videoAudioClips!.push({ clip, objectId: object.id });
+        continue;
+      }
       const source = await loadAsset(object.asset.sourcePath);
       const bytes = await (await fetch(source)).arrayBuffer();
       const decoded = await decoder.decodeAudioData(bytes);
@@ -105,22 +110,22 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
     progress?.(`Preparazione dei sottotitoli di ${object.name}…`);
     const output: EditedMedia['overlays'][number] = { objectId: object.id, states: [], images: [] };
     const cache = new Map<string, number>();
-    const { color, fontFamily, size } = object.audio.captionStyle;
+    const { color, fontFamily } = object.audio.captionStyle;
     for (let frame = frameStart; frame <= frameEnd; frame++) {
       const sourceTime = audioStateAt(project, object, frame)?.sourceTime;
       if (sourceTime === undefined) continue;
-      const visible = object.audio.captions.filter((caption) => caption.start <= sourceTime && sourceTime < caption.end).map((caption) => ({ text: caption.text, position: caption.position ?? object.audio.captionStyle.position }));
+      const visible = object.audio.captions.filter((caption) => caption.start <= sourceTime && sourceTime < caption.end).map((caption) => ({ text: caption.text, position: caption.position ?? object.audio.captionStyle.position, size: caption.size ?? object.audio.captionStyle.size }));
       if (!visible.length) continue;
       const text = visible.map((caption) => caption.text).join(' ');
       const signature = JSON.stringify(visible);
       let index = cache.get(signature);
       if (index === undefined) {
-        const fontSize = Math.max(16 * frameScale, 32 * frameScale * size);
-        const stripHeight = Math.ceil(fontSize * 3.4);
-        const stripWidth = Math.floor(width * .86);
-        const style = `box-sizing:border-box;width:${stripWidth}px;height:${stripHeight}px;padding:0 2%;display:flex;align-items:flex-end;justify-content:center;text-align:center;color:${color};font:700 ${fontSize}px/1.3 ${fontCss(fontFamily)};text-shadow:0 ${2 * frameScale}px ${4 * frameScale}px #000,0 0 ${12 * frameScale}px #000;font-synthesis:none;white-space:pre-wrap`;
-        const layers = visible.map((caption) => `<foreignObject x="${Math.round(caption.position[0] * width - stripWidth / 2)}" y="${Math.round(caption.position[1] * height - stripHeight)}" width="${stripWidth}" height="${stripHeight}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(style)}">${escapeXml(caption.text)}</div></foreignObject>`).join('');
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${layers}</svg>`;
+        const layers = visible.map((caption) => {
+          const fontSize = 32 * frameScale * caption.size;
+          const style = `position:absolute;box-sizing:border-box;width:max-content;max-width:${width * .86}px;padding:0;transform:translateX(-50%);text-align:center;overflow-wrap:anywhere;color:${color};font:700 ${fontSize}px/1.3 ${fontCss(fontFamily)};text-shadow:0 ${2 * frameScale}px ${4 * frameScale}px #000,0 0 ${12 * frameScale}px #000;font-synthesis:none;white-space:normal;left:${caption.position[0] * width}px;bottom:${(1 - caption.position[1]) * height}px`;
+          return `<div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(style)}">${escapeXml(caption.text)}</div>`;
+        }).join('');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject x="0" y="0" width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;width:100%;height:100%">${layers}</div></foreignObject></svg>`;
         const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
         const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
         const context = canvas.getContext('2d');

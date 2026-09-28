@@ -29,6 +29,11 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
     await save(file, wav(entry.wav, Math.round((entry.clip.endFrameExclusive - entry.clip.startFrame) / project.settings.fps * 48000)));
     clips.push({ ...entry.clip, file, editsAlreadyApplied: true });
   }
+  const videoAudioClips = (media?.videoAudioClips ?? []).map(({ clip, objectId }) => {
+    const object = project.objects.find(o => o.id === safeId(objectId) && o.kind === 'audio');
+    if (!object?.asset.sourcePath) throw new Error('Sorgente della traccia audio video non disponibile.');
+    return { ...clip, source: object.asset.sourcePath, editsAlreadyApplied: false };
+  });
   const cropped = [];
   for (const entry of media?.croppedImages ?? []) {
     const file = await save(`media/immagini/${safeId(entry.objectId)}.png`, png(entry.png));
@@ -58,9 +63,9 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
   if (srt) await save('media/SOTTOTITOLI_MONTATI.srt', srt);
   await save('MEDIA_MONTATI.json', JSON.stringify({
     schemaVersion: 'SceneEditedMediaV1', settings: project.settings,
-    instructions: 'Usa audioMix a partire dal frameStart del progetto, oppure i singoli clip nelle rispettive posizioni, mai entrambi. Tagli, volume, loop e dissolvenze sono già applicati: non applicarli di nuovo. SOTTOTITOLI_TIMELINE.json contiene i testi e i tempi sul video finale, non sulla sorgente audio. media/SOTTOTITOLI_MONTATI.srt usa gli stessi tempi. I PNG in overlays hanno la risoluzione finale e includono già posizione, scala, rotazione, ritaglio e testo, compresi i sottotitoli: usa quei PNG oppure ricrea il testo dai tempi, non entrambi. Sovrapponi i PNG a pieno frame nell’ordine indicato, senza trasformarli di nuovo, solo negli intervalli [startFrame, endFrameExclusive). Le immagini ritagliate sono alternative di lavorazione, non livelli aggiuntivi. project.abaco.json e assets/ conservano gli originali modificabili. TESTI.json conserva anche i testi 3D: quelli richiedono il rendering della scena e non sono livelli 2D.',
-    audioMix: mix, audioClips: clips, croppedImages: cropped, overlays, screenLayers,
+    instructions: 'Usa audioMix a partire dal frameStart del progetto, oppure i singoli audioClips nelle rispettive posizioni, mai entrambi. Nei WAV tagli, volume, loop e dissolvenze sono già applicati. videoAudioClips contiene invece sorgenti video non decodificate: applica sourceStart/sourceEnd, loop, volume, fadeIn/fadeOut e intervalli di frame prima di aggiungerle al mix. SOTTOTITOLI_TIMELINE.json contiene i testi e i tempi sul video finale, non sulla sorgente audio. media/SOTTOTITOLI_MONTATI.srt usa gli stessi tempi. I PNG in overlays hanno la risoluzione finale e includono già posizione, scala, rotazione, ritaglio e testo, compresi i sottotitoli: usa quei PNG oppure ricrea il testo dai tempi, non entrambi. Sovrapponi i PNG a pieno frame nell’ordine indicato, senza trasformarli di nuovo, solo negli intervalli [startFrame, endFrameExclusive). Le immagini ritagliate sono alternative di lavorazione, non livelli aggiuntivi. project.abaco.json e assets/ conservano gli originali modificabili. TESTI.json conserva anche i testi 3D: quelli richiedono il rendering della scena e non sono livelli 2D.',
+    audioMix: mix, audioClips: clips, videoAudioClips, croppedImages: cropped, overlays, screenLayers,
     subtitlesTimeline: 'SOTTOTITOLI_TIMELINE.json',
-    subtitleStyles: project.objects.filter(o => o.kind === 'audio').map(o => ({ objectId: o.id, showCaptions: o.audio.showCaptions, applyCaptionPositionToAll: o.audio.applyCaptionPositionToAll, ...o.audio.captionStyle, positions: o.audio.captions.map(caption => ({ captionId: caption.id, position: caption.position ?? o.audio.captionStyle.position })) })),
+    subtitleStyles: project.objects.filter(o => o.kind === 'audio').map(o => ({ objectId: o.id, showCaptions: o.audio.showCaptions, applyCaptionPositionToAll: o.audio.applyCaptionPositionToAll, ...o.audio.captionStyle, positions: o.audio.captions.map(caption => ({ captionId: caption.id, position: caption.position ?? o.audio.captionStyle.position, size: caption.size ?? o.audio.captionStyle.size })) })),
   }, null, 2));
 }

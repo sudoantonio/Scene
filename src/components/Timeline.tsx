@@ -662,7 +662,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
         const nextFrame = scenes[index + 1]?.frame ?? end + 1;
         const width = Math.max(1.5, ((nextFrame - scene.frame) / Math.max(1, end - start + 1)) * 100);
         const sceneSelection: TrackSelection = { scope: 'scene', sceneId: scene.id, label: scene.name ?? `Scene ${index + 1}` };
-        return <div key={scene.id} className={`scene-clip ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }}>
+        return <div key={scene.id} className={`scene-clip ${scene.isGap ? 'scene-gap' : ''} ${activeSceneIndex === index ? 'active' : ''}`} style={{ left: left(scene.frame), width: `${width}%` }}>
           <button className={`scene-image ${isSelectedTrack(sceneSelection) ? 'selected-block' : ''}`} style={sceneThumbnails[scene.id] ? { backgroundImage: `url(${sceneThumbnails[scene.id]})` } : undefined} title={scene.name ?? `Scene ${index + 1}`} onClick={(event) => { event.stopPropagation(); setFrame(isSelectedTrack(sceneSelection) ? scene.frame : frameInsideBlock(event, scene.frame, nextFrame)); select(undefined); setSelectedTimelineObjectIds(new Set()); setSelectedTrack(sceneSelection); setDeleteTarget({ kind: 'scene', sceneId: scene.id }); setCommentDraft(undefined); }}>
             <span className="clip-title"><span className="clip-title-text">{scene.name ?? `Scene ${index + 1}`}</span>{noteBadge(sceneSelection, 'clip-comment')}</span><small>{((nextFrame - scene.frame) / project.settings.fps).toFixed(1)} s</small>
           </button>
@@ -679,7 +679,7 @@ export default function Timeline({ collapsed, onToggleCollapse }: { collapsed?: 
             const next = scenes[index + 1];
             const clipEnd = next?.frame ?? end + 1;
             const selection: TrackSelection = { scope: 'object', sceneId: scene.id, objectId: object.id, label: `${displayName} · ${scene.name ?? `Scene ${index + 1}`}` };
-            if (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id)) return null;
+            if (scene.isGap || (object.sceneIds.length > 0 && !object.sceneIds.includes(scene.id))) return null;
             const storedRange = objectPresenceRange(object, scene.frame, clipEnd);
             const preview = presencePreview?.objectId === object.id && presencePreview.sceneId === scene.id ? presencePreview : undefined;
             const range = preview ? [preview.start, preview.end] as const : storedRange;

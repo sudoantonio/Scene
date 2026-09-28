@@ -49,7 +49,7 @@ describe('Animation handoff integrity', () => {
     useEditor.getState().resizeScene(p.cameraCuts[0].id,18);
     expect(useEditor.getState().project.directionPlans![0].actions[0].startFrame).toBe(22);
     useEditor.getState().deleteScene(p.cameraCuts[0].id);
-    expect(useEditor.getState().project.directionPlans![0].actions[0].startFrame).toBe(4);
+    expect(useEditor.getState().project.directionPlans![0].actions[0].startFrame).toBe(22);
   });
   it('reports unresolved missing subjects instead of exporting an apparently valid plan',()=>{
     const {p,o}=fixture();p.objects=p.objects.filter(x=>x.id!==o.id);expect(()=>assertAnimationHandoff(prepareAnimationProject(p))).toThrow('oggetto');

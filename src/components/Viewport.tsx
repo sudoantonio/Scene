@@ -1348,7 +1348,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const [draggingObject, setDraggingObject] = useState(false);
   const [subtitleDragPreview, setSubtitleDragPreview] = useState<{ audioId: string; captionId: string; target: SubtitlePosition }>();
   const subtitleDragCleanup = useRef<(() => void) | undefined>(undefined);
-  const [subtitleSizePreview, setSubtitleSizePreview] = useState<{ audioId: string; size: number }>();
+  const [subtitleSizePreview, setSubtitleSizePreview] = useState<{ audioId: string; captionId: string; size: number }>();
   const subtitleSizeCleanup = useRef<(() => void) | undefined>(undefined);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const objectControls = useRef<TransformControlsImpl | null>(null);
@@ -1443,9 +1443,9 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const aspect = settings.resolutionX / settings.resolutionY;
   const cameraFrame = useMemo(() => {
     if (!cameraView || !viewportSize.width || !viewportSize.height) return undefined;
-    const margin = Math.min(48, Math.max(20, Math.min(viewportSize.width, viewportSize.height) * .07));
-    const availableWidth = Math.max(1, viewportSize.width - margin * 2);
-    const availableHeight = Math.max(1, viewportSize.height - margin * 2);
+    const verticalMargin = Math.min(72, Math.max(56, viewportSize.height * .1));
+    const availableWidth = Math.max(1, viewportSize.width - 32);
+    const availableHeight = Math.max(1, viewportSize.height - verticalMargin * 2);
     const width = Math.min(availableWidth, availableHeight * aspect);
     const height = width / aspect;
     return { width, height, heightRatio: height / viewportSize.height };
@@ -1455,7 +1455,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     if (!state) return [];
     const time = state.sourceTime;
     const audio = subtitleDragPreview?.audioId === object.id ? moveSubtitlePosition(object.audio, subtitleDragPreview.captionId, subtitleDragPreview.target) : object.audio;
-    return audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, audioId: object.id, text: caption.text, style: { ...audio.captionStyle, size: subtitleSizePreview?.audioId === object.id ? subtitleSizePreview.size : audio.captionStyle.size }, position: caption.position ?? audio.captionStyle.position ?? DEFAULT_SUBTITLE_POSITION }));
+    return audio.captions.filter((caption) => caption.start <= time && time < caption.end).map((caption) => ({ id: caption.id, audioId: object.id, text: caption.text, style: { ...audio.captionStyle, size: subtitleSizePreview?.audioId === object.id && subtitleSizePreview.captionId === caption.id ? subtitleSizePreview.size : caption.size ?? audio.captionStyle.size }, position: caption.position ?? audio.captionStyle.position ?? DEFAULT_SUBTITLE_POSITION }));
   }) : [];
 
   const beginSubtitleDrag = (event: ReactPointerEvent<HTMLDivElement>, audioId: string, captionId: string, position: SubtitlePosition) => {
@@ -1504,8 +1504,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const move = (pointer: PointerEvent) => {
       if (pointer.pointerId !== pointerId) return;
       const distance = ((pointer.clientX - initialX) + (pointer.clientY - initialY)) / 2;
-      size = clampSubtitleSize(initialSize * (1 + distance / Math.max(80, cameraFrame.width * .3)));
-      setSubtitleSizePreview({ audioId, size });
+      size = clampSubtitleSize(initialSize * Math.exp(distance / Math.max(80, cameraFrame.width * .3)));
+      setSubtitleSizePreview({ audioId, captionId, size });
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', move);
@@ -1518,7 +1518,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       move(pointer); cleanup();
       if (size === initialSize) return;
       const latest = useEditor.getState().project.objects.find((object) => object.id === audioId && object.kind === 'audio');
-      if (latest) updateObject(audioId, { audio: { ...latest.audio, captionStyle: { ...latest.audio.captionStyle, size } } });
+      if (latest) updateObject(audioId, { audio: { ...latest.audio, captions: latest.audio.captions.map((caption) => caption.id === captionId ? { ...caption, size } : caption) } });
     };
     const cancel = () => cleanup();
     subtitleSizeCleanup.current = cleanup;
@@ -1993,13 +1993,13 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       <SelectionAiAnchor />
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
       <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
-      <SceneBackground kind={activeCut?.background?.kind ?? 'none'} path={activeCut?.background?.path ?? ''} />
+      <SceneBackground kind={activeCut?.isGap ? 'none' : activeCut?.background?.kind ?? 'none'} path={activeCut?.isGap ? '' : activeCut?.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
       <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow={!playing} />
-      <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />
+      {!activeCut?.isGap && <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />}
       <Line name="abaco-x-axis" points={[[-20, 0, .012], [20, 0, .012]]} color="#c64d4d" lineWidth={1.2} transparent opacity={.94} />
       <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
-      {objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <SceneItem key={object.id} object={object} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {!activeCut?.isGap && objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <SceneItem key={object.id} object={object} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {!cameraView && activeCamera && <SceneItem object={activeCamera} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
       {showMotionPaths && !playing && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
       {showMotionPaths && !playing && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
@@ -2011,8 +2011,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     </div>
     {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} muted={activeCut.background.audioManaged === true || objects.some((item) => item.kind === 'audio' && item.asset.sourcePath === activeCut.background.path)} />}
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
-    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `clamp(${16 * caption.style.size}px, ${2 * caption.style.size}vw, ${32 * caption.style.size}px)` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
-    {cameraView && cameraFrame && <ScreenSpaceLayers objects={objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
+    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `${32 * cameraFrame.width / 1280 * caption.style.size}px`, textShadow: `0 ${2 * cameraFrame.width / 1280}px ${4 * cameraFrame.width / 1280}px #000, 0 0 ${12 * cameraFrame.width / 1280}px #000` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
+    {cameraView && cameraFrame && <ScreenSpaceLayers objects={activeCut?.isGap ? [] : objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
       return { rotation: camera ? [camera.rotation.x, camera.rotation.y, camera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3 : activeCameraTransform?.rotation ?? [0, 0, 0], position: camera ? camera.position.toArray() as Vec3 : activeCameraTransform?.position ?? [0, 0, 0], verticalFovDegrees: camera instanceof THREE.PerspectiveCamera ? camera.fov : 45 };
@@ -2023,7 +2023,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     }} />}
     {!recordingSession && !playing && <MemoSceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} paused={cameraView} />}
     {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Back to free view" onClick={() => setCameraView(false)}><ArrowLeft size={15} /><span>Back</span></button>}
-    {cameraHintVisible && <div className={`camera-instructions-anchor ${cameraView && cameraFrame ? 'inside-frame' : ''}`} style={cameraView && cameraFrame ? { width: cameraFrame.width, height: cameraFrame.height } : undefined}>
+    {cameraHintVisible && <div className="camera-instructions-anchor">
       <div className="camera-drone-hint" aria-label="Blender-style camera controls">
         <button className="camera-hint-close" title="Hide instructions" aria-label="Hide instructions" onClick={() => setCameraHintVisible(false)}>×</button>
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {selectedTransformable ? `moves ${selectedTransformable.name}` : cameraView ? 'moves the camera' : 'moves the view'}</span>

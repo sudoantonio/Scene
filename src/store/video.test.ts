@@ -96,6 +96,17 @@ describe('video in the editor', () => {
     expect(project.objects.find((object) => object.id === video.id)?.asset.audioManaged).toBe(true);
     expect(project.objects.some((object) => object.id === audio.id)).toBe(false);
   });
+  it('keeps legacy video sources muted when deleting their audio track', () => {
+    useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
+    const project = structuredClone(useEditor.getState().project);
+    const audio = project.objects.find((object) => object.kind === 'audio')!;
+    project.cameraCuts[0].background = { kind: 'video', path: '/tmp/clip.mp4', name: 'Clip', audioManaged: false };
+    useEditor.setState({ project });
+    useEditor.getState().deleteObject(audio.id);
+    const result = useEditor.getState().project;
+    expect(result.objects.some((object) => object.id === audio.id)).toBe(false);
+    expect(result.cameraCuts.find((scene) => scene.background.kind === 'video')?.background.audioManaged).toBe(true);
+  });
 
   it('splits an audio block into independently editable source ranges', () => {
     useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');

@@ -1745,8 +1745,7 @@ input, textarea, select, .prompt-card > textarea, .scene-aspect select { color: 
 .screen-rotate-handle:active { cursor: grabbing; }
 
 /* I controlli restano ai bordi del pannello anche quando il frame camera è stretto. */
-.camera-mode .view-toggle span, .camera-mode .center-shot.center-subject span { display: none; }
-.camera-mode .viewport-bottom-left { flex-direction: column-reverse; align-items: flex-start; }
+.camera-mode .viewport-bottom-left { flex-direction: row; align-items: center; }
 .camera-mode .camera-drone-hint { right: 8px; bottom: 8px; }
 
 /* Palette clip ispirata a Premiere: camera blu, presenza verde, movimento rosso. */
