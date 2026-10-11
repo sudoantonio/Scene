@@ -1,3 +1,4 @@
+import { drawCommittedCapture, registerViewportCapture } from './viewport-capture';
 import AlignmentGuides from './AlignmentGuides';
 import StrokeDrawing, { StrokeVisual } from './StrokeDrawing';
 import { PerformanceProbe, performanceReview } from './PerformanceProbe';
@@ -105,6 +106,14 @@ export function WebGLContextGuard({ primary = false, onLost }: { primary?: boole
   return null;
 }
 
+function PrimaryCaptureCheckpoint({ frame, projectId, active }: { frame: number; projectId: string; active: boolean }) {
+  const advance = useThree(state => state.advance);
+  useLayoutEffect(() => {
+    if (active) return registerViewportCapture({ frame, projectId, draw: () => advance(performance.now(), true) });
+  }, [active, advance, frame, projectId]);
+  return null;
+}
+
 export async function captureContactSheet(frames: number[]): Promise<string | undefined> {
   const editor = useEditor.getState();
   if (useStrokeDrawing.getState().drawing || editor.recordingSession) throw new Error('Finish drawing or recording before requesting an MCP preview.');
@@ -131,6 +140,7 @@ export async function captureContactSheet(frames: number[]): Promise<string | un
         still.getContext('2d')?.drawImage(video, 0, 0, still.width, still.height);
         shots.push({ frame, url: still.toDataURL('image/jpeg', .72) });
       } else if (viewportCanvas) {
+        await drawCommittedCapture(frame, current.id, nextPaint);
         const guide = document.querySelector('.camera-frame-guide')?.getBoundingClientRect();
         const bounds = viewportCanvas.getBoundingClientRect();
         const still = document.createElement('canvas');
@@ -2107,6 +2117,7 @@ function Viewport({ dark = false }: { dark?: boolean }) {
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
       {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject && !drawingMode} target={[0, 0, 1]} />}
+      <PrimaryCaptureCheckpoint frame={frame} projectId={projectId} active={previewCapture && cameraView} />
     </Canvas>}
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
