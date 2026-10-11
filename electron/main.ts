@@ -1,3 +1,7 @@
+import { writeEditedMedia } from './write-edited-media';
+import { callAgentBridge } from './mcp-client';
+import { MotionAdjustmentInputSchema, motionAdjustmentRequest, parseMotionAdjustment } from '../src/domain/motion-adjustment';
+import { JevDrawingInputSchema, jevDrawingRequest, parseJevDrawingResponse } from '../src/domain/jev-drawing';
 import { PACK_BLEND_SCRIPT } from './pack-blend';
 import type { EditedMedia } from '../src/domain/edited-media';
 import { exportCameraTimeline } from './camera-timeline';
@@ -25,8 +29,15 @@ import { BLEND_ASSET_PROXY_SCRIPT } from './blend-asset-proxy';
 import { hydratePortableProject, projectForStorage } from './project-storage';
 import { exportScreenLayers } from './export-screen-layers';
 import { systemFontFile, type FontId } from '../src/domain/text-style';
+import { startAgentBridge, chooseAgentAssets, publicAgentAssets } from './agent-bridge';
+import { AgentCommandSchema } from '../src/domain/agent-commands';
+import { startMcpServer } from './mcp';
+import { chatGptToken, chatGptStatus, connectChatGpt, disconnectChatGpt, setChatGptModel } from './siwc';
 
 type Settings = { apiKey?: string; jevApiKey?: string; reasoning: 'medium' | 'high'; blenderPath?: string };
+// A separate profile prevents test builds from overwriting the installed app's draft.
+app.setName('Scene-0.59.22');
+app.setPath('userData', process.env.SCENE_USER_DATA_DIR ? path.resolve(process.env.SCENE_USER_DATA_DIR) : path.join(app.getPath('appData'), 'Scene-0.59.17'));
 const defaults: Settings = { reasoning: 'medium' };
 let mainWindow: BrowserWindow | null = null;
 let previewWindow: BrowserWindow | null = null;
@@ -345,7 +356,7 @@ async function buildBlendAssetProxy(sourcePath: string, proxyPath: string, force
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1500, height: 960, minWidth: 640, minHeight: 480, backgroundColor: '#101319',
+    width: 1500, height: 960, minWidth: 640, minHeight: 480, backgroundColor: '#090909',
     title: 'Scene',
     titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
@@ -366,9 +377,9 @@ async function createWindow() {
       setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload(); }, 600);
     } else if (mainWindow && !mainWindow.isDestroyed()) {
       void dialog.showMessageBox(mainWindow, {
-        type: 'error', title: 'Scene', message: 'La vista grafica si è chiusa più volte.',
-        detail: 'Puoi riprovare a caricare la bozza locale. Controlla le ultime modifiche dopo il ripristino.',
-        buttons: ['Riprova', 'Chiudi'], defaultId: 0, cancelId: 1,
+        type: 'error', title: 'Scene', message: 'The viewport closed repeatedly.',
+        detail: 'You can retry loading the local draft. Review recent changes after restoring it.',
+        buttons: ['Retry', 'Close'], defaultId: 0, cancelId: 1,
       }).then(({ response }) => {
         if (response === 0 && mainWindow && !mainWindow.isDestroyed()) {
           rendererCrashTimes = [];
@@ -389,7 +400,9 @@ async function createWindow() {
   else await mainWindow.loadURL('http://localhost:5173');
 }
 
-app.whenReady().then(() => {
+const mcpMode = process.argv.includes('--mcp');
+app.whenReady().then(async () => {
+  if (mcpMode) return startMcpServer();
   protocol.handle('scene-media', async (request) => {
     const filePath = videoTokens.get(new URL(request.url).pathname.slice(1));
     if (!filePath) return new Response('Video unavailable', { status: 404 });
@@ -405,7 +418,8 @@ app.whenReady().then(() => {
     return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status: range ? 206 : 200, headers });
   });
   installApplicationMenu();
-  return createWindow();
+  await createWindow();
+  await startAgentBridge(() => mainWindow, importBlendAsset);
 });
 
 ipcMain.handle('app:recovery-status', () => {
@@ -414,7 +428,75 @@ ipcMain.handle('app:recovery-status', () => {
   return recovered;
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (!mainWindow) createWindow(); });
+app.on('activate', () => { if (!mcpMode && !mainWindow) createWindow(); });
+
+ipcMain.handle('agent:chooseAssets', async () => {
+  if (!mainWindow) throw new Error('The Scene window is unavailable.');
+  return chooseAgentAssets(mainWindow, importBlendAsset);
+});
+ipcMain.handle('agent:listAssets', () => publicAgentAssets());
+ipcMain.handle('chatgpt:status', () => chatGptStatus());
+ipcMain.handle('chatgpt:connect', () => connectChatGpt());
+ipcMain.handle('chatgpt:disconnect', () => disconnectChatGpt());
+ipcMain.handle('chatgpt:model', (_event, model: string) => setChatGptModel(model));
+
+async function sceneOpenAiResponse(client: OpenAI, params: Parameters<OpenAI['responses']['create']>[0], subscription: boolean) {
+  if (!subscription) return client.responses.create(params as never) as Promise<import('openai/resources/responses/responses').Response>;
+  const stream = await client.responses.create({ ...params, store: false, stream: true } as never);
+  let completed: import('openai/resources/responses/responses').Response | undefined;
+  for await (const event of stream as unknown as AsyncIterable<{ type: string; response?: import('openai/resources/responses/responses').Response }>) {
+    if (event.type === 'response.failed') throw new Error(`ChatGPT limit or request unavailable: ${event.response?.error?.message ?? 'unknown error'}`);
+    if (event.type === 'response.incomplete') throw new Error('Incomplete ChatGPT response.');
+    if (event.type === 'response.completed') completed = event.response;
+  }
+  if (!completed) throw new Error('The ChatGPT response was interrupted.');
+  const outputText = completed.output.flatMap((item) => item.type === 'message' ? item.content.filter((part) => part.type === 'output_text').map((part) => part.text) : []).join('');
+  return { ...completed, output_text: outputText };
+}
+
+ipcMain.handle('agent:chat', async (_event, incoming: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; target?: { objectId: string; sceneId: string; frame: number } }) => {
+  const message = incoming.message?.trim();
+  if (!message || message.length > 30000) throw new Error('Enter a request of up to 30,000 characters.');
+  const settings = await readSettings();
+  const subscription = await chatGptToken();
+  if (!subscription && !settings.apiKey) throw new Error('Choose Continue with ChatGPT or configure an OpenAI API key in Settings.');
+  const client = new OpenAI({ apiKey: subscription?.token ?? settings.apiKey! });
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let preview: string | undefined;
+  let previous = '';
+  let reply = '';
+  const history = (incoming.history ?? []).slice(-12).map((item) => `${item.role}: ${item.text}`).join('\n');
+  const instructions = `Sei il regista di animatic di Scene. Crea e correggi il progetto aperto tramite comandi JSON. Se target è presente, modifica l'oggetto con quell'ID nella scena indicata; conserva posizione e dimensione di riferimento. Non creare un nuovo progetto per una modifica locale. Per trasformare un cubo in un cane, usa un modello di cane solo se è tra gli asset autorizzati; altrimenti costruisci un cane stilizzato e modificabile con primitive (corpo, testa, quattro zampe, orecchie, muso, coda), nascondi il cubo originale e spiega il risultato. Non affermare di aver generato un modello realistico se hai usato primitive. Rispondi SOLO con un oggetto JSON: {"commands":[],"previewFrame":null,"done":false,"message":"..."}. Ogni passo può contenere massimo 30 comandi. Comandi disponibili:
+create_project {type,name,fps,width,height}; add_scene {type,name,durationFrames,camera?:{position:[x,y,z],target:[x,y,z],lens?:number},lighting?:{preset,intensity,color}}; update_scene {type,sceneId,name?,durationFrames?,camera?,lighting?}; set_scene_background {type,sceneId,assetId}; add_element {type,sceneId,kind,name,assetId?,text?,color?,screenSpace?,transform?:{position?,rotation?,scale?}}; update_element {type,elementId,name?,text?,color?,visible?,transform?}; animate {type,sceneId,elementId,property,keys:[{offsetFrames,value,interpolation?}]}; set_scene_note {type,sceneId,text}. Tipi elemento: cube,sphere,cylinder,cone,plane,text,image,video,audio,blend_asset,area_light,point_light,sun_light. Proprietà animate: position,rotation,scale,visibility,text,lens. Durate in frame. Gli ID sono UUID restituiti nello stato dopo ogni passo. Per più scene, invia prima create_project e add_scene in un unico passo; poi aggiungi elementi usando gli ID. Usa solo asset autorizzati. I modelli GLB autorizzati si usano come sfondo con set_scene_background; landmarks indica posizioni in coordinate Scene, utili per mirare la camera a lavagna o TV. Scrivi spiegazioni sulla lavagna con elementi text 3D posizionati davanti alla sua superficie. Se l'utente fornisce video, mostra il video sulla TV solo dopo aver verificato asset e posizione. Inserisci il copione nelle note delle scene. Produci movimenti visibili e inquadrature chiare. Dopo aver creato elementi chiedi previewFrame e usa l'immagine ricevuta per correggere se necessario. Segna done:true soltanto dopo anteprima e correzioni. Mantieni concise le risposte. Non inserire spiegazioni fuori dal JSON.`;
+  for (let step = 0; step < 8; step += 1) {
+    const state = await callAgentBridge('status');
+    const assets = await callAgentBridge('assets.list');
+    const current = state as { selection?: { id: string }; currentSceneId?: string; revision: number };
+    if (incoming.target && (current.selection?.id !== incoming.target.objectId || current.currentSceneId !== incoming.target.sceneId)) throw new Error('The selection or scene changed. Select the object again and retry.');
+    const content: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify({ request: message, history, target: incoming.target, state, assets, previous, step, hasPreview: Boolean(preview) }) }];
+    if (preview) content.push({ type: 'input_image', image_url: preview, detail: 'low' });
+    const response = await sceneOpenAiResponse(client, { model: subscription?.model ?? 'gpt-6-astra', reasoning: { effort: settings.reasoning }, store: false, instructions, input: [{ role: 'user', content }] as never, text: { format: { type: 'json_object' } } as never }, Boolean(subscription));
+    inputTokens += response.usage?.input_tokens ?? 0;
+    outputTokens += response.usage?.output_tokens ?? 0;
+    if (!response.output_text) throw new Error('The AI returned no usable commands.');
+    const action = JSON.parse(response.output_text) as { commands?: unknown[]; previewFrame?: number | null; done?: boolean; message?: string };
+    const commands = (action.commands ?? []).map((command) => AgentCommandSchema.parse(command));
+    if (commands.length > 30) throw new Error('The AI requested too many commands in one step.');
+    if (commands.length) {
+      const revision = (state as { revision: number }).revision;
+      await callAgentBridge('apply', { expectedRevision: revision, commands });
+    }
+    if (action.previewFrame) {
+      const result = await callAgentBridge('preview', { frame: action.previewFrame }) as { image: string };
+      preview = result.image;
+    }
+    previous = JSON.stringify({ response: action, applied: commands.length });
+    reply = action.message ?? reply;
+    if (action.done && preview) return { text: reply || 'Animatic created. You can adjust it with another message.', inputTokens, outputTokens, steps: step + 1, preview };
+  }
+  return { text: `${reply || 'Ho applicato le modifiche.'} The step limit was reached; you can request an adjustment.`, inputTokens, outputTokens, steps: 8, preview };
+});
 
 ipcMain.on('preview:project', (_event, payload: PreviewState) => {
   const parsed = ProjectSchema.safeParse(payload?.project);
@@ -463,15 +545,28 @@ ipcMain.handle('project:save', async (_event, payload: { project: AbacoProject; 
 });
 
 ipcMain.handle('project:exportAiFolder', async (_event, payload: { project: AbacoProject; projectPath?: string; editedMedia?: EditedMedia }) => {
-  const selected = await dialog.showOpenDialog(mainWindow!, { title: 'Esporta cartella per l’AI', properties: ['openDirectory', 'createDirectory'], defaultPath: payload.projectPath ? path.dirname(payload.projectPath) : app.getPath('documents') });
+  const selected = await dialog.showOpenDialog(mainWindow!, { title: 'Export folder for AI', properties: ['openDirectory', 'createDirectory'], defaultPath: payload.projectPath ? path.dirname(payload.projectPath) : app.getPath('documents') });
   if (selected.canceled || !selected.filePaths[0]) return null;
   const packBlend = async (source: string, destination: string) => {
     const { command, prefix } = await blenderCommand([path.dirname(source), path.dirname(destination)]);
     const output = await runProcess(command, [...prefix, '--background', '--factory-startup', '--disable-autoexec', '--python-exit-code', '1', '--python-expr', PACK_BLEND_SCRIPT, '--', source, destination], path.dirname(destination));
-    if (!output.includes('SCENE_ASSET_PACKED')) throw new Error('Blender non ha verificato le risorse del modello. Controlla il percorso in File → Settings.');
+    if (!output.includes('SCENE_ASSET_PACKED')) throw new Error('Blender did not verify the model resources. Check its path in File → Settings.');
   };
   const result = await writeAiBundle(ProjectSchema.parse(payload.project), selected.filePaths[0], payload.projectPath, packBlend, payload.editedMedia);
   shell.showItemInFolder(path.join(result.directory, 'LEGGIMI.md'));
+  return result;
+});
+
+ipcMain.handle('project:exportPortableFolder', async (_event, payload: { project: AbacoProject; projectPath?: string; editedMedia?: EditedMedia; outputDirectory?: string }) => {
+  const selected = payload.outputDirectory ? { canceled: false, filePaths: [path.resolve(payload.outputDirectory)] } : await dialog.showOpenDialog(mainWindow!, { title: 'Export folder for AI', properties: ['openDirectory', 'createDirectory'], defaultPath: payload.projectPath ? path.dirname(payload.projectPath) : app.getPath('documents') });
+  if (selected.canceled || !selected.filePaths[0]) return null;
+  const packBlend = async (source: string, destination: string) => {
+    const { command, prefix } = await blenderCommand([path.dirname(source), path.dirname(destination)]);
+    const output = await runProcess(command, [...prefix, '--background', '--factory-startup', '--disable-autoexec', '--python-exit-code', '1', '--python-expr', PACK_BLEND_SCRIPT, '--', source, destination], path.dirname(destination));
+    if (!output.includes('SCENE_ASSET_PACKED')) throw new Error('Blender did not verify the model resources. Check its path in File → Settings.');
+  };
+  const result = await writeAiBundle(ProjectSchema.parse(payload.project), selected.filePaths[0], payload.projectPath, packBlend, payload.editedMedia);
+  if (!payload.outputDirectory) shell.showItemInFolder(path.join(result.directory, 'LEGGIMI.md'));
   return result;
 });
 
@@ -690,21 +785,52 @@ ipcMain.handle('ai:generate', async (_event, payload: { project: AbacoProject; c
     return { schemaVersion: 'BlenderPlanV1', summary: 'Current scene export without Astra instructions.', assumptions: [], warnings: ['No pending comments: the existing scene, camera, and animations were preserved.'], operations: [] };
   }
   const settings = await readSettings();
-  if (!settings.apiKey) throw new Error('Configure the OpenAI API key in Settings first.');
-  const client = new OpenAI({ apiKey: settings.apiKey });
+  const subscription = await chatGptToken();
+  if (!subscription && !settings.apiKey) throw new Error('Use Continue with ChatGPT or configure an OpenAI API key in Settings.');
+  const client = new OpenAI({ apiKey: subscription?.token ?? settings.apiKey! });
   const content: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify(compactProject(project)) }];
   if (payload.contactSheet?.startsWith('data:image/')) content.push({ type: 'input_image', image_url: payload.contactSheet, detail: 'low' });
-  const response = await client.responses.create({
-    model: 'gpt-6-astra', reasoning: { effort: settings.reasoning }, store: false,
+  const response = await sceneOpenAiResponse(client, {
+    model: subscription?.model ?? 'gpt-6-astra', reasoning: { effort: settings.reasoning }, store: false,
     instructions: ASTRA_INSTRUCTIONS,
     input: [{ role: 'user', content }] as never,
     text: { format: { type: 'json_schema', name: 'blender_plan_v1', strict: true, schema: blenderPlanJsonSchema } } as never,
-  });
+  }, Boolean(subscription));
   if (!response.output_text) throw new Error('Astra did not return a usable plan.');
   const plan = BlenderPlanSchema.parse(JSON.parse(response.output_text));
   const errors = validatePlan(project, plan);
   if (errors.length) throw new Error(`The plan was rejected:\n${errors.join('\n')}`);
   return plan;
+});
+
+const drawingRequestsInFlight = new Set<number>();
+ipcMain.handle('jev:drawing', async (event, incoming: unknown) => {
+  const input = JevDrawingInputSchema.parse(incoming);
+  const senderId = event.sender.id;
+  if (drawingRequestsInFlight.has(senderId)) throw new Error('Jev is still completing the previous request.');
+  drawingRequestsInFlight.add(senderId);
+  try {
+    const settings = await readSettings();
+    if (!settings.jevApiKey) throw new Error('Configure the TypeSafe/Jev API key in Settings.');
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST', headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(jevDrawingRequest(input)), signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Jev service unavailable (${response.status}).`);
+    return parseJevDrawingResponse(await response.json());
+  } finally { drawingRequestsInFlight.delete(senderId); }
+});
+
+ipcMain.handle('jev:adjust-motion', async (_event, incoming: unknown) => {
+  const input = MotionAdjustmentInputSchema.parse(incoming);
+  const settings = await readSettings();
+  if (!settings.jevApiKey) throw new Error('Configure the TypeSafe/Jev API key in Settings.');
+  const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+    method: 'POST', headers: { Authorization: `Bearer ${settings.jevApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(motionAdjustmentRequest(input)), signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`Jev adjustment unavailable (${response.status}).`);
+  return parseMotionAdjustment(await response.json(), input);
 });
 
 ipcMain.handle('jev:action', async (event, incoming: unknown) => {
@@ -764,7 +890,7 @@ ipcMain.handle('jev:action', async (event, incoming: unknown) => {
   return { ...compiled, performance: { engine, totalMs: Date.now() - startedAt, decisionMs, modelLoadMs, warm: engine === 'jev' || wasWarm } };
 });
 
-ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string }) => {
+ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject; plan: BlenderPlan; projectPath: string; editedMedia?: EditedMedia }) => {
   const project = ProjectSchema.parse(prepareAnimationProject(payload.project));
   assertAnimationHandoff(project);
   const plan = BlenderPlanSchema.parse(payload.plan);
@@ -787,7 +913,9 @@ ipcMain.handle('blender:build', async (_event, payload: { project: AbacoProject;
     const blendPath = path.join(tempDir, `scene_${version}.blend`);
     const audioPath = path.join(tempDir, `audio_${version}.wav`);
     await fs.writeFile(projectBundlePath, JSON.stringify(portableProject, null, 2));
-    await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project), cameraTimeline: exportCameraTimeline(project) }, null, 2));
+    const edited = payload.editedMedia ? await writeEditedMedia(tempDir, project, payload.editedMedia) : undefined;
+    const bakedAudio = edited ? { clips: edited.audioClips.map(clip => ({ file: clip.file, startFrame: clip.startFrame })) } : undefined;
+    await fs.writeFile(inputPath, JSON.stringify({ ...portableProject, screenLayers: exportScreenLayers(project), cameraTimeline: exportCameraTimeline(project), bakedAudio }, null, 2));
     await fs.writeFile(path.join(tempDir, 'ISTRUZIONI_ANIMAZIONE.md'), buildAnimationBrief(portableProject));
     await fs.writeFile(path.join(tempDir, 'CONTROLLI_CONSEGNA.json'), JSON.stringify(portableProject.animationHandoff, null, 2));
     if (portableProject.animationStandard) await fs.writeFile(path.join(tempDir, 'STANDARD_ANIMAZIONE_ALLEGATO.md'), portableProject.animationStandard.content);

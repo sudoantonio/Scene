@@ -1,0 +1,1328 @@
+{
+  "schemaVersion": "AbacoSceneV1",
+  "id": "38666baa-fb64-48e0-824c-324cb5b39af2",
+  "name": "Anteprima · Disegno e montaggio",
+  "createdAt": "2026-10-10T19:21:14.298Z",
+  "updatedAt": "2026-10-11T09:10:34.806Z",
+  "settings": {
+    "fps": 24,
+    "frameStart": 1,
+    "frameEnd": 96,
+    "resolutionX": 1920,
+    "resolutionY": 1080,
+    "units": "meters"
+  },
+  "animationStandard": {
+    "name": "STANDARD_ANIMAZIONE_GENERALE.md",
+    "content": "# Abc — Standard generale di animazione\n\nLinee guida per creare scene e recitazioni coerenti, espressive e leggibili in Blender a partire da descrizioni semplici, un personaggio e, quando disponibile, un animatic o un file di scena.\n\n**Indirizzo stilistico predefinito: cartoon caricaturale ed esagerato, con movimenti rapidi, pose marcate e corpo elastico.** Il riferimento approvato dall’utente è la versione `Abaco_Vlog_AI_Cartoon` del 15 settembre 2026. Il riferimento stabilisce il carattere della recitazione, non obbliga a riutilizzare le stesse pose, gli stessi eventi o gli stessi valori numerici in ogni scena. Le indicazioni qui riportate restano applicabili anche quando quel file non è disponibile.\n\nL’AI deve sviluppare autonomamente la realizzazione dell’azione: l’utente non deve specificare ogni passo, posa, contatto o intervallo temporale. Questo standard integra le indicazioni della scena; le richieste esplicite dell’utente hanno precedenza.\n\nBase dei riferimenti temporali: 24 fps. Se il progetto o l’utente specifica un’altra frequenza, rispettarla e convertire i riferimenti in modo da preservare la durata in secondi.\n\nI valori temporali sono punti di partenza da verificare sul risultato. La qualità finale dipende dalla coerenza fra intenzione, movimento, inquadratura e ritmo; nessuna tabella sostituisce la valutazione visiva.\n\n## 0. Interpretare frasi semplici e risolvere i dubbi\n\n### Compito dell’AI\n\nTrasformare ogni frase di regia in una breve sequenza di comportamenti osservabili, usando contesto, stato precedente del personaggio, geometria, rig e inquadratura. Scegliere autonomamente pose, traiettorie, appoggi, sguardo, raccordi e tempi intermedi. Non chiedere all’utente di compilare una scheda tecnica per ogni scena.\n\nPrima di animare, ricavare per ciascuna azione:\n\n- stimolo, intenzione, bersaglio ed eventuale cambiamento emotivo;\n- stato iniziale e risultato finale richiesto;\n- parti del corpo e oggetti coinvolti, compresi i contatti;\n- momenti necessari a rendere comprensibile l’azione e relativa distribuzione del tempo;\n- vincoli espliciti, dati indicativi e decisioni da prendere autonomamente.\n\nQuesto piano serve al lavoro dell’AI: dopo il confronto iniziale obbligatorio sulla costruzione della scena non richiede un’approvazione preventiva per ogni posa. Comunicare all’utente soltanto le interpretazioni rilevanti, le discrepanze e le domande necessarie. Non inventare eventi, oggetti narrativi, dialoghi o gag che cambino il significato della richiesta.\n\n### Valori predefiniti e priorità\n\nIn assenza di indicazioni diverse, applicare questi criteri:\n\n| Aspetto | Regola predefinita |\n|---|---|\n| Personaggio | Conservare identità, proporzioni di riferimento, caratteristiche e controlli dell’allegato; ammettere deformazioni espressive temporanee compatibili con il disegno |\n| Regia | Preservare significato, ordine delle azioni e risultato narrativo |\n| Tempi del progetto | Conservare fps, durata e confini delle scene; distribuire al loro interno gesti e pause |\n| Punti di movimento | Usarli come guida per percorso e composizione, senza considerarli automaticamente una camminata finita |\n| Contatti | Mantenere appoggi e prese coerenti nello spazio finale della scena |\n| Recitazione | Usare una recitazione cartoon caricaturale ed esagerata: gesti rapidi, silhouette forti, contrasti emotivi ampi e tenute leggibili. Adottare un registro diverso quando esplicitamente richiesto dalla regia o dall’utente |\n| Camera | Conservare tipo di inquadratura e funzione narrativa; ammettere piccoli adattamenti non vincolati per la leggibilità |\n| Camera statica | Tenerla ferma durante l’azione; un’eventuale correzione di impostazione non autorizza un movimento camera |\n| Render | Usare un render semplice e stilizzato: materiali opachi, illuminazione morbida, fondale essenziale e contorni leggibili. Evitare iperrealismo, microtexture e dettagli che distraggono dalla recitazione, salvo richiesta esplicita |\n\nUn valore numerico non è necessariamente un vincolo artistico, ma non va neppure ignorato: capire cosa rappresenta. Un keyframe di posizione non definisce da solo appoggi, gesto o intenzione. Un salto fra snapshot non autorizza un teletrasporto del personaggio.\n\nFra aspetti non esplicitamente vincolati, privilegiare intenzione e contatti, poi silhouette e leggibilità, quindi fedeltà alle coordinate indicative. Adattare il minimo necessario e annotare le modifiche rilevanti. Non cambiare silenziosamente durata, tagli, destinazione narrativa o inquadrature sostanziali per risolvere un problema tecnico.\n\n### Carattere della recitazione cartoon\n\nCostruire il movimento a partire da pose fortemente riconoscibili. Amplificare intenzionalmente inclinazioni del corpo, apertura e chiusura degli arti, asimmetrie, sguardo e sopracciglia. La differenza fra entusiasmo, sorpresa e fastidio deve leggersi subito, anche con il personaggio piccolo nell’inquadratura.\n\nUsare anticipazioni brevi, scatti rapidi, superamento della posa quando motivato, assestamenti elastici e pause nette. Il contrasto fra movimento e immobilità è parte dello stile. Evitare transizioni tutte ugualmente morbide, movimenti uniformemente lenti e agitazione continua.\n\nL’esagerazione amplifica l’azione descritta. Un sobbalzo alla scoperta di qualcosa, una compressione prima di partire o un cedimento vistoso nel fastidio sono interpretazioni ammesse quando coerenti con la situazione. Non trasformarli in automatismi per ogni emozione e non aggiungere gag, oggetti o azioni che cambiano la narrazione.\n\nUna posa neutra o i materiali realistici presenti nel modello allegato non sostituiscono questo indirizzo stilistico. Conservare l’identità del personaggio e svilupparne la recitazione secondo il registro cartoon approvato.\n\n### Confronto iniziale obbligatorio sulla costruzione della scena\n\n**Prima di costruire la scena o creare l’animazione, l’AI deve aprire un confronto con l’utente: presentare una breve lettura della scena, formulare da una a tre domande concrete sulla sua costruzione e attendere le risposte.** Questa fase è parte della regia richiesta dall’utente, anche quando il materiale sembra sufficiente per produrre una prima versione. Non saltarla perché esistono valori predefiniti, preset, coordinate o un riferimento stilistico già approvato.\n\nLe domande devono riguardare scelte che cambiano ciò che si vede, selezionando quelle ancora aperte nel progetto:\n\n- ambiente e allestimento: spazio vuoto o ambientato, elementi di sfondo, piano d’appoggio e oggetti necessari;\n- sviluppo dell’azione: causa della reazione, ordine degli eventi, bersaglio dello sguardo, rapporto fra personaggio e oggetti, esito finale;\n- messa in scena: relazione fra personaggio e camera, composizione, elementi da tenere visibili e libertà di adattare le posizioni indicative del proxy;\n- interpretazione della recitazione: qualità o intensità specifica di un momento, se non già determinata dalle indicazioni dell’utente.\n\nLeggere prima JSON, documenti, asset e conversazione. Non chiedere informazioni già fornite né richiedere nuovamente il registro cartoon approvato. Quando tutti i dati necessari sono espliciti, usare il confronto per una scelta registica ancora discrezionale: presentare due interpretazioni compatibili con il materiale e chiedere quale adottare, senza contraddire i vincoli. Non inventare una carenza tecnica per giustificare una domanda.\n\nPer ogni domanda, indicare la scena interessata, il punto da decidere e l’effetto visibile; proporre quando utile due o tre alternative, con una scelta consigliata. Raggruppare le domande in un solo messaggio e lasciare la possibilità di rispondere liberamente. Non chiedere una scheda tecnica completa, valori dei controller o conferme per ogni posa.\n\n**Dopo le domande, attendere una risposta esplicita prima di eseguire la costruzione e l’animazione dipendenti dalle scelte. Il silenzio, il tempo trascorso e un’opzione preselezionata non valgono come risposta.** Nel frattempo sono consentite lettura degli allegati, ispezione del rig e verifiche di fattibilità che non impegnino le scelte registiche. Non avviare un render di produzione come sostituto del confronto.\n\nUna risposta come «scegli tu» delega le decisioni richieste: dichiarare brevemente le scelte e procedere. Se l’utente ha già risposto nella conversazione alle domande di costruzione di questa stessa scena, non ripeterle. Un’istruzione esplicita dell’utente a procedere senza domande ha precedenza su questo standard. Non riaprire il confronto per semplici revisioni di una scena già definita, salvo nuovi dubbi sostanziali.\n\n### Chiarimenti successivi indispensabili\n\nDurante il lavoro porre ulteriori domande soltanto se:\n\n- due indicazioni obbligatorie sono incompatibili;\n- non è chiaro chi agisce, su cosa o verso quale bersaglio, e le alternative producono azioni diverse;\n- un’azione non entra nel tempo o nello spazio disponibile senza cambiare un vincolo;\n- il rig o gli allegati non consentono un’azione essenziale e occorre scegliere un’alternativa.\n\nAttendere la risposta per la parte interessata, proseguendo con le parti indipendenti. Dopo il confronto iniziale scegliere autonomamente piede di partenza, piccoli sfasamenti, pose intermedie, archi e valori dei controlli; verificarli senza richiedere approvazioni ripetute.\n\n### Preset e documento allegato al progetto\n\nI preset di emozione, azione e camera contengono descrizioni esecutive riutilizzabili; non sostituiscono la narrazione della scena e non autorizzano a riempire una descrizione narrativa vuota. Leggere sia il nome visibile sia il prompt completo incluso nell’export. Preset multipli possono combinare emozione e movimento; se descrivono stati incompatibili nello stesso intervallo e il testo non ne chiarisce la successione, risolvere il punto nel confronto iniziale.\n\nLo standard incorporato nel progetto è una copia del documento allegato al momento del salvataggio: usarne il contenuto, senza supporre che un percorso locale contenga sempre una versione accessibile o identica. Le richieste esplicite dell’utente e le risposte di regia hanno precedenza sui preset e sulle indicazioni generali di questo documento.\n\n## 1. Partire dall’intenzione\n\nPrima di animare, tradurre ogni indicazione di regia in un comportamento concreto. Definire:\n\n- **Stimolo:** che cosa vede, sente o comprende il personaggio.\n- **Intenzione:** che cosa cerca di fare in risposta.\n- **Emozione:** che cosa prova e con quale intensità.\n- **Cambiamento:** quale differenza deve essere leggibile fra la posa iniziale e quella finale.\n- **Bersaglio:** verso quale punto, oggetto o interlocutore orienta attenzione e azione.\n\nPreferire azioni osservabili: «cerca di capire», «si trattiene», «si protegge», «si avvicina per osservare», «riconosce qualcosa che desidera».\n\nUn’emozione non identifica automaticamente un gesto. La felicità non impone un saluto o un salto; la confusione non impone continue occhiate alternate. Scegliere il comportamento in base alla situazione.\n\nQuando coesistono due emozioni, stabilire quale guida il movimento. Per esempio, nella curiosità accompagnata da confusione il personaggio può protendersi per osservare e interrompersi con una piccola inclinazione interrogativa.\n\n## 2. Esprimere le emozioni con tutto il corpo\n\nLa recitazione deve essere sostenuta da postura, distribuzione del peso, direzione del busto, apertura delle braccia e qualità degli appoggi. Il viso completa e precisa questa lettura.\n\nPer ogni passaggio costruire una posa dominante riconoscibile e caricata. Usare contrasti ampi fra compressione e distensione, apertura e chiusura, avanzamento e arretramento, simmetria e asimmetria. Cercare una silhouette chiara prima di aggiungere dettagli facciali.\n\n| Intenzione emotiva | Possibile comportamento del corpo | Qualità del movimento | Evitare |\n|---|---|---|---|\n| Curiosità | Busto proteso verso lo stimolo, inclinazione evidente, sopracciglia asimmetriche | Sguardo rapido, avvicinamento deciso, pausa di osservazione | Oscillazioni e sguardi senza un bersaglio |\n| Confusione | Inclinazione interrogativa marcata, occhi o sopracciglia asimmetrici, gesto aperto o interrotto | Tentativo rapido, arresto netto, tenuta interrogativa | Ripetere sempre la stessa posa di domanda |\n| Nervosismo | Postura raccolta, tensione nelle braccia, peso poco risolto | Brevi impulsi separati da trattenimenti | Tremore continuo e movimenti casuali |\n| Rabbia | Postura più netta, tensione concentrata, appoggi decisi | Accenti rapidi e arresti leggibili | Agitare ogni parte del corpo contemporaneamente |\n| Sorpresa o paura | Occhi molto più grandi, corpo che si allunga o arretra, braccia che si aprono e poi si raccolgono; possibile sobbalzo motivato | Scatto in pochi fotogrammi, breve sospensione, assorbimento elastico e posa di reazione | Una lunga preparazione che anticipa la scoperta; salto automatico a ogni sorpresa |\n| Fastidio | Corpo abbassato o compresso, spalle cedute, mani molli, occhi stretti, sopracciglia inclinate e posa asimmetrica | Cambio netto dalla reazione precedente, caduta rapida delle braccia, tenuta secca; eventuale gesto liquidatorio motivato | Limitarsi a cambiare il viso lasciando il corpo neutro |\n| Sollievo | Rilascio della parte alta del corpo, apertura delle mani, peso che si assesta | Distensione progressiva e decelerazione morbida | Applicare lo stesso scatto della rabbia |\n| Gioia o entusiasmo | Busto disteso, posa aperta e inclinata, gesto ampio e slancio verso lo stimolo | Preparazione breve, azione rapida, superamento della posa e assestamento elastico | Usare automaticamente salti, saluti o rimbalzi |\n\nQuesti comportamenti sono possibilità di regia, non combinazioni obbligatorie. L’ampiezza deve restare compatibile con il disegno e con l’inquadratura.\n\n## 3. Costruire il ritmo\n\nOrganizzare il movimento in momenti leggibili: percezione, decisione, azione, assestamento e tenuta. Includere una preparazione solo quando sostiene l’intenzione.\n\nPer un gesto cartoon breve e deciso, usare come riferimento:\n\n| Fase | Riferimento a 24 fps | Criterio |\n|---|---:|---|\n| Spostamento intenzionale degli occhi | 1–2 fotogrammi | Arrivare su un bersaglio preciso e lasciare il tempo di leggerlo |\n| Preparazione | 2–3 fotogrammi | Accumulare energia o chiarire la direzione; può essere assente |\n| Gesto principale | 3–5 fotogrammi | Ottenere uno scatto leggibile fra pose ben distinte, conservando il percorso e i contatti |\n| Superamento della posa (overshoot) | 1–2 fotogrammi, quando utile | Superare intenzionalmente la posa in funzione dell’energia; evitare un rimbalzo obbligatorio |\n| Assestamento | 2–4 fotogrammi | Recuperare con elasticità e fermarsi sulla posa leggibile |\n| Sfasamento fra parti | 1–2 fotogrammi | Organizzare la successione quando utile |\n| Tenuta di una posa principale | Indicativamente 12–24 fotogrammi; circa 18 come punto di partenza | Separare gli scatti e consentire la lettura. Le sospensioni di passaggio possono durare meno; le pause narrative possono durare di più |\n\nQuesti intervalli non si sommano automaticamente: alcune fasi possono sovrapporsi. Uno spostamento cauto, un’esitazione o un rilascio di tensione possono richiedere tempi più lunghi. Un riflesso di sorpresa può partire senza preparazione.\n\nQuando si annotano keyframe iniziale e finale, indicare gli estremi esplicitamente: il movimento da frame 10 a frame 15 si sviluppa su cinque intervalli temporali. Evitare ambiguità fra durata del movimento e numero di fotogrammi inclusi.\n\nConservare fps, durata totale e confini delle scene, salvo richiesta diversa. Per rendere i movimenti più rapidi, concentrare il gesto in meno fotogrammi e assegnare il tempo recuperato a preparazione, assestamento o tenute motivate. Il personaggio può completare prima uno spostamento e usare il tempo residuo per leggere o preparare la posa successiva, se l’istante di arrivo non è un vincolo esplicito.\n\nLa velocità può cambiare per sostenere l’esagerazione stilistica anche quando l’intenzione narrativa resta la stessa. Evitare di accelerare uniformemente l’intero filmato o di aumentare gli fps: il risultato deve derivare da una nuova distribuzione di gesti e pause. Se invece occorre far entrare più azioni nello stesso intervallo, ridurre prima le pause non essenziali senza perdere la leggibilità.\n\n### Scegliere i valori in funzione della scena\n\nLe durate dei gesti, l’ampiezza dei movimenti e la quantità di assestamento devono derivare da intenzione, distanza, proporzioni, rig, oggetti e dimensione del personaggio nell’immagine. Non usare gli stessi valori per tutte le scene né presentare valori non verificati come ottimali.\n\nDistribuire prima gli eventi essenziali nel tempo disponibile. Se la sequenza è troppo affollata, eliminare dettagli secondari e rivedere le pause senza cancellare i momenti necessari alla comprensione. Se ciò non basta, chiedere quale vincolo può essere adattato; non accelerare indistintamente tutte le azioni.\n\n## 4. Coordinare sguardo, corpo e arti\n\nNelle azioni volontarie lo sguardo può precedere l’orientamento del busto; braccia, polsi e dettagli completano il gesto. Nelle reazioni istintive il corpo può partire insieme allo sguardo o anticiparlo.\n\nStabilire una parte che guida ciascuna azione. Le altre devono accompagnarla, contrastarla o stabilizzarla per un motivo preciso.\n\nUsare asimmetrie intenzionali e visibili: mani a quote diverse, aperture dei gomiti contrastanti, inclinazioni del corpo e distribuzione del peso coerenti. Evitare sia la simmetria automatica sia lo sfasamento applicato meccanicamente a ogni controllo.\n\nOrganizzare un accento principale per ogni passaggio narrativo. Un movimento secondario deve sostenerlo e non competere con esso.\n\n## 5. Preservare il personaggio\n\nConservare il disegno, le proporzioni riconoscibili, le gerarchie e i controlli del personaggio fornito. Quando il personaggio allegato ha mani a tre ovali o altri elementi distintivi, conservarli senza sostituirli con forme generiche.\n\nAnimare attraverso i controlli disponibili. Le deformazioni devono essere intenzionali, leggibili e compatibili con il rig. Verificare che contorno, riempimento, attacchi e viso restino coerenti durante tutto il movimento.\n\n### Deformazione elastica e viso esagerato\n\nUsare **squash e stretch**, cioè compressione e allungamento temporanei, per preparazioni, slanci, reazioni e impatti. La compressione può allargare il corpo mentre lo abbassa; lo slancio può restringerlo mentre lo allunga. Mantenere riconoscibili disegno e massa percepita, adattando la deformazione al personaggio. Dopo l’accento recuperare la posa prevista, che può restare caricaturale: non è necessario tornare al neutro.\n\nDeformare il corpo attraverso i suoi controlli, lasciando indipendenti gli appoggi quando devono restare fermi. Non scalare l’intero personaggio in modo da trascinare i piedi o staccare un oggetto impugnato. Far seguire alla deformazione occhi, sopracciglia, attacchi degli arti e punti di contatto delle mani con il viso.\n\nAmplificare apertura degli occhi, forma delle sopracciglia e asimmetrie per rendere netti i cambi emotivi. Occhi molto grandi nella sorpresa e molto stretti nel fastidio sono ammessi se restano leggibili e coerenti con il disegno. Non introdurre caratteristiche assenti dal personaggio, come una bocca quando la sua assenza è essenziale alla scena.\n\nNon trasferire automaticamente percentuali di scala o ampiezze dei cursori dalla scena di riferimento. Scegliere i valori sulle geometrie effettive e controllare le pose estreme in camera. I cursori che devono variare con continuità, come emozioni, sguardo, palpebre e prese, devono restare numerici in virgola mobile (float), con limiti coerenti: evitare assegnazioni intere che quantizzano i valori o azzerano l’intervallo utile.\n\nIn un personaggio planare, controllare le rotazioni rispetto alla camera: il disegno non deve sparire di taglio, mostrare elementi sovrapposti in modo errato o perdere la leggibilità del viso.\n\nNon introdurre trasformazioni globali che alterino lo spazio di valutazione dei driver o dei vincoli. Verificare il personaggio nella sua collocazione finale in scena.\n\n## 6. Controllare peso e appoggi\n\nDurante un appoggio fermo, mantenere stabile il punto di contatto del piede con il suolo. Valutare la geometria visibile nello spazio finale della scena, includendo trasformazioni dei genitori e delle eventuali istanze: la sola immobilità di un controllo locale non dimostra che il piede sia fermo.\n\nPrima di sollevare un piede, rendere credibile il trasferimento del peso sull’appoggio restante. Coordinare ginocchia, attacchi delle gambe e busto; evitare piedi trascinati o arti che si allungano involontariamente.\n\nUna rotazione sul tallone o sulla punta è ammessa quando intenzionale: il contatto attivo deve restare coerente con il gesto.\n\nUsare pieghe delle ginocchia quando servono a caricare, assorbire o esprimere tensione. Non aggiungerle automaticamente a ogni emozione.\n\nSe la regia richiede un salto, oppure un sobbalzo è una lettura cartoon motivata della reazione, distinguere carica quando pertinente, distacco, volo, contatto e assorbimento. Entrambi i piedi devono risultare sollevati durante il volo; il corpo deve recuperare una posa leggibile dopo l’atterraggio. Una reazione improvvisa può partire senza preparazione evidente.\n\nSono ammessi brevi tempi sospesi in aria e assorbimenti esagerati per l’effetto cartoon, purché intenzionali e raccordati. L’esagerazione non autorizza galleggiamenti involontari, piedi che scivolano in appoggio o atterraggi senza contatto col suolo.\n\n### Progettare camminate, avvicinamenti e allontanamenti\n\nUna traslazione interpolata del personaggio non basta a rappresentare una camminata. Prima di animare, confrontare lunghezza del percorso, durata, proporzioni degli arti e intenzione. Ricavare da questi elementi numero dei passi, cadenza, lunghezza delle falcate e tempi di partenza e arresto. Usare unità e scala reali del progetto; evitare un numero fisso di passi per distanze diverse.\n\nPer ogni tratto:\n\n1. Stabilire direzione di movimento, orientamento del corpo e bersaglio dello sguardo. Non ruotare automaticamente tutto il personaggio verso la traiettoria se la regia richiede attenzione altrove.\n2. Preparare l’appoggio di sostegno e trasferire il peso prima del distacco dell’altro piede.\n3. Definire punti di contatto fissi nello spazio finale, alternando sostegno e avanzamento del piede. Durante il passo, usare una traiettoria di sollevamento compatibile con il suolo e la lunghezza della gamba.\n4. Coordinare corpo, ginocchia e braccia con gli appoggi. I movimenti del corpo devono risultare dal passo; evitare un rimbalzo sinusoidale sovrapposto senza rapporto con i contatti.\n5. Costruire partenza, eventuali cambi di ritmo e arresto. Raccordare gli ultimi passi alla posa successiva, completando l’appoggio prima di un gesto che richieda stabilità.\n\nPer camminate cartoon più rapide, ridurre il tempo di avanzamento dei piedi e rendere più energici sollevamento, oscillazione delle braccia, preparazione e arresto. Coordinare la compressione del corpo con i passi e con l’arrivo. Ricalcolare cadenza e falcate per il nuovo tempo disponibile; evitare di velocizzare soltanto la traslazione del corpo. Un arresto può avere un superamento espressivo del busto mentre i piedi restano piantati.\n\nUn’andatura regolare può essere intenzionale: non aggiungere variazioni casuali per renderla meno meccanica. Variare ritmo e ampiezza quando lo richiedono intenzione, accelerazione, arresto, terreno o cambio di attenzione. Anche indietreggiare, girarsi e stringere gli appoggi richiede una sequenza di sostegni credibile.\n\nSe distanza e tempo impongono falcate implausibili, verificare prima scala e interpretazione dei dati. Poi adattare soltanto gli aspetti non vincolati. Se occorre cambiare durata, destinazione o montaggio, chiedere un chiarimento.\n\n### Oggetti, prese, rilasci e cadute\n\nDeducere le interazioni necessarie dalla regia senza richiedere istruzioni su ogni contatto. Per ogni oggetto manipolato distinguere avvicinamento della mano, contatto, presa, trasporto, rilascio, moto libero ed eventuale appoggio finale, includendo soltanto le fasi pertinenti.\n\n- Durante la presa, mantenere coerente il rapporto fra mano e oggetto. Conservare visibili il contatto e le informazioni utili, come testi o simboli, evitando sia mani nascoste sia scritte coperte.\n- Al rilascio, partire dalla posizione e dall’orientamento effettivamente raggiunti. Trasferire in modo coerente il movimento della mano all’oggetto; evitare salti quando cambiano parent, vincoli o sistema di animazione.\n- Nel moto libero, scegliere accelerazione e rotazione in base a forma, materiale, dimensione, altezza e intenzione della scena. Un oggetto leggero può oscillare, un oggetto rigido può cadere più direttamente: non applicare lo stesso moto a tutti gli oggetti.\n- All’impatto, verificare quale parte tocca per prima, come l’oggetto si assesta e se rimane stabile. Oscillazioni, rimbalzi e scivolamenti devono essere motivati, senza rotazioni continue o galleggiamenti involontari.\n- Mantenere coerenti contatti e ombre durante tutta l’interazione.\n\nScegliere liberamente animazione manuale, vincoli o simulazione secondo il risultato necessario. Una simulazione non è una garanzia di leggibilità: verificare sempre la traiettoria finale e, se usata, rendere disponibile la cache necessaria alla consegna.\n\n## 7. Curare traiettorie e interpolazione\n\nControllare il percorso delle mani, dei gomiti e degli altri punti espressivi. Gli archi devono accompagnare il gesto senza produrre compenetrazioni, allungamenti o attraversamenti della sagoma non voluti.\n\nScegliere l’interpolazione in funzione dell’azione. Le curve automatiche sono un punto di partenza: correggere rallentamenti eccessivi, inversioni involontarie, picchi di velocità e derive nelle tenute.\n\nUsare un superamento della posa anche marcato quando sostiene l’energia cartoon, seguito da un recupero breve e leggibile. Stabilire ampiezza e direzione in relazione al gesto, senza applicare la stessa oscillazione a ogni controllo. Una posa trattenuta, un arresto impaurito o un gesto controllato possono richiedere un arrivo netto e una tenuta immediata.\n\nNei passaggi rapidi evitare rallentamenti automatici troppo lunghi che consumano quasi tutto il gesto. Distanziare maggiormente le pose intermedie durante lo scatto e curare separatamente l’arrivo. Le tenute devono mantenere fermi i controlli previsti; usare l’interpolazione costante solo dove uno stacco di posa è intenzionale, senza eliminare gli archi necessari ai contatti.\n\nQuando si riutilizza un movimento stock, identificarne preparazione, azione e assestamento prima di rimapparne il tempo. Non aggiungere un secondo rallentamento a una transizione già interpolata. Se il movimento non è adatto al contesto, scegliere un’altra risorsa o costruire un raccordo nella scena.\n\n## 8. Dare valore alle pause\n\nLa pausa comunica osservazione, decisione, tensione o soddisfazione. Nello stile cartoon la tenuta di una posa caricata rende leggibile lo scatto precedente e prepara quello successivo. Una posa ferma può essere la scelta più efficace; il movimento rapido non richiede agitazione continua.\n\nInserire respiri, battiti di palpebre e piccoli aggiustamenti solo quando rafforzano lo stato del personaggio. Evitare cicli periodici percepibili e oscillazioni globali che muovano gli appoggi.\n\nSe una tenuta appare vuota, verificare prima la chiarezza dell’intenzione e della posa. Aggiungere movimento soltanto se introduce un’informazione utile.\n\n## 9. Raccordare emozioni e inquadrature\n\nFar partire ogni nuova reazione dallo stato raggiunto nella precedente: postura, appoggi, direzione dello sguardo e tensione devono avere continuità.\n\nUn cambiamento emotivo deve avere una causa leggibile. Quando la regia descrive una scoperta o un ripensamento, costruire i passaggi pertinenti fra percezione, tentativo, interruzione, verifica, comprensione e reazione. Non inserire tutte queste fasi automaticamente: una reazione immediata può non richiedere una verifica.\n\nIndividuare il momento in cui il personaggio acquisisce la nuova informazione. Far cambiare insieme, quando motivato, intenzione, postura, sguardo e qualità del movimento; evitare di rappresentare un cambiamento importante soltanto sostituendo un’espressione facciale. Rendere il contrasto leggibile anche alla dimensione finale del personaggio nell’inquadratura.\n\nIl ritorno al neutro è utile per alcune clip riutilizzabili, ma non è obbligatorio nelle scene narrative. Un passaggio diretto fra emozioni richiede un raccordo motivato; evitare azzeramenti o cambi di posa senza preparazione narrativa.\n\nQuando si combinano animazioni, identificare quali controlli modifica ciascuna. Evitare azioni concorrenti sullo stesso controllo, salvo una combinazione progettata e verificata. Assegnare correttamente tutti gli slot necessari.\n\nUsare camera e montaggio per rendere leggibile la recitazione. Un movimento camera non sostituisce il cambiamento emotivo del personaggio. Controllare che il gesto principale sia visibile nell’inquadratura e che eventuali tagli di mani o piedi siano intenzionali.\n\nSe note di regia e keyframe forniti sono in conflitto, rendere esplicita la discrepanza e la scelta adottata. Non dichiarare conformità completa a due indicazioni incompatibili.\n\n## 10. Procedere per verifiche successive\n\n1. **Lettura e fattibilità:** ricavare dalle frasi semplici intenzioni e azioni, distinguere vincoli e dati indicativi, verificare compatibilità di rig, distanze e tempi. Svolgere il confronto iniziale obbligatorio secondo la sezione 0; dopo le risposte chiarire soltanto nuovi dubbi sostanziali.\n2. **Pose principali:** verificare la recitazione con poche pose cartoon marcate, già nella camera prevista. Confrontare preparazione, estremo del gesto e posa di tenuta. Il corpo deve contribuire chiaramente all’emozione anche quando il viso è piccolo.\n3. **Timing:** concentrare gli accenti rapidi e distribuire le tenute, controllando a velocità reale il contrasto fra scatto, assestamento e pausa.\n4. **Raccordi:** costruire traiettorie, trasferimenti di peso e continuità fra le pose.\n5. **Rifinitura:** aggiungere sguardo, mani, dettagli e assestamenti senza indebolire il gesto principale.\n6. **Revisione del movimento:** riprodurre un’anteprima completa alla frequenza prevista, individuare i difetti e fare una seconda passata mirata su ritmo, appoggi, interazioni e cambi emotivi. Se non emergono difetti, non introdurre modifiche inutili.\n7. **Verifica finale:** esportare e controllare il file video effettivamente consegnato. Dopo correzioni che cambiano il movimento, ricontrollare i passaggi modificati e la continuità dell’intera sequenza.\n\nCorreggere prima intenzione, posa e ritmo; rifinire i dettagli dopo che questi aspetti funzionano.\n\n## 11. Criteri di qualità e consegna\n\n### Recitazione\n\n- Ogni passaggio ha un’intenzione comprensibile e un bersaglio coerente.\n- Le emozioni si distinguono nettamente per postura, silhouette, viso e dinamica del corpo.\n- La recitazione è caricaturale ed esagerata secondo il riferimento approvato, salvo indicazione esplicita diversa.\n- Gli scatti rapidi sono separati da tenute leggibili; squash, stretch e overshoot sostengono l’intenzione senza deformazioni accidentali.\n- Il gesto principale è leggibile a velocità reale nell’inquadratura finale.\n- Pause, variazioni di intensità e raccordi hanno una funzione narrativa.\n- Le azioni secondarie non distraggono dal cambiamento principale.\n\n### Integrità tecnica\n\n- Nessun salto involontario di posa, scivolamento degli appoggi o compenetrazione evidente.\n- Sagoma, mani, attacchi e viso conservano le caratteristiche del personaggio.\n- Driver, vincoli e assegnazioni delle animazioni funzionano nell’intera sequenza.\n- Non compaiono curve anomale, trasformazioni inattese o dipendenze mancanti.\n- Eventuali ritorni al neutro sono verificati soltanto dove richiesti.\n\n### Verifica del risultato\n\nGuardare la sequenza completa alla frequenza prevista dal progetto, senza salti di riproduzione. Se il render non è riproducibile fluidamente, preparare un’anteprima più leggera con la stessa durata e tutti i fotogrammi, senza accelerare o saltare il movimento. Ispezionare poi i passaggi rapidi, i contatti e le silhouette fotogramma per fotogramma. Controllare separatamente le azioni del personaggio quando il movimento camera ne rende difficile la valutazione.\n\nVerificare anche il video esportato: durata, risoluzione, frequenza, completezza dei fotogrammi e corrispondenza con i render. Un controllo matematico o la lettura dei metadati non equivalgono a una valutazione visiva della recitazione.\n\nLa verifica visiva di immagini ferme o di campioni distribuiti lungo il video è utile, ma non sostituisce la riproduzione continua a velocità reale. Distinguere inoltre la semplice apertura o riproduzione del file da una sua effettiva valutazione visiva. L’AI non deve dichiarare di aver guardato una sequenza che non ha potuto osservare.\n\nSe gli strumenti disponibili non permettono questa valutazione, eseguire i controlli possibili e consegnare il risultato come **prima versione da revisionare sul movimento**, indicando esplicitamente la verifica mancante. Non presentarlo come animazione completamente validata. Se è indispensabile una decisione dell’utente per proseguire, porre una domanda mirata; altrimenti rendere disponibili i file senza bloccare il lavoro completato.\n\nConsegnare il progetto Blender modificabile e gli output richiesti, con nomi chiari e risorse necessarie disponibili. Annotare eventuali interpretazioni della regia e limiti ancora presenti.\n\nDistinguere sempre fra verifica tecnica, valutazione visiva e approvazione artistica. Riportare soltanto i controlli effettivamente svolti; l’adozione di questo standard non implica l’approvazione automatica delle animazioni prodotte.\n\nL’approvazione esplicita dell’utente per una versione stabilisce un riferimento artistico valido per le lavorazioni successive. Non richiedere nuovamente conferma del registro cartoon già approvato. Questa approvazione non autorizza a dichiarare eseguite verifiche tecniche o visive non svolte e non approva automaticamente ogni futura animazione.\n\n\n## 12. Dallo storyboard alla recitazione finale\n\nVersione 2026-09-26.1. Il JSON di Scene è una consegna di regia: i movimenti del proxy illustrano percorsi e tempi e non costituiscono automaticamente la recitazione finale. Leggere anche animationHandoff, directionPlans e le indicazioni di continuità delle scene.\n\nPer ogni accento importante costruire pose chiaramente distinte di preparazione (quando motivata), massimo slancio e arrivo. Verificare la silhouette in camera prima dei dettagli. Quando lo stile richiede elasticità, rendere visibili compressione e allungamento attraverso i controlli appropriati, senza trascinare gli appoggi. Conservare identità, volume percepito e attacchi.\n\nDistinguere lo stesso movimento secondo la sua intenzione: un salto di gioia può aprirsi verso lo stimolo, mentre un sobbalzo impaurito può arretrare e proteggersi. Derivare la scelta dalla regia, senza imporre questi esempi a tutte le azioni.\n\nProgettare separatamente anticipazione, scatto, sospensione, contatto, recupero e tenuta. Non sommare meccanicamente durate predefinite. Il riferimento di 3–5 fotogrammi riguarda un accento breve, non l’intero salto o l’intera camminata. Convertire i riferimenti a 24 fps quando cambia la frequenza. Non applicare una smussatura automatica globale a tutti i controlli. Alternare pause brevi e tenute narrative secondo la lettura.\n\nRispettare durata e sincronizzazioni esplicite. Le durate suggerite possono essere adattate per migliorare la recitazione mantenendo energia, confini della scena e narrazione; annotare gli adattamenti rilevanti. Le coordinate del proxy sono indicative salvo vincolo esplicito.\n\nPrima della rifinitura completa, produrre brevi prove dei passaggi rappresentativi e confrontare pose e ritmo con il riferimento artistico disponibile. Verificare a velocità reale quando gli strumenti lo consentono; dichiarare separatamente le verifiche tecniche e l’eventuale valutazione del movimento ancora mancante. Un progetto Blender valido o un video correttamente esportato non dimostrano da soli la qualità della recitazione.",
+    "attachedAt": "2026-10-10T19:21:14.298Z",
+    "version": "2026-09-26.1"
+  },
+  "objects": [
+    {
+      "id": "796639bd-bc07-448b-ac77-b432cc57efd0",
+      "name": "Camera 1",
+      "kind": "camera",
+      "color": "#d1a12a",
+      "fontFamily": "system",
+      "visible": true,
+      "transform": {
+        "position": [
+          7,
+          -7,
+          5
+        ],
+        "rotation": [
+          60.255,
+          40.966,
+          20.538
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 0,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "66c5abf9-1d49-4f85-9626-52e7d971fd8c",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            7,
+            -7,
+            5
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "0a893d3f-6f26-42fc-8feb-a2d0f03be2ee",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            60.255,
+            40.966,
+            20.538
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "7a443bdf-604e-480a-9ad2-37647c3cecd7",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            1,
+            1,
+            1
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "bb5d3c3d-1892-448c-b60d-89f25fc3b325",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "0968ad19-b4ee-4b85-90ce-c16c1580464c",
+          "frame": 1,
+          "property": "lens",
+          "value": 50,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "6f70bc8e-b751-472e-9ae3-d26c9666789f",
+      "name": "1 · Oggetto da muovere",
+      "kind": "cube",
+      "color": "#fb795a",
+      "fontFamily": "system",
+      "visible": true,
+      "transform": {
+        "position": [
+          -2,
+          -1,
+          1
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 0,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "ae87b0ec-ce73-4c2a-8ca3-6851417d9406",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            0,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "ef730d95-95a4-4831-b079-e1e5b9172d62",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            0.3,
+            0.3,
+            0.3
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "bd1d609c-a491-4ed7-bd71-5b3ab3272257",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "e2325a29-cc9d-46a8-be1e-8ca194462320",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            -2,
+            -1,
+            1
+          ],
+          "interpolation": "linear",
+          "positionPath": [
+            [
+              -2,
+              -1,
+              1
+            ],
+            [
+              -1.8630667139010593,
+              -0.8492467575879207,
+              1.1077592824817097
+            ],
+            [
+              -1.7252499696889236,
+              -0.6995991715416244,
+              1.2122050441456937
+            ],
+            [
+              -1.5856855469919833,
+              -0.5521348498770058,
+              1.3101274829226
+            ],
+            [
+              -1.4435542860357418,
+              -0.4078790760363433,
+              1.398524607021603
+            ],
+            [
+              -1.2980978863563164,
+              -0.2677783918749146,
+              1.4746942158379894
+            ],
+            [
+              -1.1486422674794277,
+              -0.13267939915982385,
+              1.5363200563129706
+            ],
+            [
+              -0.9946098979319505,
+              -0.0033013447831395926,
+              1.5815451325644454
+            ],
+            [
+              -0.8355407683343429,
+              0.11978342698037894,
+              1.6090260419705236
+            ],
+            [
+              -0.6711149473325053,
+              0.2361696670390333,
+              1.6179714306885191
+            ],
+            [
+              -0.501160815830544,
+              0.3456481864225971,
+              1.608160729598393
+            ],
+            [
+              -0.32568080401904975,
+              0.4482166879692686,
+              1.5799413994997231
+            ],
+            [
+              -0.1448506130435956,
+              0.544100133010483,
+              1.534212966891026
+            ],
+            [
+              0.04096831351556614,
+              0.6337449911225691,
+              1.4723937346398035
+            ],
+            [
+              0.23124763710342605,
+              0.7178170203989961,
+              1.3963746656277312
+            ],
+            [
+              0.4252970208125342,
+              0.7971738070735706,
+              1.3084632362261848
+            ],
+            [
+              0.6222975768479886,
+              0.8728416283400533,
+              1.2113142826554109
+            ],
+            [
+              0.8213264339607285,
+              0.9459767407105998,
+              1.1078529052770956
+            ],
+            [
+              1.0213854558352295,
+              1.0178214796778884,
+              1.0011885250161736
+            ]
+          ],
+          "source": "user",
+          "purpose": "motion",
+          "commentIds": []
+        },
+        {
+          "id": "3b18697a-7074-43d6-a366-920d0c63df70",
+          "frame": 49,
+          "property": "position",
+          "value": [
+            1.0213854558352295,
+            1.0178214796778884,
+            1.0011885250161736
+          ],
+          "interpolation": "linear",
+          "source": "user",
+          "purpose": "motion",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "f23b4ce2-a098-4012-b53a-efba9b2982ca",
+      "name": "2 · Destinazione",
+      "kind": "sphere",
+      "color": "#78aec2",
+      "fontFamily": "system",
+      "visible": true,
+      "transform": {
+        "position": [
+          1,
+          1,
+          1
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.6,
+          0.6,
+          0.6
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 0,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "5d13819a-bc8b-4b5b-840f-688b26613f7a",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            1,
+            1,
+            1
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "b3dede95-b56f-4bf9-85ac-3fc3664caec6",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            0,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "b904fb3c-5eab-446e-84c2-3a26eb887583",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "d5ad6191-d49c-4862-9a57-1c17eb8dfd3a",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "57130afd-2b97-478e-a1ff-6ba8555bb58d",
+      "name": "4 · Scritta 3D",
+      "kind": "text",
+      "color": "#718292",
+      "fontFamily": "system",
+      "visible": true,
+      "transform": {
+        "position": [
+          2,
+          0,
+          2
+        ],
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "scale": [
+          0.35,
+          0.35,
+          0.35
+        ]
+      },
+      "text": "CERCHIO",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 0,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "e294d8e5-cffd-41c3-8e1f-9e3aef1f0397",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            2,
+            0,
+            2
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "f604618e-bbc8-45a5-a760-b39af9b3647a",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            90,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "f7e9940e-ca00-4d16-9664-de31346dd298",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            0.35,
+            0.35,
+            0.35
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "6ba9bdd2-02f6-4c98-a5fe-0448eb53175e",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "402f0a6c-3466-414f-8488-ddd78760e2e3",
+          "frame": 1,
+          "property": "text",
+          "value": "CERCHIO",
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "18bfda14-461b-408d-92c6-cb0ab8eb540f",
+      "name": "Video · prova",
+      "kind": "plane",
+      "color": "#717b78",
+      "fontFamily": "system",
+      "visible": false,
+      "transform": {
+        "position": [
+          0,
+          0,
+          1.5
+        ],
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "scale": [
+          0.8,
+          0.8,
+          1
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "/editor-demo/clip.mp4",
+        "proxyPath": "/editor-demo/clip.mp4",
+        "collectionName": "Video 3D",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1.7777777777777777,
+        "duration": 3,
+        "audioManaged": true,
+        "groundOffset": 0
+      },
+      "audio": {
+        "duration": 0,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [
+        "1f5af268-0919-4453-934a-41156fe7b5dc"
+      ],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "75cc7e4d-4138-4ee5-8f0a-09580a521e13",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            4,
+            0,
+            1
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "e5c8e4fb-f322-47f6-b515-6e1a08112b0a",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            90,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "f80ebdb2-6f13-43ca-9989-07ee0254be05",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            0.8,
+            0.8,
+            1
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "7cb1a913-c981-4540-aeb1-e4070eaa0db6",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "cddd696d-a4ad-436b-8c90-3eca508f5255",
+      "name": "Video · prova · Audio",
+      "kind": "audio",
+      "color": "#d1a12a",
+      "fontFamily": "system",
+      "visible": false,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "/editor-demo/clip.mp4",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "linkedVideoId": "18bfda14-461b-408d-92c6-cb0ab8eb540f",
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 3,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 3,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "cdbcbd1f-7a98-48b7-86c1-62ee32e67763",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "6d083081-a460-48a1-bf9d-ed13a12c051b",
+          "frame": 73,
+          "property": "visibility",
+          "value": false,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "c06b81cb-f2cd-4ac6-a53c-d68d5699f9bd",
+          "frame": 1,
+          "property": "position",
+          "value": [
+            0,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "4e252823-d153-4fc7-8a19-636920535f93",
+          "frame": 1,
+          "property": "rotation",
+          "value": [
+            0,
+            0,
+            0
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "244099ea-371c-4043-8280-abd598942b4a",
+          "frame": 1,
+          "property": "scale",
+          "value": [
+            1,
+            1,
+            1
+          ],
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    },
+    {
+      "id": "a7717e49-bf38-471e-b5c6-538b992814a3",
+      "name": "Audio · prova",
+      "kind": "audio",
+      "color": "#d1a12a",
+      "fontFamily": "system",
+      "visible": false,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "text": "Text",
+      "camera": {
+        "lens": 50
+      },
+      "light": {
+        "energy": 1000,
+        "size": 5
+      },
+      "asset": {
+        "sourcePath": "/editor-demo/audio.wav",
+        "proxyPath": "",
+        "collectionName": "",
+        "boundsCenter": [
+          0,
+          0,
+          0
+        ],
+        "previewScale": 1,
+        "groundOffset": 1
+      },
+      "audio": {
+        "duration": 4,
+        "volume": 1,
+        "muted": false,
+        "loop": false,
+        "trimStart": 0,
+        "trimEnd": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "waveform": [
+          0.3,
+          0.4426215758562807,
+          0.5770675053248897,
+          0.6956308031828838,
+          0.7915149409805989,
+          0.8592234515803356,
+          0.8948750089150119,
+          0.8964259213188455,
+          0.8637872842111949,
+          0.7988300764672098,
+          0.7052779083306906,
+          0.5884935689931892,
+          0.4551716097966665,
+          0.3129545854356576,
+          0.43000504823242774,
+          0.5655122659769112,
+          0.6857992452323453,
+          0.7839706491499443,
+          0.8543988952339128,
+          0.8930467511634783,
+          0.8976987653015043,
+          0.8680882653555653,
+          0.8059126451138503,
+          0.7147360629582762,
+          0.5997851298701414,
+          0.46764929891935547,
+          0.3259031311252372,
+          0.417327909060326,
+          0.553833238285798,
+          0.6757878181929935,
+          0.7762007183094916,
+          0.8493158644986536,
+          0.8909420004429365,
+          0.8986929474318446,
+          0.8721243897903446,
+          0.8127593448529682,
+          0.7240008574415268,
+          0.610936923552586,
+          0.48004882581905095,
+          0.33883960013853953,
+          0.4045960687337878,
+          0.5420358673012617,
+          0.6656011896381364,
+          0.768208770991939,
+          0.8439767292083984,
+          0.8885617380398947,
+          0.8994080041977257,
+          0.8758937757751368,
+          0.8193669835848947,
+          0.7330679723055811,
+          0.621943750800261,
+          0.4923644095316029,
+          0.3517579611758063,
+          0.39181546314964655,
+          0.530125653247565,
+          0.6552441088243338,
+          0.7599985332395197,
+          0.8383839785992244,
+          0.8859070736911785,
+          0.8998436022221117,
+          0.8793946659295668,
+          0.8257324806660753,
+          0.7419331802386719,
+          0.6328004799598219,
+          0.5045903082292417,
+          0.3646521913796664,
+          0.37899205094029964,
+          0.5181081489591834,
+          0.6447214044771784,
+          0.7515738328668344,
+          0.8325402201489027,
+          0.8829792450665428,
+          0.8999995384184993,
+          0.8826254280526125,
+          0.8318528683453439,
+          0.7505923480630057,
+          0.6435020493573388,
+          0.5167208218975514,
+          0.3775162791431331,
+          0.3661318106956424,
+          0.5059889572919372,
+          0.6340379825400209,
+          0.7429385976762273,
+          0.8264481783612267,
+          0.8797796171916419,
+          0.8998757400856014,
+          0.8855845558835793,
+          0.837725293147561,
+          0.7590414386617528,
+          0.6540434696581761,
+          0.5287502949929661,
+          0.39034422691236614,
+          0.3532407381757041,
+          0.49377372851079937,
+          0.6231988238867077,
+          0.734096853626547,
+          0.8201106934957871,
+          0.8763096818116185,
+          0.8994722649412434,
+          0.888270669804355,
+          0.8433470172039743,
+          0.7672765128612444,
+          0.6644198261931435,
+          0.5406731190795104,
+          0.4031300539828806,
+          0.3403248435152849,
+          0.48146815765560436,
+          0.6122089819993641,
+          0.7250527229561461,
+          0.8135307202437649,
+          0.8725710566956182,
+          0.8987893010954524,
+          0.8906825174826196,
+          0.8487154195286806,
+          0.7752937312675202,
+          0.6746262812498365,
+          0.5524837354436043,
+          0.4158677992878976,
+          0.3273901484218705,
+          0.4690779818858879,
+          0.6010735806123426,
+          0.7158104222609982,
+          0.8067113263503864,
+          0.8685654848825433,
+          0.8978271669627564,
+          0.8928189744557171,
+          0.8538279972405902,
+          0.7830893560563428,
+          0.6846580763280892,
+          0.5641766376856646,
+          0.4285515241775326,
+          0.31444268336817016,
+          0.4566089778060696,
+          0.5897978113234161,
+          0.7063742605288057,
+          0.7996556911846678,
+          0.8642948338684064,
+          0.896586311113732,
+          0.8946790446549051,
+          0.858682366730338,
+          0.790659752715865,
+          0.6945105343585167,
+          0.5757463742873196,
+          0.4411753151875525,
+          0.3014884847805713,
+          0.44406695877226465,
+          0.5783869311733176,
+          0.6967486371300585,
+          0.7923671042571072,
+          0.8597610947356573,
+          0.8950673120658694,
+          0.8962618608697466,
+          0.8632762647715762,
+          0.7980013917411293,
+          0.7041790618830648,
+          0.5871875511530527,
+          0.4537332867963716,
+          0.3114664077752148,
+          0.43145777218196213,
+          0.5668462601947841,
+          0.6869380397669205,
+          0.7848489636860446,
+          0.8549663812248933,
+          0.8932708780138516,
+          0.8975666851524267,
+          0.8676075495761448,
+          0.805110850279606,
+          0.7136591511966119,
+          0.5984948341250466,
+          0.4662195841690223,
+          0.3244159544099189,
+          0.41878729674780213,
+          0.5551811789322332,
+          0.6769470423809719,
+          0.7771047746133612,
+          0.8499129287493803,
+          0.8911978464993804,
+          0.8985929091617995,
+          0.8716742017926333,
+          0.811984813727014,
+          0.7229463824485518,
+          0.6096629514701202,
+          0.47862838588682555,
+          0.3373541177266717,
+          0.4060614397568022,
+          0.5433971259332016,
+          0.6667803030207182,
+          0.769138147570312,
+          0.8446030933528434,
+          0.8888491840206914,
+          0.8993400544470127,
+          0.8754743254478421,
+          0.8186200772726762,
+          0.7320364257034463,
+          0.6206866963375167,
+          0.4909539066614929,
+          0.3502748656357991,
+          0.3932861343162229,
+          0.5314995952127839,
+          0.6564425616698812,
+          0.7609527967942,
+          0.8390393506110312,
+          0.8862259855819465,
+          0.8998077726705747,
+          0.8790061488307377,
+          0.8250135473936699,
+          0.7409250429597558,
+          0.6315609291864763,
+          0.503190400032342,
+          0.3631721741671054,
+          0.3804673365873943,
+          0.5194941336921777,
+          0.6459386380375232,
+          0.7525525384967,
+          0.8332242944775359,
+          0.8833294741827233,
+          0.8999958457707553,
+          0.8822680253184694,
+          0.8311622432971086,
+          0.7496080901256822,
+          0.642280580182427,
+          0.51533216104547,
+          0.3760400302784087,
+          0.36761102300883275,
+          0.50738633861256,
+          0.6352734293109698,
+          0.7439412890846617,
+          0.8271606360744228,
+          0.8801610002478131,
+          0.8999041860632537,
+          0.8852584341440595,
+          0.8370632983098671,
+          0.7580815189512556,
+          0.6528406515606444,
+          0.5273735289135151,
+          0.3888724346589818,
+          0.3547231875098658,
+          0.49518185492553957,
+          0.6244519078726107,
+          0.7351230633341781
+        ],
+        "captions": [],
+        "captionStyle": {
+          "color": "#ffffff",
+          "fontFamily": "system",
+          "size": 1,
+          "position": [
+            0.5,
+            0.95
+          ]
+        },
+        "applyCaptionPositionToAll": true,
+        "showCaptions": true
+      },
+      "screenSpace": false,
+      "sceneIds": [],
+      "screenCrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sceneNotes": [],
+      "keyframes": [
+        {
+          "id": "45157218-c8b5-4f19-b574-619c57c9134b",
+          "frame": 1,
+          "property": "visibility",
+          "value": true,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        },
+        {
+          "id": "b8c8daea-01a9-46f1-a711-4e4eda195188",
+          "frame": 97,
+          "property": "visibility",
+          "value": false,
+          "interpolation": "constant",
+          "source": "user",
+          "purpose": "snapshot",
+          "commentIds": []
+        }
+      ]
+    }
+  ],
+  "groups": [],
+  "comments": [],
+  "cameraCuts": [
+    {
+      "id": "1f5af268-0919-4453-934a-41156fe7b5dc",
+      "cameraId": "796639bd-bc07-448b-ac77-b432cc57efd0",
+      "frame": 1,
+      "source": "user",
+      "commentIds": [],
+      "name": "Scene 1",
+      "transition": "cut",
+      "lighting": {
+        "preset": "neutral",
+        "intensity": 1,
+        "direction": 45,
+        "elevation": 45,
+        "color": "#ffffff"
+      },
+      "background": {
+        "kind": "none",
+        "path": "",
+        "name": ""
+      },
+      "framing": {
+        "target": [
+          0,
+          0,
+          1
+        ],
+        "distance": 10.677078252031311
+      }
+    }
+  ]
+}

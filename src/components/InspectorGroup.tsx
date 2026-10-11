@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight } from './icons';
 
 export default function InspectorGroup({ title, children, defaultOpen = false, hint, icon, collapsible = true, variant }: { title: string; children: ReactNode; defaultOpen?: boolean; hint?: string; icon?: ReactNode; collapsible?: boolean; variant?: 'primary' | 'secondary' | 'setup' }) {
   const [open, setOpen] = useState(defaultOpen);

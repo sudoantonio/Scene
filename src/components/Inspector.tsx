@@ -1,4 +1,5 @@
-import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2, X } from 'lucide-react';
+import MotionAdjustment from './MotionAdjustment';
+import { Box, Braces, Circle, Cone, Crop, Cylinder, FileBox, Frame, Image, Move3d, MoveDown, Palette, PanelRightClose, PanelRightOpen, RefreshCw, Rotate3d, SlidersHorizontal, SquareDashed, Sun, TextCursorInput, Trash2, X } from './icons';
 import * as THREE from 'three';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { cameraTarget, fromCameraSpace, toCameraSpace } from '../domain/camera-space';
@@ -99,7 +100,8 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
       ['edit', SlidersHorizontal, 'Edit'], ['scene', Box, 'Scenography'], ['light', Sun, 'Lighting'],
     ] as const).map(([id, Icon, label]) => <button key={id} className={panel === id ? 'active' : ''} onClick={() => onPanelChange(id)}><Icon size={13} />{label}</button>)}</nav>}
     <div className="inspector-scroll" key={`${panel}:${panel === 'edit' ? object?.id ?? selectedAudio?.id ?? 'camera' : ''}`} role="region" aria-label={panel === 'edit' ? 'Edit controls' : panel === 'scene' ? 'Scenography content' : 'Lighting controls'} tabIndex={0}>
-    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scene'}</strong><span>Scenography</span></header><InspectorGroup title="Stage and background" icon={<Frame size={13} />} variant="setup"><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
+    {panel === 'light' ? <LightingPanel /> : panel === 'scene' ? <div className="scenography-content"><header className="inspector-context scenography-context-header"><strong>{activeScene?.name ?? 'Scene'}</strong><span>Scenography</span></header><InspectorGroup title="Stage and background" icon={<Frame size={13} />} variant="setup" collapsible={false}><BackgroundPanel /></InspectorGroup><ElementsPanel mode="scene" /></div> : <>
+      <MotionAdjustment />
       {selectedAudio ? <AudioPanel /> : object && transform ? <section className="object-section edit-stack">
         <div className="inspector-identity">
           <span className="inspector-kind">{object.kind === 'text' ? 'Text · 2D' : object.screenSpace ? 'Image · 2D' : 'Element · 3D'}</span>
@@ -127,6 +129,7 @@ export default function Inspector({ panel, onPanelChange, collapsed, onToggleCol
         <InspectorGroup title="Appearance" icon={<Palette size={13} />} variant="secondary">
           <div className="group-title"><span>Color</span><label className="visible-compact"><input type="checkbox" checked={evaluateProperty(object, 'visibility', frame) as boolean} onChange={(event) => updateObject(object.id, { visible: event.target.checked })} /> Visible</label></div>
           <div className="style-row"><label className="color-picker" title="Choose a color"><input aria-label="Custom color" type="color" value={object.color} onChange={(event) => updateObject(object.id, { color: event.target.value })} /></label>{styleColors.map((color) => <button key={color} aria-label={`Color ${color}`} title={color} className={object.color.toLowerCase() === color ? 'active' : ''} style={{ background: color }} onClick={() => updateObject(object.id, { color })} />)}</div>
+          {object.kind === 'stroke' && object.stroke && <label className="field"><span>Stroke thickness (m)</span><input aria-label="Selected stroke thickness" type="number" min=".001" max="1000" step=".005" value={object.stroke.thickness} onChange={event => { const thickness = Number(event.target.value); if (thickness > 0 && thickness <= 1000) updateObject(object.id, { stroke: { ...object.stroke!, thickness } }); }} /></label>}
           {object.kind === 'text' && <div className="text-font-control"><FontPicker name="Text font" value={object.fontFamily} onChange={(fontFamily) => updateObject(object.id, { fontFamily })} /></div>}
         </InspectorGroup>
         {object.screenSpace && <InspectorGroup title="Crop" icon={<Crop size={13} />} variant="secondary"><div className="camera-sliders">{(['Top', 'Right', 'Bottom', 'Left'] as const).map((label, index) => <label key={label}><span>{label}</span><strong>{Math.round(object.screenCrop[index] * 100)}%</strong><input aria-label={`Crop ${label}`} type="range" min="0" max="0.45" step="0.01" value={object.screenCrop[index]} onChange={(event) => { const crop = [...object.screenCrop] as [number, number, number, number]; crop[index] = Number(event.target.value); updateObject(object.id, { screenCrop: crop }); }} /></label>)}</div></InspectorGroup>}

@@ -10,12 +10,18 @@
     "types": [
       "node"
     ],
-    "target": "ES2022"
+    "target": "ES2022",
+    "resolveJsonModule": true
   },
   "include": [
+    "src/domain/surface-motion.ts",
+    "src/domain/drawn-motion.ts",
+    "src/domain/jev-drawing.ts",
+    "src/domain/stroke-spatial.ts",
     "vite.config.ts",
     "electron/**/*.ts",
     "src/domain/schema.ts",
+    "src/domain/agent-commands.ts",
     "src/domain/animation.ts",
     "src/domain/controller-pose.ts",
     "src/domain/character-motion.ts",
@@ -32,6 +38,14 @@
     "src/domain/bundled-animation-standard.ts",
     "src/domain/media-timeline.ts",
     "src/domain/edited-media.ts",
-    "src/domain/text-style.ts"
+    "src/domain/text-style.ts",
+    "src/domain/motion-adjustment.ts",
+    "package.json",
+    "src/domain/agent-motion.ts",
+    "src/domain/agent-direct.ts",
+    "src/domain/agent-timing.ts",
+    "src/domain/agent-framing.ts",
+    "src/domain/agent-integrity.ts",
+    "src/domain/presence.ts"
   ]
 }

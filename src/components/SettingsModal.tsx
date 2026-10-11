@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, KeyRound } from 'lucide-react';
+import { FolderOpen, KeyRound } from './icons';
 import Modal from './Modal';
 import { useEditor } from '../store/editor';
 
@@ -13,7 +13,11 @@ export default function SettingsModal({ onClose }: { onClose(): void }) {
   const [hasKey, setHasKey] = useState(false);
   const [hasJevKey, setHasJevKey] = useState(false);
   const [status, setStatus] = useState('');
+  const [chatGpt, setChatGpt] = useState<Awaited<ReturnType<NonNullable<Window['abaco']>['chatGptStatus']>>>();
   useEffect(() => { window.abaco?.getSettings().then((settings) => { setHasKey(settings.hasApiKey); setHasJevKey(settings.hasJevApiKey); setReasoning(settings.reasoning); setBlenderPath(settings.blenderPath); }); }, []);
+  useEffect(() => { void window.abaco?.chatGptStatus().then(setChatGpt).catch((error) => setStatus(String(error))); }, []);
+  const connect = async () => { try { setStatus('Complete sign-in in your browser…'); setChatGpt(await window.abaco!.connectChatGpt()); setStatus('Account ChatGPT collegato.'); } catch (error) { setStatus(error instanceof Error ? error.message : String(error)); } };
+  const disconnect = async () => { const result = await window.abaco!.disconnectChatGpt(); setChatGpt(await window.abaco!.chatGptStatus()); setStatus(result.revoked ? 'Disconnesso da ChatGPT.' : 'Disconnected locally; remote revocation was not confirmed.'); };
   const browse = async () => { const path = await window.abaco?.chooseBlender(); if (path) setBlenderPath(path); };
   const save = async () => {
     if (!window.abaco) return setStatus('Open this screen in the Electron desktop app.');
@@ -22,6 +26,7 @@ export default function SettingsModal({ onClose }: { onClose(): void }) {
   };
   return <Modal title="Settings" onClose={onClose}>
     <div className="settings-form">
+      <div className="field"><span>Accesso ChatGPT</span>{chatGpt?.connected ? <><small>{chatGpt.email ?? 'Account collegato'}</small>{chatGpt.models.length > 0 && <select value={chatGpt.model} onChange={(event) => { void window.abaco!.setChatGptModel(event.target.value).then(setChatGpt); }}>{chatGpt.models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}</select>}{chatGpt.error && <small>{chatGpt.error}</small>}<a href={chatGpt.usageUrl} target="_blank" rel="noreferrer">Visualizza limiti e utilizzo in ChatGPT</a><button onClick={() => void disconnect()}>Disconnetti</button></> : <><button onClick={() => void connect()}>Continue with ChatGPT</button><small>Use an eligible ChatGPT plan with your consent. You can also use an API key.</small></>}</div>
       <label className="field"><span>OpenAI API key</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? 'Key configured · enter a new one to replace it' : 'sk-…'} /></div><small>Encrypted by the system and never stored in the project.</small></label>
       <label className="field"><span>TypeSafe API key · Jev</span><div className="input-with-icon"><KeyRound size={16} /><input type="password" value={jevApiKey} onChange={(event) => setJevApiKey(event.target.value)} placeholder={hasJevKey ? 'Key configured · enter a new one to replace it' : 'TypeSafe key'} /></div><small>Used only by Jev. Laya runs locally and needs no key; it downloads the model on first use. The Jev key is encrypted and never stored in the project.</small></label>
       <label className="field"><span>Astra reasoning</span><select value={reasoning} onChange={(event) => setReasoning(event.target.value as 'medium' | 'high')}><option value="medium">Medium · recommended</option><option value="high">High · more complex scenes</option></select></label>

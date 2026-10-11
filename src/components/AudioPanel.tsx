@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Captions, Download, Languages, Scissors, Volume2 } from 'lucide-react';
+import { Captions, Download, Languages, Scissors, Volume2 } from './icons';
 import { captionsSrt } from '../domain/media-timeline';
 import FontPicker from './FontPicker';
 import { useEditor } from '../store/editor';

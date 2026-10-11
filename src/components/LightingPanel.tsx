@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Palette } from 'lucide-react';
+import { Palette } from './icons';
 import type { LightingSettings } from '../domain/schema';
 import { useEditor } from '../store/editor';
 

@@ -1,0 +1,37 @@
+import { spawn } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { ProjectSchema } from '../src/domain/schema';
+import { prepareAnimationProject, buildAnimationBrief } from '../src/domain/animation-handoff';
+import { assertAnimationHandoff } from '../src/domain/direction-integrity';
+import { exportScreenLayers } from '../electron/export-screen-layers';
+import { exportCameraTimeline } from '../electron/camera-timeline';
+import { BLENDER_BUILD_SCRIPT } from '../electron/blender-template';
+
+const [projectPath, blenderExecutable, outputDirectory] = process.argv.slice(2);
+if (!projectPath || !blenderExecutable || !outputDirectory) throw new Error('Uso: export-ub-demo progetto blender output-directory');
+const opened = ProjectSchema.parse(JSON.parse(await fs.readFile(projectPath, 'utf8')));
+for (const shot of opened.cameraCuts) if (shot.background.path && !path.isAbsolute(shot.background.path)) shot.background.path = path.resolve(path.dirname(projectPath), shot.background.path);
+const project = ProjectSchema.parse(prepareAnimationProject(opened));
+assertAnimationHandoff(project);
+await fs.mkdir(outputDirectory, { recursive: true });
+const inputPath = path.join(outputDirectory, 'input.json');
+const planPath = path.join(outputDirectory, 'plan.json');
+const scriptPath = path.join(outputDirectory, 'build_scene.py');
+const blendPath = path.join(outputDirectory, 'Ub-la-bolla-AI.blend');
+const audioPath = path.join(outputDirectory, 'audio.wav');
+await fs.writeFile(inputPath, JSON.stringify({ ...project, screenLayers: exportScreenLayers(project), cameraTimeline: exportCameraTimeline(project) }));
+await fs.writeFile(planPath, JSON.stringify({ schemaVersion: 'BlenderPlanV1', summary: 'Direct storyboard export', assumptions: [], warnings: [], operations: [] }));
+await fs.writeFile(scriptPath, BLENDER_BUILD_SCRIPT);
+await fs.writeFile(path.join(outputDirectory, 'ISTRUZIONI_ANIMAZIONE.md'), buildAnimationBrief(project));
+const output = await new Promise<string>((resolve, reject) => {
+  const child = spawn(blenderExecutable, ['--background', '--python-exit-code', '1', '--python', scriptPath, '--', inputPath, planPath, blendPath, audioPath], { cwd: outputDirectory });
+  let log = '';
+  child.stdout.on('data', (chunk) => { log += String(chunk); });
+  child.stderr.on('data', (chunk) => { log += String(chunk); });
+  child.on('error', reject);
+  child.on('close', (code) => code === 0 ? resolve(log) : reject(new Error(`Blender: ${code}\n${log.slice(-4000)}`)));
+});
+if (!output.includes('ABACO_ANIMATIC_COMPLETE')) throw new Error(`Blender non ha confermato l'esportazione.\n${output.slice(-4000)}`);
+await fs.writeFile(path.join(outputDirectory, 'blender.log'), output);
+console.log(JSON.stringify({ blendPath, bytes: (await fs.stat(blendPath)).size, marker: 'ABACO_ANIMATIC_COMPLETE' }));

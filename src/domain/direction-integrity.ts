@@ -15,13 +15,13 @@ export function reconcileDirectionPlans(project: AbacoProject): HandoffIssue[] {
   for (const plan of plans) {
     const issue = (severity: HandoffIssue['severity'], code: string, message: string) => issues.push({ severity, code, message, planId: plan.id });
     const object = project.objects.find(o => o.id === plan.objectId);
-    if (!object) { issue('error', 'missing_object', `L’oggetto dell’azione «${plan.instruction}» non esiste più.`); continue; }
+    if (!object) { issue('error', 'missing_object', `The object for the action «${plan.instruction}» no longer exists.`); continue; }
     const owner = sceneAt(plan.startFrame);
     if (!scenes.some(s => s.id === plan.sceneId)) {
       if (owner && (!object.sceneIds.length || object.sceneIds.includes(owner.id))) {
         plan.sceneId = owner.id;
-        issue('info', 'scene_relinked', `«${plan.instruction}»: collegamento alla scena recuperato dalla posizione sulla timeline.`);
-      } else { issue('error', 'missing_scene', `Impossibile associare «${plan.instruction}» a una scena.`); continue; }
+        issue('info', 'scene_relinked', `«${plan.instruction}»: scene link restored from the timeline position.`);
+      } else { issue('error', 'missing_scene', `Cannot associate «${plan.instruction}» with a scene.`); continue; }
     }
     // Legacy exports have no action/key links. Infer only an unambiguous, single-action scene.
     const scene = scenes.find(s => s.id === plan.sceneId)!;
@@ -41,12 +41,12 @@ export function reconcileDirectionPlans(project: AbacoProject): HandoffIssue[] {
       if (new Set(frames).size >= 2) {
         const start = Math.min(...frames), end = Math.max(...frames);
         if (start !== action.startFrame || end !== action.endFrame) {
-          issue('info', 'timing_aligned', `«${action.instruction}»: intervallo aggiornato ai punti del movimento (${start}–${end}).`);
+          issue('info', 'timing_aligned', `«${action.instruction}»: range updated to match the motion points (${start}–${end}).`);
           action.startFrame = start; action.endFrame = end;
         }
       }
       if (action.endFrame <= action.startFrame || action.startFrame < project.settings.frameStart || action.endFrame > project.settings.frameEnd) {
-        issue('error', 'invalid_timing', `«${action.instruction}»: intervallo del movimento non valido. Correggilo nella timeline.`);
+        issue('error', 'invalid_timing', `«${action.instruction}»: invalid motion range. Adjust it in the timeline.`);
         continue;
       }
       action.durationSeconds = (action.endFrame - action.startFrame) / project.settings.fps;
@@ -58,7 +58,7 @@ export function reconcileDirectionPlans(project: AbacoProject): HandoffIssue[] {
       }
       if (action.referenceId && (!project.objects.some(o => o.id === action.referenceId) || action.referenceId === plan.objectId)) {
         delete action.referenceId;
-        issue('warning', 'reference_removed', `«${action.instruction}»: bersaglio assente o coincidente con il soggetto; verificare la regia.`);
+        issue('warning', 'reference_removed', `«${action.instruction}»: target missing or identical to the subject; review the direction.`);
       }
       if (action.motionSpec?.referenceId && (!project.objects.some(o => o.id === action.motionSpec!.referenceId) || action.motionSpec.referenceId === plan.objectId)) delete action.motionSpec.referenceId;
       const actionScene = sceneAt(action.startFrame) ?? scene;
@@ -75,7 +75,7 @@ export function reconcileDirectionPlans(project: AbacoProject): HandoffIssue[] {
       plan.endFrame = Math.max(...plan.actions.map(a => a.endFrame));
       const firstScene = sceneAt(plan.startFrame);
       if (firstScene) plan.sceneId = firstScene.id;
-    } else issue('error', 'empty_plan', `«${plan.instruction}»: il piano non contiene azioni.`);
+    } else issue('error', 'empty_plan', `«${plan.instruction}»: the plan contains no actions.`);
   }
   return issues;
 }
@@ -89,5 +89,5 @@ export function mapDirectionFrames(project: AbacoProject, map: (frame: number) =
 }
 export function assertAnimationHandoff(project: AbacoProject) {
   const errors = (project.animationHandoff?.issues ?? []).filter(i => i.severity === 'error');
-  if (errors.length) throw new Error(`Correggi questi punti prima di esportare:\n${errors.map(i => i.message).join('\n')}`);
+  if (errors.length) throw new Error(`Fix these items before exporting:\n${errors.map(i => i.message).join('\n')}`);
 }

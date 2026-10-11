@@ -1,24 +1,25 @@
 {
   "name": "abaco-animatic",
-  "version": "0.59.15",
+  "version": "0.59.22",
   "private": true,
   "author": "Abaco Animation",
   "license": "Apache-2.0",
-  "desktopName": "Scene",
-  "description": "Editor desktop per storyboard 3D con Jev/Laya; richiede Blender per produzione e rendering",
+  "desktopName": "Scene-0.59.22",
+  "description": "Local desktop editor for 3D storyboards and animatics; Blender is required for production and rendering",
   "main": "dist-electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build:renderer": "tsc -b && vite build",
-    "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron --external @receptron/laya",
+    "build:electron": "tsup electron/main.ts electron/preload.ts electron/mcp-cli.ts --format cjs --out-dir dist-electron --external electron --external @receptron/laya",
     "build": "npm run build:renderer && npm run build:electron",
     "test": "vitest run",
-    "package:linux": "npm run build && electron-builder --linux AppImage",
-    "package:mac": "npm run build && electron-builder --mac zip --arm64",
+    "package:linux": "npm run build && electron-builder --linux AppImage --x64 --publish never",
+    "package:mac": "npm run build && electron-builder --mac zip --arm64 --publish never",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@receptron/laya": "^0.1.2",
     "openai": "^5.20.0",
     "zod": "3.25.76"
@@ -50,8 +51,8 @@
     "zustand": "^5.0.8"
   },
   "build": {
-    "appId": "com.abaco.animatic",
-    "productName": "Scene",
+    "appId": "com.abaco.animatic.jevdraw",
+    "productName": "Scene-0.59.22",
     "directories": {
       "output": "release"
     },
@@ -71,7 +72,14 @@
       "category": "Graphics",
       "icon": "build/icon.png",
       "syncDesktopName": true,
-      "artifactName": "Scene-${version}.${ext}"
+      "artifactName": "Scene-${version}-linux-${arch}.${ext}",
+      "executableName": "scene",
+      "extraResources": [
+        {
+          "from": "build/scene-mcp-linux",
+          "to": "scene-mcp"
+        }
+      ]
     },
     "mac": {
       "target": "zip",
@@ -86,8 +94,13 @@
         {
           "from": "vendor/whisper-cpp/LICENSE",
           "to": "whisper-license.txt"
+        },
+        {
+          "from": "build/scene-mcp",
+          "to": "scene-mcp"
         }
       ]
     }
-  }
+  },
+  "packageManager": "pnpm@11.19.0"
 }

@@ -1,0 +1,11 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { ProjectSchema } from '../src/domain/schema';
+import { useEditor } from '../src/store/editor';
+const base=ProjectSchema.parse(JSON.parse(readFileSync('work-build/preview-base.json','utf8')));
+useEditor.getState().loadProject(base,'');
+useEditor.getState().setFrame(1);
+useEditor.getState().addVideo({sourcePath:'/editor-demo/clip.mp4',name:'Video · prova',duration:3,aspectRatio:16/9},'world');
+const id=useEditor.getState().selectedId!;
+useEditor.getState().setTransform(id,{position:[4,0,1],rotation:[90,0,0],scale:[.8,.8,1]});
+useEditor.getState().addAudio({sourcePath:'/editor-demo/audio.wav',name:'Audio · prova',duration:4,waveform:Array.from({length:240},(_,i)=>.3+.6*Math.abs(Math.sin(i*.24)))});
+writeFileSync('public/editor-demo/project.json',JSON.stringify(ProjectSchema.parse(useEditor.getState().project),null,2));

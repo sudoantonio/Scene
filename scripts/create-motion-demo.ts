@@ -1,0 +1,37 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { createSceneObject, ProjectSchema, type Vec3 } from '../src/domain/schema';
+import { useEditor } from '../src/store/editor';
+import { projectForStorage } from '../electron/project-storage';
+import { BLENDER_BUILD_SCRIPT } from '../electron/blender-template';
+const output = path.resolve(process.argv[2]); mkdirSync(output, { recursive: true });
+const project = ProjectSchema.parse(JSON.parse(readFileSync(path.resolve('examples/drawing-base.abaco.json'), 'utf8')));
+project.name = 'Movimento disegnato · Jev';
+const moving = createSceneObject('cube', 1); moving.name = 'Oggetto da animare'; moving.color = '#fc7459';
+moving.transform.position = [0, -.08, 1]; moving.transform.scale = [.3, .3, .3]; project.objects.push(moving);
+const imported = createSceneObject('blend_asset', 1); imported.name = 'Superficie OBJ importata';
+imported.asset.sourcePath = ''; imported.asset.proxyPath = path.join(output, 'superficie.glb'); imported.name = 'Superficie Blender importata';
+imported.transform = { position: [-1, 0, 1], rotation: [90, 0, 0], scale: [1, 1, 1] }; project.objects.push(imported);
+writeFileSync(path.join(output, 'qa-motion.abaco.json'), JSON.stringify(ProjectSchema.parse(project), null, 2));
+useEditor.setState({ project, currentFrame: 1, past: [], future: [], recordingSession: undefined, recordingMotion: undefined });
+const points: Vec3[] = Array.from({ length: 121 }, (_, i) => { const t = i / 120; return [1.1 * Math.sin(2 * Math.PI * t), -.08, 1 + .7 * (1 - Math.cos(2 * Math.PI * t))]; });
+useEditor.getState().applyDrawnMotion(moving.id, points, 4);
+const recorded = createSceneObject('sphere', 2); recorded.name = 'Movimento registrato con pause'; recorded.color = '#b4d5ed'; recorded.transform.position = [3, -.6, 1]; recorded.transform.scale = [.15, .15, .15];
+const next = structuredClone(useEditor.getState().project); next.objects.push(recorded);
+useEditor.setState({ project: next, currentFrame: 1 });
+useEditor.getState().startRecording(next.cameraCuts[0].id);
+let key: string | undefined;
+for (let frame = 2; frame <= 97; frame++) {
+  const t = Math.max(0, Math.min(1, (frame - 25) / 60)), angle = Math.PI * 1.5 * t;
+  const position: Vec3 = [3 + .6 * Math.sin(angle), -.6 * Math.cos(angle), 1 + .5 * Math.sin(t * Math.PI)];
+  key = useEditor.getState().recordDrawnPosition(recorded.id, position, frame, 1, key)?.keyId;
+}
+useEditor.getState().finishRecordingMovement(); useEditor.getState().stopRecording();
+const demo = ProjectSchema.parse(useEditor.getState().project);
+const demoAsset = demo.objects.find(object => object.id === imported.id)!;
+demoAsset.asset.sourcePath = path.join(output, 'superficie.blend'); demoAsset.asset.groundOffset = .5;
+writeFileSync(path.join(output, 'Movimento-3D-Jev.abaco.json'), JSON.stringify(projectForStorage(demo, path.join(output, 'Movimento-3D-Jev.abaco.json')), null, 2));
+writeFileSync(path.join(output, 'build-motion.py'), BLENDER_BUILD_SCRIPT);
+writeFileSync(path.join(output, 'empty-plan.json'), JSON.stringify({ schemaVersion: 'BlenderPlanV1', summary: '', operations: [], warnings: [], assumptions: [] }));
+writeFileSync(path.join(output, 'verify-motion.py'), `import bpy, json, sys\nfrom pathlib import Path\nroot = Path(sys.argv[sys.argv.index('--') + 1])\nproject = json.loads((root / 'Movimento-3D-Jev.abaco.json').read_text())\ncount = 0\nfor data in project['objects']:\n    keys = [k for k in data['keyframes'] if k['property'] == 'position' and k.get('purpose') == 'motion']\n    if not keys: continue\n    obj = next(o for o in bpy.data.objects if o.get('abaco_id') == data['id'])\n    for key in keys:\n        bpy.context.scene.frame_set(key['frame'])\n        assert all(abs(obj.location[axis] - key['value'][axis]) < 1e-4 for axis in range(3)), (data['name'], key['frame'], tuple(obj.location), key['value'])\n    count += len(keys)\nassert count >= 190, count\nassert len([o for o in bpy.data.objects if o.get('abaco_kind') == 'stroke']) == 3\n(root / 'blender-motion-qa.json').write_text(json.dumps({'passed': True, 'positionKeysVerified': count, 'curvesPreserved': 3}, indent=2))\nprint('BLENDER_MOTION_VERIFIED', count)\n`);
+console.log('MOTION_DEMO', output, moving.id);

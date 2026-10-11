@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, Sparkles } from './icons';
 import type { BlenderPlan } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import Modal from './Modal';

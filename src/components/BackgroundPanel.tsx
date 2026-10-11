@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Image, Trash2, Video } from 'lucide-react';
+import { Box, Image, Trash2, Video } from './icons';
 import { defaultBackground } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import { inspectVideo } from '../domain/video';

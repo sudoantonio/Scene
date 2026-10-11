@@ -1,0 +1,15 @@
+import { mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { createProject, createSceneObject, ProjectSchema } from '../src/domain/schema';
+import { BLENDER_BUILD_SCRIPT } from '../electron/blender-template';
+const output = path.resolve(process.argv[2]); mkdirSync(output,{recursive:true});
+const p=createProject(); p.name='Movimento con cerchio · sorgente e destinazione';
+const source=createSceneObject('cube',1); source.name='1 · Oggetto da muovere'; source.color='#fb795a'; source.transform={position:[-2,-1,1],rotation:[0,0,0],scale:[.3,.3,.3]};
+const target=createSceneObject('sphere',1); target.name='2 · Destinazione'; target.color='#78aec2'; target.transform={position:[1,1,1],rotation:[0,0,0],scale:[.6,.6,.6]};
+const imported=createSceneObject('blend_asset',1); imported.name='3 · Modello importato (destinazione alternativa)'; imported.transform={position:[-1,2,1],rotation:[90,0,0],scale:[.7,.7,.7]}; imported.asset.sourcePath=path.join(output,'superficie.blend'); imported.asset.proxyPath=path.join(output,'superficie.glb');
+const text=createSceneObject('text',1);text.screenSpace=false;text.text='CERCHIO';text.name='4 · Scritta 3D';text.transform={position:[2,0,2],rotation:[90,0,0],scale:[.35,.35,.35]};
+p.objects.push(source,target,imported,text);
+for(const ext of ['blend','glb'])copyFileSync(`examples/superficie.${ext}`,path.join(output,`superficie.${ext}`));
+writeFileSync(path.join(output,'Scena-pronta.abaco.json'),JSON.stringify(ProjectSchema.parse(p),null,2));
+writeFileSync(path.join(output,'build-circle.py'),BLENDER_BUILD_SCRIPT);
+writeFileSync(path.join(output,'empty-plan.json'),JSON.stringify({schemaVersion:'BlenderPlanV1',summary:'',operations:[],warnings:[],assumptions:[]}));

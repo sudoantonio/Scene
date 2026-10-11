@@ -260,11 +260,13 @@ describe('Punti e maniglie del movimento', () => {
     expect(overview).toBeVisible();
     const segments = container.querySelectorAll('.collapsed-scene-segment');
     expect(segments).toHaveLength(2);
+    expect(segments[0].querySelector('.collapsed-scene-label')).toHaveTextContent('Scene 1');
+    expect(segments[1].querySelector('.collapsed-scene-label')).toHaveTextContent('Scene 2');
     expect(segments[0]).toHaveStyle({ left: '0px', width: '405px' });
     expect(segments[1]).toHaveStyle({ left: '405px', width: '405px' });
     expect(container.querySelector('.collapsed-scene-playhead')).not.toBeNull();
     expect(container.querySelector('.collapsed-scene-content')).toHaveStyle({ '--timeline-second-width': '135px' });
-    expect(screen.queryByRole('button', { name: 'Delete selected block' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete selected block' })).toBeDisabled();
     expect(screen.queryByTitle('Inquadratura a schermo intero')).not.toBeInTheDocument();
     expect(container.querySelector('.timeline-camera-zoom')).not.toBeInTheDocument();
     expect(overview.compareDocumentPosition(screen.getByRole('button', { name: 'Record motion' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

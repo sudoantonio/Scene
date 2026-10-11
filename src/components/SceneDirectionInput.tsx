@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
-import { Box, Camera, Circle, Cone, Cylinder, Image, MoveRight, SquareDashed, TextCursorInput, Smile } from 'lucide-react';
+import { Box, Camera, Circle, Cone, Cylinder, Image, MoveRight, SquareDashed, TextCursorInput, Smile } from './icons';
 import { presetsForScope } from '../domain/direction-presets';
 import { sceneTargetBefore } from '../domain/scene-direction';
 import type { SceneObject } from '../domain/schema';

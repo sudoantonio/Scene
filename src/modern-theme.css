@@ -812,7 +812,7 @@ body:has(.app-shell.theme-light) #root,
 }
 
 /* Three-level neutral palette. Yellow remains reserved for primary actions. */
-.app-shell.theme-dark :is(.slim-headbar, .timeline, .timeline-toolbar, .timeline-scroll, .simple-inspector, .simple-inspector .right-tabs, .simple-inspector .inspector-scroll) {
+.app-shell.theme-dark :is(.timeline, .timeline-toolbar, .timeline-scroll, .simple-inspector, .simple-inspector .right-tabs, .simple-inspector .inspector-scroll) {
   background-color: var(--ui-secondary) !important;
 }
 .app-shell.theme-dark :is(.inspector-group, .quick-add-popover, .timeline-comment-popover) {
@@ -1248,3 +1248,91 @@ body:has(.app-shell.theme-light) #root,
 .app-shell .viewport-subtitle.dragging { cursor: grabbing; }
 .app-shell .viewport-subtitle.selected { outline: 1px dashed rgba(240,197,71,.82); outline-offset: 4px; border-radius: 2px; }
 .app-shell .viewport-subtitle-resize-handle { position: absolute; right: -12px; bottom: -12px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid #2b2514; border-radius: 3px; background: #f0c547; box-shadow: 0 0 0 1px rgba(255,255,255,.85); cursor: nwse-resize; pointer-events: auto; touch-action: none; }
+
+.app-shell .headbar-create-tools .stroke-drawing-toolbar > button { display: grid; place-items: center; width: 30px; min-width: 30px; height: 28px; padding: 0; }
+.app-shell .headbar-create-tools .stroke-drawing-toolbar > button.active { color: #efae45; background: #4a3d25; }
+.app-shell .presence-segment { touch-action: none; user-select: none; }
+.app-shell .presence-resize-handle, .app-shell .audio-trim-handle { width: 12px; opacity: 1; touch-action: none; }
+.app-shell .presence-resize-handle::after, .app-shell .audio-trim-handle::after { top: 26%; bottom: 26%; opacity: .8; }
+.app-shell .presence-segment.video-layer { background: #304857; color: #d2e9f4; }
+.motion-adjustment { margin: 10px 12px; padding: 10px; display: grid; gap: 8px; background: var(--ui-raised); border-radius: 8px; font-size: 11px; }
+.motion-adjustment label { display: grid; gap: 6px; }
+.motion-adjustment textarea { min-height: 48px; resize: vertical; font-size: 11px; }
+.motion-adjustment button { justify-self: end; font-size: 11px; }
+.motion-adjustment small { color: var(--ui-muted); }
+
+/* 0.59.22 · near-black palette, restrained borders and readable controls. */
+.app-shell.theme-dark {
+  color-scheme: dark;
+  --bg: #090909;
+  --panel: #121212;
+  --panel-2: #1c1c1c;
+  --line: #292929;
+  --ui-primary: #1c1c1c;
+  --ui-secondary: #121212;
+  --ui-tertiary: #292929;
+  --ui-text: #ededed;
+  --ui-muted: #a3a3a3;
+  --ui-surface: #121212;
+  --ui-raised: #1c1c1c;
+  --ui-hover: #292929;
+  --ui-edge: #292929;
+  --ui-subsection: #171717;
+  --timeline-label-base: #121212;
+  --timeline-open-panel: #121212;
+  --timeline-open-label: #151515;
+  --timeline-open-track: #171717;
+  --timeline-open-raised: #222222;
+  --timeline-open-rule: #262626;
+  background: var(--bg) !important;
+}
+.app-shell.theme-dark :is(.workspace, .slim-headbar) { background: var(--bg) !important; }
+.app-shell.theme-dark :is(.inspector, .simple-inspector, .right-tabs, .inspector-scroll, .timeline, .timeline-toolbar, .timeline-control-row, .timeline-scroll, .collapsed-scene-overview) { background: var(--ui-surface) !important; border-color: var(--ui-edge) !important; }
+.app-shell.theme-dark .timeline .track-pair.active :is(.track, .track-label) { background: #222222 !important; }
+.app-shell.theme-dark .timeline :is(.track, .ruler) { background-color: #171717 !important; border-color: #262626 !important; }
+.app-shell.theme-dark .timeline :is(.track-label, .ruler-label) { background: #151515 !important; }
+.app-shell.theme-dark :is(input:not([type='range']):not([type='checkbox']):not([type='color']), textarea, select) { color: var(--ui-text); background: #1c1c1c !important; border-color: #333333 !important; }
+.app-shell.theme-dark :is(input, textarea, select):focus-visible { outline: 1px solid #c7aa67; outline-offset: 1px; box-shadow: none !important; }
+.app-shell.theme-dark :is(.quick-add-popover, .stroke-drawing-options, .modal, .timeline-comment-editor, .scene-direction-menu, .timeline-range-menu) { color: var(--ui-text); background: #161616 !important; border-color: #303030 !important; }
+.app-shell.theme-dark :is(.motion-path-visibility, .view-mode-switch, .viewport-toolbar, .viewport-controls, .stroke-drawing-feedback) { background: #151515ed !important; }
+.app-shell.theme-dark .panel-resizer::after { background: #3b3b3b; }
+.app-shell.theme-dark .slim-add { background: var(--ui-raised); }
+.app-shell.theme-dark .slim-add:hover { background: var(--ui-hover); }
+.app-shell.theme-dark .headbar-create-tools .stroke-drawing-toolbar > button.active { background: #33281b; color: #efae45; }
+.app-shell.theme-dark .timeline:not(.collapsed) .presence-segment.video-layer { background: #273d49 !important; color: #d5e7f0; }
+
+/* Unified icon weight; solid silhouettes for playback and primary media actions. */
+.app-shell .lucide { stroke-width: 1.85; }
+.alignment-feedback { display: block; padding: 5px 9px; color: #ffe292; background: #18150de8; border: 1px solid #d5ab36; border-radius: 6px; font-size: 11px; white-space: nowrap; pointer-events: none; }
+.screen-alignment-guides { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 20; }
+.screen-alignment-guides line { stroke: #f0c547; stroke-width: 1.5; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.object-alignment-guides { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.object-alignment-guides line { stroke: #f0c547; stroke-width: 1.5; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.app-shell .timeline.collapsed .collapsed-scene-segment .collapsed-scene-label { display: block; position: absolute; top: 2px; left: 4px; max-width: calc(100% - 8px); padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; background: #090909ba; border-radius: 4px; font-size: 10px; font-weight: 650; line-height: 15px; text-align: left; pointer-events: none; }
+.screen-alignment-feedback { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 21; }
+.app-shell .scene-icon { flex: none; display: inline-block; vertical-align: middle; }
+.app-shell .timeline :is(.play, .timeline-step, .timeline-record) { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; padding: 0; color: #e9e9e9; }
+.app-shell .timeline .play { color: #fff; background: transparent !important; }
+.app-shell .timeline .timeline-step:hover, .app-shell .timeline .play:hover { color: #fff; background: #292929 !important; }
+.app-shell .timeline .timeline-record { color: #e86464; }
+.app-shell .timeline .timeline-record.active { color: #ff7878; background: #442327 !important; }
+.app-shell .timeline .timeline-record:disabled { color: #666; }
+/* Larger control targets without changing the scene or timeline scale. */
+.app-shell .timeline :is(.play, .timeline-step, .timeline-record, .split-button, .timeline-delete-block) { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+.app-shell .timeline .timeline-record { width: 36px !important; min-width: 36px !important; height: 36px !important; }
+.app-shell .timeline :is(.play, .timeline-step, .timeline-record, .split-button) > svg { width: 20px; height: 20px; }
+.app-shell .timeline .play > svg { width: 23px; height: 23px; }
+.app-shell .timeline .timeline-control-row { min-height: 44px; gap: 5px; }
+.app-shell .timeline { grid-template-rows: 44px minmax(0, 1fr); }
+.app-shell .timeline.collapsed { grid-template-rows: 44px; }
+.app-shell .slim-add { min-height: 34px; padding: 0 16px; font-size: 12px; }
+.app-shell .headbar-create-tools .stroke-drawing-toolbar > button { width: 36px; min-width: 36px; height: 34px; }
+.app-shell .headbar-create-tools .stroke-drawing-toolbar > button > svg { width: 20px; height: 20px; }
+.app-shell .headbar-history button { width: 30px; height: 30px; }
+.app-shell :is(.motion-path-visibility, .view-mode-switch button, .camera-preview-toggle) { min-width: 36px; min-height: 36px; }
+@media (max-width: 600px) {
+  .app-shell .timeline :is(.play, .timeline-step, .timeline-record, .split-button, .timeline-delete-block) { width: 32px; min-width: 32px; }
+  .app-shell .timeline .timeline-record { width: 32px !important; min-width: 32px !important; }
+  .app-shell .timeline .timeline-control-row { gap: 2px; }
+  .app-shell .headbar-history { left: 12px; }
+}

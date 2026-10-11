@@ -14,7 +14,7 @@ export const TransformSchema = z.object({
 export type Transform = z.infer<typeof TransformSchema>;
 
 export const ObjectKindSchema = z.enum([
-  'cube', 'sphere', 'cylinder', 'cone', 'plane', 'text', 'audio', 'blend_asset', 'camera', 'area_light', 'point_light', 'sun_light',
+  'cube', 'sphere', 'cylinder', 'cone', 'plane', 'text', 'audio', 'blend_asset', 'stroke', 'camera', 'area_light', 'point_light', 'sun_light',
 ]);
 export type ObjectKind = z.infer<typeof ObjectKindSchema>;
 
@@ -44,21 +44,32 @@ export const KeyframeSchema = z.object({
   value: KeyframeValueSchema,
   interpolation: InterpolationSchema,
   holdFrames: z.number().int().nonnegative().optional(),
+  positionPath: z.array(Vec3Schema).min(2).max(100000).optional(),
   source: z.enum(['user', 'ai']).default('user'),
   purpose: z.enum(['snapshot', 'motion']).optional(),
   directionActionId: z.string().uuid().optional(),
   commentIds: z.array(z.string().uuid()).default([]),
 }).superRefine((key, ctx) => {
+  if (key.positionPath && key.property !== 'position') ctx.addIssue({ code: 'custom', path: ['positionPath'], message: 'Surface paths apply to position only' });
   if (!isValidAnimationValue(key.property, key.value)) {
     ctx.addIssue({ code: 'custom', path: ['value'], message: `Invalid value for ${key.property}` });
   }
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 
+export const StrokeGeometrySchema = z.object({
+  points: z.array(Vec3Schema).min(2).max(100000),
+  thickness: z.number().finite().positive().max(1000),
+  normals: z.array(Vec3Schema).optional(),
+}).superRefine((stroke, ctx) => {
+  if (stroke.normals && stroke.normals.length !== stroke.points.length) ctx.addIssue({ code: 'custom', path: ['normals'], message: 'Each stroke point must have a normal' });
+});
+
 export const SceneObjectSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   kind: ObjectKindSchema,
+  stroke: StrokeGeometrySchema.optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   fontFamily: z.enum(FONT_OPTIONS.map((option) => option.id) as [FontId, ...FontId[]]).default('system'),
   visible: z.boolean(),
@@ -148,6 +159,7 @@ export const BackgroundSettingsSchema = z.object({
   kind: z.enum(['none', 'image', 'model', 'video']),
   path: z.string().default(''),
   name: z.string().default(''),
+  landmarks: z.array(z.object({ name: z.string(), position: Vec3Schema, normal: Vec3Schema.optional(), width: z.number().positive().optional(), height: z.number().positive().optional() })).max(64).optional(),
   audioManaged: z.boolean().optional(),
 });
 export type BackgroundSettings = z.infer<typeof BackgroundSettingsSchema>;
@@ -203,6 +215,32 @@ export const DirectionPlanSchema = z.object({
 });
 export type DirectionPlan = z.infer<typeof DirectionPlanSchema>;
 
+export const StoryPaceSchema = z.enum(['snap', 'quick', 'normal', 'slow']);
+export type StoryPace = z.infer<typeof StoryPaceSchema>;
+export const StoryboardBeatSchema = z.object({
+  id: z.string().uuid(), sceneId: z.string().uuid(),
+  startOffsetFrames: z.number().int().nonnegative(), durationFrames: z.number().int().positive(),
+  dialogue: z.string().max(10000).default(''),
+  intention: z.string().trim().min(1).max(2000),
+  visualAction: z.string().trim().min(1).max(4000),
+  emotion: z.string().max(120).optional(),
+  focusElementId: z.string().uuid().optional(),
+  surface: z.enum(['none', 'tv', 'board', 'screen']).default('none'),
+  pace: StoryPaceSchema.default('quick'),
+});
+export type StoryboardBeat = z.infer<typeof StoryboardBeatSchema>;
+export const StoryboardSchema = z.object({ script: z.string().max(100000), beats: z.array(StoryboardBeatSchema).max(500) });
+export type Storyboard = z.infer<typeof StoryboardSchema>;
+
+export const AgentMotionRecordSchema = z.object({
+  id: z.string().uuid(), sceneId: z.string().uuid(), elementId: z.string().uuid(),
+  beatId: z.string().uuid().optional(), motion: z.enum(['move_to', 'move_by', 'rotate', 'look_at', 'orbit']),
+  pace: StoryPaceSchema, durationExplicit: z.boolean(),
+  startFrame: z.number().int().positive(), endFrame: z.number().int().positive(),
+  amount: z.number().finite().nonnegative(), warnings: z.array(z.string()).default([]),
+});
+export type AgentMotionRecord = z.infer<typeof AgentMotionRecordSchema>;
+
 export const ProjectSchema = z.object({
   schemaVersion: z.literal('AbacoSceneV1'),
   id: z.string().uuid(),
@@ -225,6 +263,8 @@ export const ProjectSchema = z.object({
     issues: z.array(z.object({ severity: z.enum(['info', 'warning', 'error']), code: z.string(), message: z.string(), planId: z.string().optional() })),
   }).optional(),
   animationBrief: z.string().optional(),
+  storyboard: StoryboardSchema.optional(),
+  agentMotions: z.array(AgentMotionRecordSchema).optional(),
   directionPlans: z.array(DirectionPlanSchema).optional(),
   objects: z.array(SceneObjectSchema),
   groups: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1), memberIds: z.array(z.string().uuid()).min(2) })).default([]),
@@ -234,6 +274,9 @@ export const ProjectSchema = z.object({
   if (project.settings.frameEnd < project.settings.frameStart) {
     ctx.addIssue({ code: 'custom', path: ['settings', 'frameEnd'], message: 'The end frame is before the start frame' });
   }
+  project.objects.forEach((object, index) => {
+    if (object.kind === 'stroke' && !object.stroke) ctx.addIssue({ code: 'custom', path: ['objects', index, 'stroke'], message: 'Stroke geometry is missing' });
+  });
   const ids = new Set(project.objects.map((object) => object.id));
   const grouped = new Set<string>();
   for (const group of project.groups) {
@@ -243,8 +286,18 @@ export const ProjectSchema = z.object({
     }
   }
   const sceneIds = new Set(project.cameraCuts.map((scene) => scene.id));
+  const orderedCuts = [...project.cameraCuts].sort((a, b) => a.frame - b.frame);
+  const beatIds = new Set<string>();
+  for (const beat of project.storyboard?.beats ?? []) {
+    const index = orderedCuts.findIndex((cut) => cut.id === beat.sceneId);
+    if (beatIds.has(beat.id)) ctx.addIssue({ code: 'custom', message: `Duplicate storyboard beat: ${beat.id}` });
+    beatIds.add(beat.id);
+    if (index < 0) ctx.addIssue({ code: 'custom', message: `Storyboard scene not found: ${beat.sceneId}` });
+    else if (beat.startOffsetFrames + beat.durationFrames > (orderedCuts[index + 1]?.frame ?? project.settings.frameEnd + 1) - orderedCuts[index].frame) ctx.addIssue({ code: 'custom', message: `Storyboard beat exceeds scene: ${beat.id}` });
+    if (beat.focusElementId && !ids.has(beat.focusElementId)) ctx.addIssue({ code: 'custom', message: `Storyboard focus not found: ${beat.focusElementId}` });
+  }
   for (const comment of project.comments) {
-    if (comment.endFrame < comment.startFrame) ctx.addIssue({ code: 'custom', message: 'Intervallo commento non valido' });
+    if (comment.endFrame < comment.startFrame) ctx.addIssue({ code: 'custom', message: 'Invalid comment interval' });
     for (const id of comment.targetIds) if (!ids.has(id)) ctx.addIssue({ code: 'custom', message: `Comment object not found: ${id}` });
     if (comment.sceneId && !sceneIds.has(comment.sceneId)) ctx.addIssue({ code: 'custom', message: `Comment scene not found: ${comment.sceneId}` });
   }
@@ -292,7 +345,7 @@ export const emptyTransform = (): Transform => ({ position: [0, 0, 0], rotation:
 export function createSceneObject(kind: ObjectKind, index: number): SceneObject {
   const labels: Record<ObjectKind, string> = {
     cube: 'Cube', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', plane: 'Plane', text: 'Text', audio: 'Audio', blend_asset: 'Blender asset',
-    camera: 'Camera', area_light: 'Area light', point_light: 'Point light', sun_light: 'Sun',
+    stroke: '3D stroke', camera: 'Camera', area_light: 'Area light', point_light: 'Point light', sun_light: 'Sun',
   };
   const transform = emptyTransform();
   if (['cube', 'sphere', 'cylinder', 'cone'].includes(kind)) transform.position = [0, 0, 1];
@@ -305,7 +358,7 @@ export function createSceneObject(kind: ObjectKind, index: number): SceneObject 
   if (kind.includes('light')) transform.position = [4, -4, 6];
   const professionalColors: Record<ObjectKind, string> = {
     cube: '#7e8c94', sphere: '#899084', cylinder: '#887f76', cone: '#827b74', plane: '#717b78', text: '#718292', audio: '#d1a12a',
-    blend_asset: '#777984', camera: '#d1a12a', area_light: '#f2dfac', point_light: '#f2dfac', sun_light: '#f2dfac',
+    blend_asset: '#777984', stroke: '#efae45', camera: '#d1a12a', area_light: '#f2dfac', point_light: '#f2dfac', sun_light: '#f2dfac',
   };
   return {
     id: crypto.randomUUID(), name: `${labels[kind]} ${index}`, kind, color: professionalColors[kind], fontFamily: 'system',

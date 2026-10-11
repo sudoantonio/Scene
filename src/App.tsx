@@ -1,7 +1,9 @@
+import { browserAsset } from './domain/browser-assets';
+import { isVideoFile } from './domain/video';
 import { prepareEditedMedia } from './domain/edited-media';
 import { useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { PanelRightOpen, Plus, Redo2, Undo2 } from 'lucide-react';
+import { PanelRightOpen, Plus, Redo2, Undo2 } from './components/icons';
 import { applyPlan } from './domain/animation';
 import type { BlenderPlan } from './domain/schema';
 import Inspector from './components/Inspector';
@@ -10,12 +12,15 @@ import PlanReview from './components/PlanReview';
 import SettingsModal from './components/SettingsModal';
 import Timeline from './components/Timeline';
 import Viewport, { captureContactSheet } from './components/Viewport';
+import EditorClock from './components/EditorClock';
 import AudioPlayback from './components/AudioPlayback';
-import JevFloatingComposer from './components/JevFloatingComposer';
 import { useEditor } from './store/editor';
 import { inspectAudio } from './domain/audio';
 import { inspectVideo } from './domain/video';
 import type { ObjectKind } from './domain/schema';
+import { agentEditorStatus, agentFramingStatus, agentSceneDetail, agentStoryboardStatus, agentTimingStatus, applyAgentRequest } from './store/agent-editor';
+import StrokeDrawingToolbar from './components/StrokeDrawingToolbar';
+import { interfaceZoom } from './domain/interface-zoom';
 
 const emptyPlan = (): BlenderPlan => ({ schemaVersion: 'BlenderPlanV1', summary: 'Direct export without AI changes.', assumptions: [], warnings: [], operations: [] });
 const draggableShapes: ObjectKind[] = ['cube', 'sphere', 'cylinder', 'cone', 'plane', 'text'];
@@ -36,13 +41,10 @@ const initialLayout = () => {
 export default function App() {
   const project = useEditor((state) => state.project);
   const projectPath = useEditor((state) => state.projectPath);
-  const currentFrame = useEditor((state) => state.currentFrame);
-  const playing = useEditor((state) => state.isPlaying);
   const dirty = useEditor((state) => state.dirty);
   const newProject = useEditor((state) => state.newProject);
   const loadProject = useEditor((state) => state.loadProject);
   const markSaved = useEditor((state) => state.markSaved);
-  const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const setGizmoMode = useEditor((state) => state.setGizmoMode);
   const undo = useEditor((state) => state.undo);
@@ -57,7 +59,7 @@ export default function App() {
   const [inspectorPanel, setInspectorPanel] = useState<'edit' | 'scene' | 'light'>('edit');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(initialLayout);
-  const [collapsed, setCollapsed] = useState({ right: false, timeline: false });
+  const [collapsed, setCollapsed] = useState(() => ({ right: !window.abaco && window.innerWidth < 900, timeline: !window.abaco && window.innerWidth < 600 && !new URLSearchParams(window.location.search).has('expanded-timeline') }));
   const theme: 'dark' = 'dark';
   const shellRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
@@ -96,7 +98,23 @@ export default function App() {
       useEditor.getState().addObject(shape);
       return;
     }
-    if (!window.abaco) { notify('error', 'File drop is available in the desktop app.'); return; }
+    if (!window.abaco) {
+      for (const file of Array.from(event.dataTransfer.files)) {
+        try {
+          if (isVideoFile(file.name)) {
+            const asset = await browserAsset(file), metadata = await inspectVideo(asset.sourcePath);
+            if (event.altKey) useEditor.getState().addVideoScene({ ...asset, duration: metadata.duration });
+            else useEditor.getState().addVideo({ ...asset, ...metadata }, event.shiftKey ? 'screen' : 'world');
+          } else if (file.type.startsWith('audio/') || /\.(wav|mp3|m4a|ogg|flac)$/i.test(file.name)) {
+            const asset = await browserAsset(file); useEditor.getState().addAudio({ ...asset, ...await inspectAudio(asset.sourcePath) });
+          } else if (file.type.startsWith('image/')) {
+            const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
+            useEditor.getState().addImage({ sourcePath: '', dataUrl, name: file.name, aspectRatio: await imageAspectRatio(dataUrl) }, event.shiftKey ? 'screen' : 'world');
+          } else throw new Error('Drag a video, audio file, or image to add it to the scene.');
+        } catch (error) { notify('error', error instanceof Error ? error.message : 'Import failed.'); }
+      }
+      return;
+    }
     const paths = Array.from(event.dataTransfer.files).map((file) => window.abaco!.getDroppedFilePath(file)).filter(Boolean);
     if (!paths.length) return;
     let imported = 0;
@@ -205,8 +223,8 @@ export default function App() {
       const snapshot = useEditor.getState();
       const editedMedia = await prepareEditedMedia(snapshot.project, window.abaco!.loadAsset, text => notify('info', text));
       const output = await window.abaco!.exportAiFolder(snapshot.project, snapshot.projectPath, editedMedia);
-      if (output) notify(output.warnings.length ? 'info' : 'ok', `Cartella per l’AI creata: ${output.directory}. ${output.files} file inclusi.${output.warnings.length ? ' Consulta LEGGIMI.md per i punti da verificare.' : ''}`);
-    } catch (error) { notify('error', error instanceof Error ? error.message : 'Esportazione non riuscita.'); }
+      if (output) notify(output.warnings.length ? 'info' : 'ok', `Cartella per l’AI creata: ${output.directory}. ${output.files} file inclusi.${output.warnings.length ? ' See LEGGIMI.md for items to review.' : ''}`);
+    } catch (error) { notify('error', error instanceof Error ? error.message : 'Export failed.'); }
     finally { setBusy(false); }
   };
   const exportDirect = async () => {
@@ -220,6 +238,51 @@ export default function App() {
     } catch (error) { notify('error', (error as Error).message); }
     finally { setBusy(false); }
   };
+  useEffect(() => window.abaco?.onAgentRequest?.(async ({ id, method, args }) => {
+    try {
+      let result: unknown;
+      const state = useEditor.getState();
+      if (method === 'status') result = agentEditorStatus((args as { detail?: 'summary' | 'full' } | undefined)?.detail === 'full' ? 'full' : 'summary');
+      else if (method === 'scene') {
+        const request = args as { sceneId: string; frame?: number };
+        result = agentSceneDetail(request.sceneId, request.frame);
+      } else if (method === 'storyboard') result = agentStoryboardStatus();
+      else if (method === 'timing') result = agentTimingStatus();
+      else if (method === 'framing') result = agentFramingStatus();
+      else if (method === 'apply') result = applyAgentRequest(args);
+      else if (method === 'preview.motion') {
+        const motionId = (args as { motionId?: string } | undefined)?.motionId;
+        const motion = agentEditorStatus('full').motions.find((item) => item.id === motionId);
+        if (!motion) throw new Error('Motion not found. Reload the scene.');
+        const frames = [...new Set([0, .25, .5, .75, 1].map((fraction) => Math.round(motion.startFrame + (motion.endFrame - motion.startFrame) * fraction)))];
+        const durationSeconds = (motion.endFrame - motion.startFrame) / state.project.settings.fps;
+        result = { frames, durationSeconds, pace: motion.pace, speedPerSecond: motion.speedPerSecond, speedUnit: motion.speedUnit, warnings: motion.warnings, image: await captureContactSheet(frames) };
+      }
+      else if (method === 'preview') {
+        const frames = (args as { frames?: number[]; frame?: number })?.frames ?? [(args as { frame?: number })?.frame];
+        if (!Array.isArray(frames) || !frames.length || frames.length > 6 || frames.some((frame) => !Number.isInteger(frame) || frame! < 1 || frame! > state.project.settings.frameEnd)) throw new Error('Frame fuori dal progetto.');
+        result = { frames, image: await captureContactSheet(frames as number[]) };
+      } else if (method === 'save') {
+        const requestedPath = (args as { path?: string } | undefined)?.path;
+        const saved = await save(requestedPath ?? projectPath);
+        if (!saved) throw new Error('Save cancelled.');
+        result = { path: saved.path, revision: agentEditorStatus().revision };
+      } else if (method === 'export') {
+        if (!useEditor.getState().projectPath) throw new Error('The project has no save path. Use scene_save with a path before scene_export_blender.');
+        const saved = await save();
+        if (!saved) throw new Error('Save cancelled.');
+        const editedMedia = await prepareEditedMedia(saved.project, window.abaco!.loadAsset);
+        result = await window.abaco!.buildBlender(saved.project, emptyPlan(), saved.path, editedMedia);
+      } else if (method === 'bundle') {
+        const outputDirectory = (args as { outputDirectory?: string } | undefined)?.outputDirectory;
+        const snapshot = useEditor.getState();
+        const editedMedia = await prepareEditedMedia(snapshot.project, window.abaco!.loadAsset);
+        result = await window.abaco!.exportPortableFolder(snapshot.project, snapshot.projectPath, editedMedia, outputDirectory);
+        if (!result) throw new Error('Export cancelled.');
+      } else throw new Error(`Unknown method: ${method}`);
+      window.abaco?.respondAgent({ id, result });
+    } catch (error) { window.abaco?.respondAgent({ id, error: error instanceof Error ? error.message : String(error) }); }
+  }), [projectPath]);
   const beginResize = (part: 'right' | 'timeline', event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const origin = { x: event.clientX, y: event.clientY, value: layout[part] };
@@ -227,7 +290,7 @@ export default function App() {
     const valueFromPointer = (pointer: PointerEvent) => {
       const delta = part === 'right' ? origin.x - pointer.clientX : origin.y - pointer.clientY;
       const limits = part === 'timeline' ? [150, 520] : [240, 500];
-      return Math.max(limits[0], Math.min(limits[1], origin.value + delta));
+      return Math.max(limits[0], Math.min(limits[1], origin.value + delta / interfaceZoom()));
     };
     const move = (pointer: PointerEvent) => {
       finalValue = valueFromPointer(pointer);
@@ -242,35 +305,6 @@ export default function App() {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
   };
-  useEffect(() => {
-    if (!playing) return;
-    let animationFrame = 0;
-    let previousTime = performance.now();
-    let partialFrames = 0;
-    const tick = (now: number) => {
-      const state = useEditor.getState();
-      const elapsed = Math.min(250, Math.max(0, now - previousTime));
-      previousTime = now;
-      partialFrames += elapsed * state.project.settings.fps / 1000;
-      const advance = Math.floor(partialFrames);
-      partialFrames -= advance;
-      if (!advance) { animationFrame = window.requestAnimationFrame(tick); return; }
-      if (state.recordingSession) {
-        const scenes = state.project.cameraCuts.slice().sort((a, b) => a.frame - b.frame);
-        const index = scenes.findIndex((scene) => scene.id === state.recordingSession?.sceneId);
-        const sceneEnd = scenes[index + 1]?.frame ?? state.project.settings.frameEnd + 1;
-        if (index < 0 || state.currentFrame + advance >= sceneEnd) {
-          state.setFrame(Math.max(state.currentFrame, sceneEnd - 1));
-          state.stopRecording();
-          return;
-        }
-      }
-      if (state.currentFrame + advance >= state.project.settings.frameEnd) { state.setFrame(state.project.settings.frameStart); state.setPlaying(false); }
-      else { state.setFrame(state.currentFrame + advance); animationFrame = window.requestAnimationFrame(tick); }
-    };
-    animationFrame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [playing]);
 
   useEffect(() => {
     if (!dirty || !projectPath || !window.abaco) return;
@@ -282,13 +316,6 @@ export default function App() {
     try { localStorage.setItem('abaco-layout-v1', JSON.stringify(layout)); } catch { /* preferenze non disponibili */ }
   }, [layout]);
 
-  useEffect(() => {
-    window.abaco?.syncPreviewProject({ project, frame: currentFrame, theme });
-  }, [project, theme]);
-
-  useEffect(() => {
-    window.abaco?.syncPreviewFrame(currentFrame);
-  }, [currentFrame]);
 
   useEffect(() => {
     if (!addOpen) return;
@@ -305,7 +332,7 @@ export default function App() {
     const status = window.abaco?.getRecoveryStatus;
     if (!status) return;
     void status().then((recovered) => {
-      if (recovered) notify('info', 'La vista grafica è stata riavviata e la bozza locale è stata ripristinata. Controlla le ultime modifiche.');
+      if (recovered) notify('info', 'The viewport restarted and the local draft was restored. Review recent changes.');
     });
   }, []);
 
@@ -362,13 +389,14 @@ export default function App() {
   }, [redo, setGizmoMode, setPlaying, undo]);
 
   const rightWidth = collapsed.right ? 32 : layout.right;
-  const timelineHeight = collapsed.timeline ? 72 : layout.timeline;
+  const timelineHeight = collapsed.timeline ? 84 : layout.timeline;
   const dockInspectorBesideTimeline = collapsed.timeline && !collapsed.right;
-  return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={(event) => { void onDrop(event); }} style={{ gridTemplateRows: `34px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
+  return <div ref={shellRef} className={`app-shell theme-${theme} ${dockInspectorBesideTimeline ? 'timeline-sidebar-docked' : ''}`} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={(event) => { void onDrop(event); }} style={{ gridTemplateRows: `40px minmax(0,1fr) 10px ${timelineHeight}px`, ...(dockInspectorBesideTimeline ? { gridTemplateColumns: `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` } : {}) }}>
     {dropActive && <div className="asset-drop-overlay" aria-hidden="true">Drop to add · images and video become 3D · Shift: 2D · Option: video scene</div>}
+    <EditorClock theme={theme} />
     <AudioPlayback />
     <div className="slim-headbar">
-      <div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div>
+      <div className="headbar-create-tools"><div ref={addMenuRef} className="quick-add-menu"><button className="slim-add" onClick={() => setAddOpen((value) => !value)}><Plus size={17} /> Add</button>{addOpen && <div className="quick-add-popover" onClick={() => setAddOpen(false)}><ElementsPanel mode="add" /></div>}</div><StrokeDrawingToolbar /></div>
       <div className={`headbar-history ${collapsed.right ? 'with-panel-toggle' : ''}`}>
         <button type="button" aria-label="Undo" title="Undo · ⌘/Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={19} /></button>
         <button type="button" aria-label="Redo" title="Redo · ⌘/Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={19} /></button>
@@ -376,7 +404,7 @@ export default function App() {
       {collapsed.right && <button className="headbar-inspector-open" aria-label="Open side panel" title="Open panels" onClick={() => setCollapsed((value) => ({ ...value, right: false }))}><PanelRightOpen size={15} /></button>}
     </div>
     <main ref={workspaceRef} className={`workspace ${collapsed.right || dockInspectorBesideTimeline ? 'inspector-hidden' : ''}`} style={{ gridTemplateColumns: collapsed.right || dockInspectorBesideTimeline ? 'minmax(0,1fr)' : `minmax(0,1fr) 10px minmax(0,${rightWidth}px)` }}>
-      <div className="viewport-stack"><Viewport dark={theme === 'dark'} /><JevFloatingComposer /></div>
+      <div className="viewport-stack"><Viewport dark={theme === 'dark'} /></div>
       {!collapsed.right && !dockInspectorBesideTimeline && <><div className="panel-resizer vertical" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} /><Inspector panel={inspectorPanel} onPanelChange={setInspectorPanel} onToggleCollapse={() => setCollapsed((value) => ({ ...value, right: true }))} /></>}
     </main>
     {dockInspectorBesideTimeline && <div className="panel-resizer vertical timeline-sidebar-divider" title="Resize side panel" onPointerDown={(event) => beginResize('right', event)} />}

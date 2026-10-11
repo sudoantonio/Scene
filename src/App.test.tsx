@@ -30,6 +30,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.abaco; vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Salvataggi e apertura progetto', () => {
+  it('removes general AI creation and places the pencil directly beside Add', () => {
+    const { container } = render(<App />);
+    expect(screen.queryByRole('button', { name: 'Crea con AI' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add' }).parentElement?.nextElementSibling).toBe(container.querySelector('.stroke-drawing-toolbar'));
+  });
   it('adds a dragged shape to the scene', () => {
     render(<App />);
     const shell = document.querySelector('.app-shell')!;
@@ -63,13 +68,10 @@ describe('Salvataggi e apertura progetto', () => {
     expect(screen.getByTestId('inspector')).toBeInTheDocument();
   });
 
-  it('mostra il pulsante AI agent sul soggetto e apre l’input solo al clic', () => {
-    useEditor.getState().addObject('cube');
-    render(<App />);
-    expect(screen.getByRole('button', { name: 'AI agent' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Action input')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'AI agent' }));
-    expect(screen.getByLabelText('Action input')).toBeInTheDocument();
+  it('does not mount an AI agent button when an object is selected', () => {
+    useEditor.getState().addObject('cube'); render(<App />);
+    expect(screen.queryByRole('button', { name: 'AI agent' })).toBeNull();
+    expect(screen.queryByLabelText('Action input')).toBeNull();
   });
 
   it('docks the right panel beside the closed timeline and restores the open layout', () => {

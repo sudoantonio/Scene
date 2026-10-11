@@ -108,6 +108,19 @@ def create_object(data, suffix="", text_override=None):
     elif kind == "cylinder": bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=1, depth=2)
     elif kind == "cone": bpy.ops.mesh.primitive_cone_add(vertices=32, radius1=1, radius2=0, depth=2)
     elif kind == "plane": bpy.ops.mesh.primitive_plane_add(size=2)
+    elif kind == "stroke":
+        stroke = data["stroke"]
+        curve = bpy.data.curves.new(name, "CURVE")
+        curve.dimensions = "3D"
+        curve.bevel_depth = stroke["thickness"] / 2
+        curve.bevel_resolution = 2
+        curve.use_fill_caps = False
+        spline = curve.splines.new("POLY")
+        spline.points.add(len(stroke["points"]) - 1)
+        for point, position in zip(spline.points, stroke["points"]): point.co = (*position, 1)
+        obj = bpy.data.objects.new(name, curve)
+        scene.collection.objects.link(obj)
+        if stroke.get("normals"): obj["abaco_stroke_normals"] = json.dumps(stroke["normals"])
     elif kind == "text":
         curve = bpy.data.curves.new(name, "FONT")
         curve.body = text_override if text_override is not None else data.get("text", "Testo")
@@ -141,7 +154,7 @@ def create_object(data, suffix="", text_override=None):
         aspect = data["asset"].get("previewScale", 1) if image.source == "MOVIE" else image.size[0] / max(1, image.size[1])
         for vertex in obj.data.vertices: vertex.co.x *= aspect
         obj.data.materials.append(overlay_material(name, "#ffffff", image, first_visible_frame(data), data["asset"].get("duration", 0)))
-    elif kind in ("cube", "sphere", "cylinder", "cone", "plane", "text"):
+    elif kind in ("cube", "sphere", "cylinder", "cone", "plane", "text", "stroke"):
         obj.data.materials.append(make_material(data))
     obj["abaco_id"] = data["id"]
     obj["abaco_kind"] = kind
@@ -235,6 +248,25 @@ def apply_animation(obj, data):
             elif prop == "scale": obj.scale = value; obj.keyframe_insert("scale", frame=hold_frame)
             elif prop == "lens" and obj.type == "CAMERA": obj.data.lens = value; obj.data.keyframe_insert("lens", frame=hold_frame)
             set_interpolation(obj, hold_frame, mode)
+    # Preserve corners of the minimum surface curve, including those between frames.
+    position_keys = sorted([key for key in data.get("keyframes", []) if key["property"] == "position"], key=lambda key: key["frame"])
+    for index, key in enumerate(position_keys[:-1]):
+        following = position_keys[index + 1]
+        path = key.get("positionPath")
+        if not path or key.get("interpolation") == "constant": continue
+        if (Vector(path[0]) - Vector(key["value"])).length > 1e-8 or (Vector(path[-1]) - Vector(following["value"])).length > 1e-8: continue
+        lengths = [0.0]
+        for a, b in zip(path, path[1:]): lengths.append(lengths[-1] + (Vector(b) - Vector(a)).length)
+        if lengths[-1] <= 1e-12: continue
+        start = min(following["frame"], key["frame"] + key.get("holdFrames", 0))
+        for point, distance in zip(path[1:-1], lengths[1:-1]):
+            frame = start + (following["frame"] - start) * distance / lengths[-1]
+            obj.location = point
+            obj.keyframe_insert("location", frame=frame)
+        for curve in action_fcurves(obj):
+            if curve.data_path == "location":
+                for point in curve.keyframe_points:
+                    if start <= point.co.x < following["frame"]: point.interpolation = "LINEAR"
     constrain_camera_segments(obj)
 
 def create_blend_asset(data):
@@ -397,17 +429,30 @@ def visibility_window(obj, start, end):
 cuts = sorted(project.get("cameraCuts", []), key=lambda item: item["frame"])
 for cut_index, cut in enumerate(cuts):
     background = cut.get("background", {"kind": "none", "path": ""})
+    if background.get("kind") == "model" and cut_index > 0:
+        previous = cuts[cut_index - 1].get("background", {})
+        if previous.get("kind") == "model" and previous.get("path") == background.get("path"):
+            continue
     background_path = asset_path(background.get("path", ""))
     if background.get("kind") == "none" or not background_path.is_file():
         continue
     start = cut["frame"]
     end = cuts[cut_index + 1]["frame"] if cut_index + 1 < len(cuts) else settings["frameEnd"] + 1
+    if background.get("kind") == "model":
+        next_index = cut_index + 1
+        while next_index < len(cuts):
+            following = cuts[next_index].get("background", {})
+            if following.get("kind") != "model" or following.get("path") != background.get("path"):
+                break
+            next_index += 1
+        end = cuts[next_index]["frame"] if next_index < len(cuts) else settings["frameEnd"] + 1
     if background["kind"] == "model" and background_path.suffix.lower() == ".glb":
         before = set(bpy.data.objects)
         bpy.ops.import_scene.gltf(filepath=str(background_path))
         for imported in set(bpy.data.objects) - before:
             imported["abaco_background_scene"] = cut["id"]
-            visibility_window(imported, start, end)
+            if start > settings["frameStart"] or end <= settings["frameEnd"]:
+                visibility_window(imported, start, end)
     elif background["kind"] == "model" and background_path.suffix.lower() == ".obj":
         before = set(bpy.data.objects)
         if hasattr(bpy.ops.wm, "obj_import"):
@@ -416,7 +461,8 @@ for cut_index, cut in enumerate(cuts):
             bpy.ops.import_scene.obj(filepath=str(background_path))
         for imported in set(bpy.data.objects) - before:
             imported["abaco_background_scene"] = cut["id"]
-            visibility_window(imported, start, end)
+            if start > settings["frameStart"] or end <= settings["frameEnd"]:
+                visibility_window(imported, start, end)
     elif background["kind"] in ("image", "video"):
         camera = objects.get(cut["cameraId"])
         if not camera: continue
@@ -507,10 +553,12 @@ for layer_index, layer in enumerate(screen_layers):
             obj["abaco_camera_id"] = cut["cameraId"]
             obj["abaco_scene_id"] = cut["id"]
             depth = max(camera.data.clip_start * 1.1, .11) + (len(screen_layers) - layer_index) * .0001
+            camera_source = next((candidate for candidate in project["objects"] if candidate["id"] == cut["cameraId"]), None)
+            dynamic_lens = len([key for key in camera_source.get("keyframes", []) if key["property"] == "lens" and start <= key["frame"] < end]) > 1 if camera_source else False
             if start > settings["frameStart"]: overlay_visibility(obj, settings["frameStart"], False)
             for sample in samples:
                 frame = sample["frame"]
-                scene.frame_set(frame)
+                if dynamic_lens: scene.frame_set(frame)
                 corners = camera.data.view_frame(scene=scene)
                 width = (max(v.x / -v.z for v in corners) - min(v.x / -v.z for v in corners)) * depth
                 height = (max(v.y / -v.z for v in corners) - min(v.y / -v.z for v in corners)) * depth
@@ -610,7 +658,18 @@ if audio_objects:
     editor = scene.sequence_editor_create()
     sequences = getattr(editor, "sequences", getattr(editor, "strips", None))
     channel = 1
-    for data in audio_objects:
+    baked_audio = project.get("bakedAudio")
+    if baked_audio is not None:
+        for index, clip in enumerate(baked_audio.get("clips", [])):
+            source = asset_path(clip["file"])
+            if not source.is_file(): raise RuntimeError("Audio montato non trovato: " + str(source))
+            strip = sequences.new_sound("Audio montato • %d" % (index + 1), str(source), channel=channel, frame_start=int(clip["startFrame"]))
+            strip.volume = 1.0
+            channel += 1
+        raw_audio_objects = [data for data in audio_objects if Path(data["asset"]["sourcePath"]).suffix.lower() in (".mp4", ".m4v", ".mov", ".webm")]
+    else:
+        raw_audio_objects = audio_objects
+    for data in raw_audio_objects:
         source = asset_path(data["asset"]["sourcePath"])
         if not source.is_file(): raise RuntimeError("Audio non trovato: " + str(source))
         controls = data.get("audio", {})

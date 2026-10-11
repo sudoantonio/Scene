@@ -20,7 +20,7 @@ async function textBitmap(text: string, color: string, fontSize: number, frameSc
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(style)}">${escapeXml(text)}</div></foreignObject></svg>`;
   return { image: await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)), width, height };
 }
-const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('Immagine non leggibile durante l’esportazione.')); image.src = source; });
+const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('Image could not be read during export.')); image.src = source; });
 
 /** Bake the actual edit. Source project/assets are preserved separately for further editing. */
 export async function prepareEditedMedia(project: AbacoProject, loadAsset: (source: string) => Promise<string>, progress?: (text: string) => void): Promise<EditedMedia> {
@@ -28,7 +28,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
   const { frameStart, frameEnd, fps, resolutionX: width, resolutionY: height } = project.settings;
   const sounds = project.objects.filter(o => o.kind === 'audio');
   if (sounds.length) {
-    progress?.('Preparazione dell’audio montato…');
+    progress?.('Preparing edited audio…');
     const rate = 48000;
     const decoder = new OfflineAudioContext(2, 1, rate);
     const count = Math.round((frameEnd - frameStart + 1) / fps * rate);
@@ -55,7 +55,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
   await document.fonts.ready;
   const frameScale = width / 1280;
   for (const object of project.objects.filter(o => o.screenSpace && ['text', 'plane'].includes(o.kind) && !/\.(mp4|m4v|mov|webm)$/i.test(o.asset.sourcePath))) {
-    progress?.(`Preparazione di ${object.name}…`);
+    progress?.(`Preparing ${object.name}…`);
     const ranges = visibilityIntervals(project, object);
     if (!ranges.length) continue;
     let image: HTMLImageElement | undefined;
@@ -67,7 +67,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
       const sw = image.naturalWidth * (1 - left - right), sh = image.naturalHeight * (1 - top - bottom);
       cropCanvas.width = Math.max(1, Math.round(sw)); cropCanvas.height = Math.max(1, Math.round(sh));
       const cropContext = cropCanvas.getContext('2d');
-      if (!cropContext) throw new Error('Impossibile esportare il ritaglio dell’immagine.');
+      if (!cropContext) throw new Error('Cannot export the image crop.');
       cropContext.drawImage(image, image.naturalWidth * left, image.naturalHeight * top, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
       result.croppedImages.push({ objectId: object.id, png: cropCanvas.toDataURL('image/png') });
     }
@@ -75,7 +75,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
     const cache = new Map<string, number>();
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Impossibile esportare i livelli della scena.');
+    if (!ctx) throw new Error('Cannot export the scene layers.');
     for (const [start, end] of ranges) for (let frame = start; frame < end; frame++) {
       const transform = evaluateTransform(object, frame);
       const text = object.kind === 'text' ? String(evaluateProperty(object, 'text', frame)) : undefined;
@@ -107,7 +107,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
     result.overlays.push(output);
   }
   for (const object of sounds.filter((sound) => sound.audio.showCaptions && sound.audio.captions.length)) {
-    progress?.(`Preparazione dei sottotitoli di ${object.name}…`);
+    progress?.(`Preparing subtitles for ${object.name}…`);
     const output: EditedMedia['overlays'][number] = { objectId: object.id, states: [], images: [] };
     const cache = new Map<string, number>();
     const { color, fontFamily } = object.audio.captionStyle;
@@ -129,7 +129,7 @@ export async function prepareEditedMedia(project: AbacoProject, loadAsset: (sour
         const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
         const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
         const context = canvas.getContext('2d');
-        if (!context) throw new Error('Impossibile esportare i sottotitoli.');
+        if (!context) throw new Error('Cannot export subtitles.');
         context.drawImage(image, 0, 0);
         index = output.images.length;
         output.images.push(canvas.toDataURL('image/png'));

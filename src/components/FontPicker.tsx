@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from './icons';
 import { FONT_OPTIONS, fontCss, type FontId } from '../domain/text-style';
 
 export default function FontPicker({ value, onChange, name }: { value: FontId; onChange(font: FontId): void; name: string }) {

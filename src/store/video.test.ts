@@ -52,7 +52,7 @@ describe('video in the editor', () => {
     expect(objectPresenceRange(project.objects.find((object) => object.asset.linkedVideoId === video.id)!, 1, 97)).toEqual([1, 73]);
   });
 
-  it('splits only the selected video and continues the source time in the second part', () => {
+  it('splits selected video with its linked audio and continues source time in the second part', () => {
     useEditor.getState().addVideo({ sourcePath: '/tmp/clip.mp4', name: 'Clip', duration: 3, aspectRatio: 1 }, 'screen');
     const original = useEditor.getState().project.objects.find((object) => object.name === 'Clip')!;
     const scene = useEditor.getState().project.cameraCuts[0];
@@ -67,7 +67,10 @@ describe('video in the editor', () => {
     expect(objectPresenceRange(second, 1, 73)).toEqual([25, 73]);
     expect(second.asset.sourceOffset).toBe(1);
     expect(videoTime(25, 25, 24, 3, second.asset.sourceOffset)).toBe(1);
-    expect(objectPresenceRange(audio, 1, 73)).toEqual([1, 73]);
+    expect(objectPresenceRange(audio, 1, 73)).toEqual([1, 25]);
+    const audioRight = project.objects.find(item => item.kind === 'audio' && item.asset.linkedVideoId === second.id)!;
+    expect(objectPresenceRange(audioRight, 1, 73)).toEqual([25, 73]);
+    expect(audioRight.audio.trimStart).toBe(1);
   });
 
   it('moves the right half without resetting the source time or removing the left half', () => {

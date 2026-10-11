@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+contents_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+# Resolve the executable from this bundle; no hard-coded product/version name.
+executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$contents_dir/Info.plist")
+ELECTRON_RUN_AS_NODE=1 exec "$contents_dir/MacOS/$executable" "$contents_dir/Resources/app.asar/dist-electron/mcp-cli.cjs"

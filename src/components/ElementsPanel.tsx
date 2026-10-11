@@ -1,6 +1,7 @@
+import { chooseBrowserAsset } from '../domain/browser-assets';
 import AnimationStandardPanel from './AnimationStandardPanel';
 import SceneDirectionInput from './SceneDirectionInput';
-import { Box, Circle, Cone, Cylinder, FileBox, Image, Music2, SquareDashed, TextCursorInput, Video } from 'lucide-react';
+import { Box, Circle, Cone, Cylinder, FileBox, Image, Music2, SquareDashed, TextCursorInput, Video } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import type { ObjectKind } from '../domain/schema';
 import { combinedSceneDirection, sceneDirectionTargets } from '../domain/scene-direction';
@@ -74,8 +75,7 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
   };
   const insertVideo = async (mode: 'screen' | 'world' | 'scene') => {
     try {
-      if (!window.abaco) throw new Error('Video import is available in the desktop app.');
-      const selected = await window.abaco.chooseVideo();
+      const selected = window.abaco ? await window.abaco.chooseVideo() : await chooseBrowserAsset('video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm');
       if (!selected) return;
       const metadata = await inspectVideo(selected.sourcePath);
       if (mode === 'scene') addVideoScene({ ...selected, duration: metadata.duration });
@@ -104,10 +104,9 @@ export default function ElementsPanel({ mode }: { mode: 'scene' | 'add' }) {
         }}><FileBox size={15} /><span>Blender asset</span></button>
         <button onClick={async () => {
           try {
-            if (!window.abaco) throw new Error('Audio import is available in the desktop app.');
-            const asset = await window.abaco.chooseAudio();
+            const asset = window.abaco ? await window.abaco.chooseAudio() : await chooseBrowserAsset('audio/*,.wav,.mp3,.m4a,.ogg,.flac');
             if (!asset) return;
-            const source = await window.abaco.loadAsset(asset.sourcePath);
+            const source = window.abaco ? await window.abaco.loadAsset(asset.sourcePath) : asset.sourcePath;
             const analysis = await inspectAudio(source);
             addAudio({ ...asset, ...analysis });
             window.dispatchEvent(new Event('abaco:edit-audio'));

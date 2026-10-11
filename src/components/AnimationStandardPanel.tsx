@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useEditor } from '../store/editor';
 import { AnimationStandardSchema } from '../domain/schema';
 import { createBundledStandard } from '../domain/bundled-animation-standard';
-import { FileText, RotateCcw, WandSparkles, X } from 'lucide-react';
+import { FileText, RotateCcw, WandSparkles, X } from './icons';
 
 export default function AnimationStandardPanel() {
   const standard = useEditor(s => s.project.animationStandard);

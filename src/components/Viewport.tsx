@@ -1,16 +1,27 @@
+import AlignmentGuides from './AlignmentGuides';
+import StrokeDrawing, { StrokeVisual } from './StrokeDrawing';
+import { PerformanceProbe, performanceReview } from './PerformanceProbe';
+import PrimitiveMesh, { type PrimitiveKind } from './PrimitiveMesh';
+import PrimitiveBatch from './PrimitiveBatch';
+import { takePlaybackPointer } from './playback-pointer';
+import CircleMotionDrawing, { CircleMotionCursor } from './CircleMotionDrawing';
+import { StrokeDrawingFeedback } from './StrokeDrawingToolbar';
+import { useStrokeDrawing } from '../store/stroke-drawing';
+import { motionHandleKeys, validPositionPath } from '../domain/drawn-motion';
+import { compactSurfacePath, pathLengths } from '../domain/surface-motion';
 import { audioStateAt, visibilityIntervals } from '../domain/media-timeline';
 import { fontCss } from '../domain/text-style';
 import { clampSubtitlePosition, clampSubtitleSize, DEFAULT_SUBTITLE_POSITION, moveSubtitlePosition, type SubtitlePosition } from '../domain/subtitle-position';
-import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, events, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Grid, Html, Line, OrbitControls, PerspectiveCamera, Text, TransformControls } from '@react-three/drei';
-import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from 'lucide-react';
-import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
+import { ArrowLeft, Box, Copy, Eye, EyeOff, Focus, Group, ImageOff, Minimize2, Move3d, Plus, RotateCcw, Rotate3d, Scaling, TextCursorInput, Trash2, Ungroup, Video } from './icons';
+import { Component, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, MTLLoader, OBJLoader, type OrbitControls as OrbitControlsImpl, type TransformControls as TransformControlsImpl } from 'three-stdlib';
 import { hitsTransformHandle } from '../domain/gizmo';
 import { groundedPositionZ } from '../domain/ground';
-import { evaluateProperty, evaluateTransform } from '../domain/animation';
-import { fromCameraSpace, toCameraSpace } from '../domain/camera-space';
+import { evaluateRenderProperty as evaluateProperty, evaluateRenderTransform as evaluateTransform, renderAnimationFrame } from '../domain/animation';
+import { createObjectAlignment, type AlignmentGuide } from './object-alignment';
 import { applyControllerMorphs, controllerOffset, controllerOffsetFromWorldDelta, controllerPose, controllerWorldDelta } from '../domain/controller-pose';
 import { controllerMotionPaths } from '../domain/controller-motion-path';
 import { normalizeWheelDelta, trackpadCameraOffset, TRACKPAD_PINCH_SENSITIVITY, TRACKPAD_ROTATE_SENSITIVITY } from '../domain/gestures';
@@ -19,6 +30,17 @@ import { isVideoFile, syncVideo } from '../domain/video';
 import type { CameraCut, Keyframe, SceneObject, Transform, Vec3 } from '../domain/schema';
 import { useEditor } from '../store/editor';
 import headerLogo from '../assets/abaco-scene-header.png';
+import { interfaceZoom } from '../domain/interface-zoom';
+import { alignmentTargets, snapAlignment, type AlignmentTarget } from '../domain/alignment';
+
+const zoomAwareEvents: typeof events = (state) => ({
+  ...events(state),
+  compute(event, current) {
+    const bounds = current.gl.domElement.getBoundingClientRect();
+    current.pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, 1 - (event.clientY - bounds.top) / bounds.height * 2);
+    current.raycaster.setFromCamera(current.pointer, current.camera);
+  },
+});
 
 let viewportCanvas: HTMLCanvasElement | null = null;
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -85,10 +107,15 @@ export function WebGLContextGuard({ primary = false, onLost }: { primary?: boole
 
 export async function captureContactSheet(frames: number[]): Promise<string | undefined> {
   const editor = useEditor.getState();
+  if (useStrokeDrawing.getState().drawing || editor.recordingSession) throw new Error('Finish drawing or recording before requesting an MCP preview.');
   const original = editor.currentFrame;
+  const originalCameraView = editor.cameraView, originalPlaying = editor.isPlaying;
+  const originalSelectedId = editor.selectedId, originalSelection = [...editor.selectedIds], originalMotion = editor.selectedMotion;
   const selected = [...new Set(frames)].slice(0, 6);
   const shots: Array<{ frame: number; url: string }> = [];
   try {
+    editor.setPlaying(false); editor.setPreviewCapture(true); editor.select(undefined);
+    if (!originalCameraView) editor.setCameraView(true);
     for (const frame of selected) {
       useEditor.getState().setFrame(frame);
       await nextPaint();
@@ -103,12 +130,27 @@ export async function captureContactSheet(frames: number[]): Promise<string | un
         still.width = 960; still.height = 540;
         still.getContext('2d')?.drawImage(video, 0, 0, still.width, still.height);
         shots.push({ frame, url: still.toDataURL('image/jpeg', .72) });
-      } else if (viewportCanvas) shots.push({ frame, url: viewportCanvas.toDataURL('image/jpeg', 0.72) });
+      } else if (viewportCanvas) {
+        const guide = document.querySelector('.camera-frame-guide')?.getBoundingClientRect();
+        const bounds = viewportCanvas.getBoundingClientRect();
+        const still = document.createElement('canvas');
+        still.width = current.settings.resolutionX; still.height = current.settings.resolutionY;
+        const context = still.getContext('2d')!;
+        if (guide && bounds.width && bounds.height) {
+          const scaleX = viewportCanvas.width / bounds.width, scaleY = viewportCanvas.height / bounds.height;
+          context.drawImage(viewportCanvas, (guide.left - bounds.left) * scaleX, (guide.top - bounds.top) * scaleY, guide.width * scaleX, guide.height * scaleY, 0, 0, still.width, still.height);
+        } else context.drawImage(viewportCanvas, 0, 0, still.width, still.height);
+        shots.push({ frame, url: still.toDataURL('image/jpeg', .72) });
+      }
     }
   } catch {
     return undefined;
   } finally {
     useEditor.getState().setFrame(original);
+    useEditor.getState().setPreviewCapture(false);
+    useEditor.setState({ selectedId: originalSelectedId, selectedIds: originalSelection, selectedMotion: originalMotion });
+    if (!originalCameraView) useEditor.getState().setCameraView(false);
+    useEditor.getState().setPlaying(originalPlaying);
   }
   if (!shots.length) return undefined;
   const cellWidth = 480, cellHeight = 300, columns = Math.min(2, shots.length), rows = Math.ceil(shots.length / columns);
@@ -119,7 +161,9 @@ export async function captureContactSheet(frames: number[]): Promise<string | un
   await Promise.all(shots.map(async (shot, index) => {
     const image = new Image(); image.src = shot.url; await image.decode().catch(() => undefined);
     const x = (index % columns) * cellWidth, y = Math.floor(index / columns) * cellHeight;
-    context.drawImage(image, x, y, cellWidth, cellHeight);
+    const scale = Math.min(cellWidth / image.width, cellHeight / image.height);
+    const width = image.width * scale, height = image.height * scale;
+    context.drawImage(image, x + (cellWidth - width) / 2, y + (cellHeight - height) / 2, width, height);
     context.fillStyle = 'rgba(8,10,14,.82)'; context.fillRect(x + 12, y + 12, 86, 30);
     context.fillStyle = '#fff'; context.font = '600 15px sans-serif'; context.fillText(`Frame ${shot.frame}`, x + 22, y + 33);
   }));
@@ -154,7 +198,12 @@ function ImageBackground({ source }: { source: string }) {
 
 function ModelBackground({ source }: { source: string }) {
   const gltf = useLoader(GLTFLoader, source);
-  const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
+  const model = useMemo(() => {
+    const result = gltf.scene.clone(true);
+    // glTF usa Y verso l'alto; Scene e Blender usano Z verso l'alto.
+    result.rotation.x = Math.PI / 2;
+    return result;
+  }, [gltf.scene]);
   return <primitive object={model} />;
 }
 
@@ -258,7 +307,7 @@ function CharacterHandle({ object, controller, previewOffset, onPreviewOffset, o
     document.body.style.cursor = '';
   };
   return <group>
-    <mesh position={position} renderOrder={100} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={(event) => { event.stopPropagation(); setHovered(false); if (!drag.current) document.body.style.cursor = ''; }}
+    <mesh position={position} renderOrder={100} userData={{ strokeSkip: true }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={(event) => { event.stopPropagation(); setHovered(false); if (!drag.current) document.body.style.cursor = ''; }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.stopPropagation();
@@ -317,7 +366,7 @@ function BlendAssetVisual({ object, onDragChange }: { object: SceneObject; onDra
   const [poseControllers, setPoseControllers] = useState<CharacterController[]>(object.asset.controllers ?? []);
   const [draftPose, setDraftPose] = useState<Record<string, Vec3>>({});
   const updateObject = useEditor((state) => state.updateObject);
-  const frame = useEditor((state) => state.currentFrame);
+  const frame = useEditor((state) => object.asset.controllerKeys?.length ? state.currentFrame : 0);
   const startFrame = useEditor((state) => state.project.settings.frameStart);
   const selected = useEditor((state) => state.selectedIds.includes(object.id));
   const pose = { ...controllerPose(object.asset, frame, startFrame), ...draftPose };
@@ -373,7 +422,7 @@ export function SceneBackground({ kind, path }: { kind: 'none' | 'image' | 'mode
     return () => { active = false; };
   }, [kind, path]);
   if (!source && !obj) return null;
-  return <BackgroundAssetBoundary resetKey={`${kind}:${path}`}><Suspense fallback={null}>{kind === 'image' && source ? <ImageBackground source={source} /> : obj ? <ObjBackground source={obj.source} materials={obj.materials} /> : source ? <ModelBackground source={source} /> : null}</Suspense></BackgroundAssetBoundary>;
+  return <group userData={{ strokeSceneElement: { id: 'background:scene', source: 'background', name: path.split('/').at(-1)?.slice(0, 500), elementKind: kind } }}><BackgroundAssetBoundary resetKey={`${kind}:${path}`}><Suspense fallback={null}>{kind === 'image' && source ? <ImageBackground source={source} /> : obj ? <ObjBackground source={obj.source} materials={obj.materials} /> : source ? <ModelBackground source={source} /> : null}</Suspense></BackgroundAssetBoundary></group>;
 }
 
 function CameraBackLogo() {
@@ -386,7 +435,7 @@ function CameraBackLogo() {
 
 function CameraVisual({ object }: { object: SceneObject }) {
   const settings = useEditor((state) => state.project.settings);
-  const frame = useEditor((state) => state.currentFrame);
+  const frame = useEditor(state => renderAnimationFrame(object, state.currentFrame));
   const aspect = settings.resolutionX / settings.resolutionY;
   const depth = 3.2;
   const sensorHeight = 36 / aspect;
@@ -412,21 +461,23 @@ function CameraVisual({ object }: { object: SceneObject }) {
 
 const loaded3DFonts = new Map<string, string>();
 function Styled3DText({ object, visible }: { object: SceneObject; visible: boolean }) {
-  const [font, setFont] = useState<string | undefined>(loaded3DFonts.get(object.fontFamily));
+  const family = object.fontFamily === 'system' ? 'arial' : object.fontFamily;
+  const [font, setFont] = useState<string | undefined>(loaded3DFonts.get(family));
   useEffect(() => {
-    if (object.fontFamily === 'system') { setFont(undefined); return; }
-    const cached = loaded3DFonts.get(object.fontFamily);
+    const cached = loaded3DFonts.get(family);
     if (cached) { setFont(cached); return; }
     setFont(undefined);
     let cancelled = false;
-    void window.abaco?.loadFont(object.fontFamily).then((loaded) => {
+    void window.abaco?.loadFont(family).then((loaded) => {
       if (!loaded) return;
-      loaded3DFonts.set(object.fontFamily, loaded);
+      loaded3DFonts.set(family, loaded);
       if (!cancelled) setFont(loaded);
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [object.fontFamily]);
-  return <Text visible={visible} color={object.color} font={font} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
+  }, [family]);
+  // Avoid Troika's remote default-font request while the local font loads.
+  if (window.abaco && !font) return null;
+  return <Text userData={{ strokeText: true }} visible={visible} color={object.color} font={font} fontSize={1} anchorX="center" anchorY="middle">{object.text}</Text>;
 }
 
 function ImagePlaneVisual({ object }: { object: SceneObject }) {
@@ -450,6 +501,7 @@ function useVideoSource(sourcePath: string) {
 }
 
 function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame: number; muted: boolean }) {
+  const invalidate = useThree(state => state.invalidate);
   const source = useVideoSource(object.asset.sourcePath);
   const playing = useEditor((state) => state.isPlaying);
   const project = useEditor((state) => state.project);
@@ -467,19 +519,23 @@ function VideoPlaneVisual({ object, frame, muted }: { object: SceneObject; frame
     element.preload = 'auto';
     element.playsInline = true;
     element.muted = muted || object.asset.audioManaged === true;
+    const refreshVideo = () => invalidate();
     element.onloadedmetadata = () => {
       const state = useEditor.getState();
       const latest = state.project.objects.find((item) => item.id === object.id) ?? object;
       const at = state.currentFrame;
       const clipStart = visibilityIntervals(state.project, latest).find(([from, to]) => at >= from && at < to)?.[0] ?? state.project.settings.frameStart;
       syncVideo(element, at, clipStart, state.project.settings.fps, latest.asset.duration ?? 0, state.isPlaying, latest.asset.sourceOffset ?? 0);
+      invalidate();
     };
+    element.addEventListener('seeked', refreshVideo);
+    element.addEventListener('loadeddata', refreshVideo);
     video.current = element;
     const next = new THREE.VideoTexture(element);
     next.colorSpace = THREE.SRGBColorSpace;
     setTexture(next);
-    return () => { element.onloadedmetadata = null; element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
-  }, [muted, object.asset.audioManaged, source]);
+    return () => { element.onloadedmetadata = null; element.removeEventListener('seeked', refreshVideo); element.removeEventListener('loadeddata', refreshVideo); element.pause(); element.removeAttribute('src'); element.load(); next.dispose(); video.current = null; };
+  }, [muted, object.asset.audioManaged, source, invalidate]);
   useEffect(() => {
     if (!video.current) return;
     syncVideo(video.current, frame, startFrame, fps, duration, playing, object.asset.sourceOffset ?? 0);
@@ -499,15 +555,13 @@ function SyncedVideo({ sourcePath, frame, startFrame, fps, duration, sourceOffse
 function MeshVisual({ object, frame, muted = false, hideText = false, onDragChange }: { object: SceneObject; frame: number; muted?: boolean; hideText?: boolean; onDragChange?: (value: boolean) => void }) {
   const material = <meshStandardMaterial color={object.color} roughness={0.62} metalness={0.02} />;
   switch (object.kind) {
-    case 'cube': return <mesh castShadow>{material}<boxGeometry args={[2, 2, 2]} /></mesh>;
-    case 'sphere': return <mesh castShadow>{material}<sphereGeometry args={[1, 32, 18]} /></mesh>;
-    case 'cylinder': return <mesh castShadow>{material}<cylinderGeometry args={[1, 1, 2, 32]} /></mesh>;
-    case 'cone': return <mesh castShadow>{material}<coneGeometry args={[1, 2, 32]} /></mesh>;
+    case 'stroke': return object.stroke ? <StrokeVisual stroke={object.stroke} color={object.color} /> : null;
+    case 'cube': case 'sphere': case 'cylinder': case 'cone': return <PrimitiveMesh kind={object.kind} color={object.color} />;
     case 'plane': return object.asset.proxyPath
       ? isVideoFile(object.asset.sourcePath) ? <VideoPlaneVisual object={object} frame={frame} muted={muted} />
       : <BackgroundAssetBoundary resetKey={object.asset.proxyPath} fallback={<mesh>{material}<planeGeometry args={[2, 2]} /></mesh>}><Suspense fallback={null}><ImagePlaneVisual object={object} /></Suspense></BackgroundAssetBoundary>
-      : <mesh receiveShadow>{material}<planeGeometry args={[2, 2]} /></mesh>;
-    case 'text': return <Styled3DText object={object} visible={!hideText} />;
+      : <PrimitiveMesh kind="plane" color={object.color} />;
+    case 'text': return <Suspense fallback={null}><Styled3DText object={object} visible={!hideText} /></Suspense>;
     case 'blend_asset': return <BlendAssetVisual object={object} onDragChange={onDragChange} />;
     case 'camera': return <CameraVisual object={object} />;
     case 'area_light': return <mesh><circleGeometry args={[.7, 28]} /><meshBasicMaterial color={object.color} side={THREE.DoubleSide} /></mesh>;
@@ -532,10 +586,17 @@ function SelectionOutline({ target }: { target: RefObject<THREE.Group | null> })
   return null;
 }
 
+
 function SceneItem({ object, frame, cameraView, objectControls, interactionEnabled = true, onDragChange }: { object: SceneObject; frame: number; cameraView: boolean; objectControls: RefObject<TransformControlsImpl | null>; interactionEnabled?: boolean; onDragChange(value: boolean): void }) {
   const ref = useRef<THREE.Group>(null);
   const translationProxy = useRef<THREE.Group>(null);
   const viewCamera = useThree((state) => state.camera);
+  const alignmentScene = useThree((state) => state.scene);
+  const alignmentCanvas = useThree((state) => state.gl.domElement);
+  const alignmentSession = useRef<ReturnType<typeof createObjectAlignment> | undefined>(undefined);
+  const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
+  const gizmoAxes = useRef<number[]>([]);
+  const bypassAlignment = useRef(false);
   const directDrag = useRef<{
     pointerId: number; moved: boolean; x: number; y: number;
     position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3;
@@ -545,11 +606,11 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
   const gizmoDragging = useRef(false);
   const gizmoCleanup = useRef<(() => void) | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
-  const selectedId = useEditor((state) => state.selectedId);
-  const selectedIds = useEditor((state) => state.selectedIds);
+  const selectedId = useEditor(state => state.selectedId === object.id ? object.id : undefined);
+  const selected = useEditor(state => state.selectedIds.includes(object.id));
   const multiSelectMode = useEditor((state) => state.multiSelectMode);
-  const selectedMotion = useEditor((state) => state.selectedMotion);
-  const recordingSession = useEditor((state) => state.recordingSession);
+  const selectedMotion = useEditor(state => state.selectedMotion?.objectId === object.id ? state.selectedMotion : undefined);
+  const recordingSession = useEditor(state => Boolean(state.recordingSession));
   const mode = useEditor((state) => state.gizmoMode);
   const select = useEditor((state) => state.select);
   const selectMember = useEditor((state) => state.selectMember);
@@ -559,11 +620,13 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
   const setPlaying = useEditor((state) => state.setPlaying);
   const [textEditing, setTextEditing] = useState(false);
   const [textDraft, setTextDraft] = useState('');
-  const transform = evaluateTransform(object, frame);
+  const previewPosition = useStrokeDrawing(state => state.previewMotion?.objectId === object.id ? state.previewMotion.position : undefined);
+  const evaluated = evaluateTransform(object, frame);
+  const transform = previewPosition ? { ...evaluated, position: previewPosition } : evaluated;
   const text = evaluateProperty(object, 'text', frame) as string;
   const visible = object.kind === 'camera' || evaluateProperty(object, 'visibility', frame) as boolean;
   const helperOnly = object.kind === 'camera' || object.kind.includes('light');
-  const helperSelected = selectedIds.includes(object.id) || selectedMotion?.objectId === object.id;
+  const helperSelected = selected || selectedMotion?.objectId === object.id;
   const shown = useMemo(() => ({ ...object, text }), [object, text]);
   const viewTranslation = cameraView && mode === 'translate';
   useLayoutEffect(() => {
@@ -573,45 +636,19 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     translationProxy.current.updateMatrixWorld();
   });
 
-  const snapToOtherObjects = (position: THREE.Vector3) => {
+  const prepareAlignment = () => {
+    if (!ref.current || helperOnly) return;
     const state = useEditor.getState();
-    const others = state.project.objects.filter((item) => item.id !== object.id && item.kind !== 'camera' && !item.kind.includes('light') && evaluateProperty(item, 'visibility', state.currentFrame));
-    const threshold = .22;
-    const snapToGround = (candidate: THREE.Vector3) => {
-      const targetZ = groundedPositionZ(object, evaluateTransform(object, state.currentFrame));
-      if (Math.abs(candidate.z - targetZ) <= .35) candidate.z = targetZ;
-      return candidate;
-    };
-    if (cameraView) {
-      const cameraPose: Transform = {
-        position: viewCamera.position.toArray() as Vec3,
-        rotation: [viewCamera.rotation.x, viewCamera.rotation.y, viewCamera.rotation.z].map(THREE.MathUtils.radToDeg) as Vec3,
-        scale: [1, 1, 1],
-      };
-      const local = toCameraSpace(position.toArray() as Vec3, cameraPose);
-      for (const axis of [0, 2] as const) {
-        let nearest = local[axis], nearestDistance = threshold;
-        for (const item of others) {
-          const value = toCameraSpace(evaluateTransform(item, state.currentFrame).position, cameraPose)[axis];
-          const distance = Math.abs(local[axis] - value);
-          if (distance < nearestDistance) { nearest = value; nearestDistance = distance; }
-        }
-        local[axis] = nearest;
-      }
-      return snapToGround(new THREE.Vector3(...fromCameraSpace(local, cameraPose)));
-    }
-    const snapped = position.clone();
-    for (const axis of [0, 1, 2] as const) {
-      let nearest = snapped.getComponent(axis), nearestDistance = threshold;
-      for (const item of others) {
-        const value = evaluateTransform(item, state.currentFrame).position[axis];
-        const distance = Math.abs(snapped.getComponent(axis) - value);
-        if (distance < nearestDistance) { nearest = value; nearestDistance = distance; }
-      }
-      snapped.setComponent(axis, nearest);
-    }
-    return snapToGround(snapped);
+    viewCamera.updateMatrixWorld();
+    alignmentSession.current = createObjectAlignment(object, state.project, state.currentFrame, state.selectedIds, alignmentScene, ref.current, viewCamera, cameraView, alignmentCanvas.getBoundingClientRect());
   };
+  const snapToOtherObjects = (position: THREE.Vector3, axes = cameraView ? [0, 1] : [0, 1, 2], bypass = false) => {
+    if (!alignmentSession.current) prepareAlignment();
+    const snapped = alignmentSession.current?.apply(position, axes, bypass);
+    if (snapped) setAlignmentGuides(snapped.guides);
+    return snapped?.position ?? position;
+  };
+  const clearAlignment = () => { alignmentSession.current = undefined; setAlignmentGuides([]); };
 
   const commit = (snap = true) => {
     if (!ref.current) return;
@@ -634,12 +671,13 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     const drag = directDrag.current;
     if (!drag) return;
     drag.cleanup?.();
-    if (drag.moved) { commit(); useEditor.getState().finishRecordingMovement(); }
+    if (drag.moved) { commit(false); useEditor.getState().finishRecordingMovement(); }
+    clearAlignment();
     directDrag.current = undefined;
     setDragging(false);
     onDragChange(false);
   };
-  const startDirectDrag = (event: ThreeEvent<PointerEvent>) => {
+  const startDirectDrag = (event: ThreeEvent<PointerEvent>, fromPlayback = false) => {
     if (!interactionEnabled) return;
     if ((multiSelectMode || event.nativeEvent.shiftKey || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey) && event.button === 0) {
       event.stopPropagation(); toggleSelection(object.id); return;
@@ -647,7 +685,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     // Touch gestures remain available to OrbitControls.
     if (event.button !== 0 || event.nativeEvent.pointerType === 'touch' || !ref.current || gizmoDragging.current) return;
     // Reserve the gesture even if an object is closer than the overlaid arrow.
-    if (hitsTransformHandle(objectControls.current, event.ray)) return;
+    if (!fromPlayback && hitsTransformHandle(objectControls.current, event.ray)) return;
     // Se il gizmo e l'oggetto sono sovrapposti, soltanto l'intersezione piu'
     // vicina deve gestire il gesto. In caso contrario i due controlli scrivono
     // contemporaneamente la stessa trasformazione e la rotazione sembra fermarsi.
@@ -677,6 +715,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
       window.removeEventListener('pointercancel', windowCancel);
       window.removeEventListener('blur', windowBlur);
     };
+    if (mode === 'translate') prepareAlignment();
     directDrag.current = { ...dragState, cleanup };
     window.addEventListener('pointerup', windowFinish);
     window.addEventListener('pointercancel', windowCancel);
@@ -696,7 +735,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
       ref.current.position.copy(drag.position)
         .addScaledVector(drag.right, dx * drag.worldPerPixel)
         .addScaledVector(drag.up, -dy * drag.worldPerPixel);
-      ref.current.position.copy(snapToOtherObjects(ref.current.position));
+      ref.current.position.copy(snapToOtherObjects(ref.current.position, undefined, event.nativeEvent.altKey));
     } else if (mode === 'rotate') {
       ref.current.rotation.set(drag.rotation.x + dy * 0.003, drag.rotation.y, drag.rotation.z + dx * 0.003);
     } else if (mode === 'scale') {
@@ -725,6 +764,7 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     gizmoCleanup.current = undefined;
     // An unrestricted snap could move the two axes the user did not drag.
     commit(false);
+    clearAlignment();
     useEditor.getState().finishRecordingMovement();
     setDragging(false);
     onDragChange(false);
@@ -733,6 +773,9 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     if (gizmoDragging.current) return;
     if (!recordingSession) setPlaying(false);
     gizmoDragging.current = true;
+    const axis = (objectControls.current as unknown as { axis?: string })?.axis ?? 'XYZ';
+    gizmoAxes.current = ['X', 'Y', 'Z'].flatMap((letter, index) => axis.includes(letter) && (!cameraView || index < 2) ? [index] : []);
+    if (mode === 'translate') prepareAlignment();
     setDragging(true);
     onDragChange(true);
     const finish = () => finishGizmoDrag();
@@ -747,13 +790,22 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     window.addEventListener('blur', finish);
   };
 
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => { bypassAlignment.current = event.altKey; };
+    window.addEventListener('keydown', update); window.addEventListener('keyup', update);
+    return () => { window.removeEventListener('keydown', update); window.removeEventListener('keyup', update); };
+  }, []);
   useEffect(() => () => {
     directDrag.current?.cleanup?.();
     gizmoCleanup.current?.();
   }, []);
+  useLayoutEffect(() => {
+    const pending = takePlaybackPointer(object.id);
+    if (pending) queueMicrotask(() => startDirectDrag(pending, true));
+  }, [object.id]);
 
   const commitTextEdit = () => { updateObject(object.id, { text: textDraft }); setTextEditing(false); };
-  const visual = <group ref={ref} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
+  const visual = <><group ref={ref} userData={{ sceneObjectId: object.id }} position={transform.position} rotation={transform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={transform.scale} visible={visible && (!helperOnly || (object.kind === 'camera' && !cameraView) || (helperSelected && !cameraView))}
       onPointerOver={(event) => { if (!interactionEnabled) return; event.stopPropagation(); setCursor(event, 'grab'); }} onPointerOut={(event) => { if (interactionEnabled && !dragging) setCursor(event, 'default'); }}
       onDoubleClick={(event) => { event.stopPropagation(); selectMember(object.id); if (object.kind === 'text') { setTextDraft(text); setTextEditing(true); } }}
       onClick={(event) => { if (cameraView && !interactionEnabled) { event.stopPropagation(); select(object.id); } }}
@@ -766,7 +818,10 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
           else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); commitTextEdit(); }
         }} />
       </Html>}
-    </group>;
+    </group>{alignmentGuides.length > 0 && <group userData={{ strokeSkip: true }}>
+      <AlignmentGuides guides={alignmentGuides} cameraView={cameraView} />
+      <Html position={ref.current?.position.toArray()} center style={{ pointerEvents: 'none', transform: 'translateY(-38px)' }}><span className="alignment-feedback" role="status">Aligned · {Array.from(new Set(alignmentGuides.map(guide => guide.label))).join(' · ')}</span></Html>
+    </group>}</>;
 
   // Durante il trascinamento diretto non montiamo il gizmo appena l'oggetto
   // diventa selezionato: due controller sullo stesso gruppo causavano blocchi
@@ -776,18 +831,24 @@ function SceneItem({ object, frame, cameraView, objectControls, interactionEnabl
     showZ={!viewTranslation && !(object.kind === 'plane' && mode === 'scale')}
     onObjectChange={() => {
       if (!ref.current) return;
-      if (mode === 'translate' && viewTranslation && translationProxy.current) ref.current.position.copy(translationProxy.current.position);
+      if (mode === 'translate' && gizmoDragging.current) {
+        if (viewTranslation && translationProxy.current) ref.current.position.copy(translationProxy.current.position);
+        ref.current.position.copy(snapToOtherObjects(ref.current.position, gizmoAxes.current, bypassAlignment.current));
+        if (viewTranslation && translationProxy.current) translationProxy.current.position.copy(ref.current.position);
+      }
       if (mode === 'scale' && object.kind === 'plane') {
         ref.current.scale.x = Math.max(.01, ref.current.scale.x);
         ref.current.scale.y = Math.max(.01, ref.current.scale.y);
         ref.current.scale.z = 1;
       }
-      // Lo snap viene applicato una sola volta al rilascio. Applicarlo a ogni
-      // pixel tratteneva l'oggetto sulla soglia e dava l'impressione di blocco.
+      // TransformControls computes each raw sample from its original pointer anchor.
+      // Hysteresis stabilizes alignment while retaining an independent release band.
     }}
     onMouseDown={startGizmoDrag}
     onMouseUp={finishGizmoDrag} /></>;
 }
+
+const MemoSceneItem = memo(SceneItem);
 
 function CameraViewControls({ syncKey, target, controls }: {
   syncKey: string;
@@ -809,7 +870,7 @@ function CameraViewControls({ syncKey, target, controls }: {
 }
 
 export const ShotCamera = memo(function ShotCamera({ object, aspect, frame: frameOverride, frameHeightRatio = 1, lockTransform = false }: { object: SceneObject; aspect: number; frame?: number; frameHeightRatio?: number; lockTransform?: boolean }) {
-  const frame = useEditor((state) => frameOverride ?? state.currentFrame);
+  const frame = useEditor(state => frameOverride ?? renderAnimationFrame(object, state.currentFrame));
   const transform = evaluateTransform(object, frame);
   const lockedTransform = useRef(transform);
   if (!lockTransform) lockedTransform.current = transform;
@@ -905,7 +966,7 @@ export function ThumbnailItem({ object, frame }: { object: SceneObject; frame: n
 
 const thumbnailRevision = (scene: CameraCut, objects: SceneObject[]) => {
   const frame = scene.frame;
-  return `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${object.kind}:${object.color}:${object.fontFamily}:${object.screenSpace}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${object.screenCrop.join(',')}`).join('|')}`;
+  return `${frame}:${JSON.stringify(scene)}:${objects.map((object) => `${object.id}:${object.kind}:${object.color}:${object.fontFamily}:${object.screenSpace}:${JSON.stringify(evaluateTransform(object, frame))}:${evaluateProperty(object, 'visibility', frame)}:${evaluateProperty(object, 'text', frame)}:${object.asset.proxyPath}:${JSON.stringify(object.stroke ?? null)}:${object.screenCrop.join(',')}`).join('|')}`;
 };
 
 function VideoSceneThumbnail({ projectId, scene, aspect, revision, onCaptured }: { projectId: string; scene: CameraCut; aspect: number; revision: string; onCaptured(): void }) {
@@ -950,7 +1011,7 @@ function SceneThumbnailRenderer({ projectId, scene, objects, aspect, dark, onCap
   const elevation = THREE.MathUtils.degToRad(scene.lighting.elevation);
   const radius = Math.cos(elevation) * 9;
   const lightPosition: [number, number, number] = [Math.sin(angle) * radius, -Math.cos(angle) * radius, 1.5 + Math.sin(elevation) * 9];
-  return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+  return <div className="thumbnail-renderer" style={{ aspectRatio: String(aspect) }}><Canvas resize={{ offsetSize: true }} key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
     <WebGLContextGuard onLost={recoverRenderer} />
     <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
     <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
@@ -996,7 +1057,7 @@ function LiveCameraPreview({ scene, camera, objects, aspect, dark, onOpen, onFin
   if (collapsed) return <button className="live-camera-preview-collapsed" title="Expand camera preview" aria-label="Expand camera preview" onClick={() => setCollapsed(false)}><Video size={15} /></button>;
   return <div className="live-camera-preview" style={{ width: aspect < 1 ? 'clamp(92px, 14%, 128px)' : undefined }}>
     <button className="live-camera-preview-open" onClick={onOpen} title="Open camera view" aria-label="Open camera preview">
-    <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}>{scene.background.kind === 'video' ? <SyncedVideo sourcePath={scene.background.path} frame={frame} startFrame={scene.frame} fps={settings.fps} duration={(settings.frameEnd - scene.frame + 1) / settings.fps} muted /> : <Canvas key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true }}>
+    <div className="live-camera-preview-canvas" style={{ aspectRatio: String(aspect) }}>{scene.background.kind === 'video' ? <SyncedVideo sourcePath={scene.background.path} frame={frame} startFrame={scene.frame} fps={settings.fps} duration={(settings.frameEnd - scene.frame + 1) / settings.fps} muted /> : <Canvas resize={{ offsetSize: true }} key={rendererGeneration} frameloop="demand" dpr={1} gl={{ antialias: true }}>
       <WebGLContextGuard onLost={recoverRenderer} />
       <color attach="background" args={[dark ? '#353535' : '#f1f1ef']} />
       <SceneBackground kind={scene.background?.kind ?? 'none'} path={scene.background?.path ?? ''} />
@@ -1036,14 +1097,14 @@ export function ReadonlyScreenLayers({ objects, frame }: { objects: SceneObject[
         transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`,
         '--layer-scale': String(Math.max(.1, transform.scale[0])),
       } as CSSProperties;
-      return <div key={object.id} className="preview-screen-layer" style={style}><div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>
+      return <div key={object.id} data-stroke-preview-screen-id={object.id} className="preview-screen-layer" style={style}><div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>
         {object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : isVideoFile(object.asset.sourcePath) ? <ScreenAssetVideo object={object} frame={frame} muted /> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}
       </div></div>;
     })}
   </div>;
 }
 
-function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneObject[]; frame: number; width: number; height: number }) {
+export function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneObject[]; frame: number; width: number; height: number }) {
   const select = useEditor((state) => state.select);
   const toggleSelection = useEditor((state) => state.toggleSelection);
   const selectedId = useEditor((state) => state.selectedId);
@@ -1051,6 +1112,8 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
   const setTransform = useEditor((state) => state.setTransform);
   const [interaction, setInteraction] = useState<{ id: string; mode: 'move' | 'resize' | 'rotate'; x: number; y: number; centerX: number; centerY: number; distance: number; angle: number; transform: Transform }>();
   const [preview, setPreview] = useState<{ id: string; transform: Transform }>();
+  const screenAlignment = useRef<{ targets: AlignmentTarget[][]; held: Array<AlignmentTarget | undefined>; center: number[]; bounds: DOMRect } | undefined>(undefined);
+  const [screenGuides, setScreenGuides] = useState<Array<{ axis: number; coordinate: number; label: string }>>([]);
   const previewRef = useRef<{ id: string; transform: Transform } | undefined>(undefined);
   const visible = objects.filter((object) => object.screenSpace && evaluateProperty(object, 'visibility', frame));
   useEffect(() => {
@@ -1061,8 +1124,17 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       if (Math.hypot(dx, dy) < 4) return;
       let transform: Transform;
       if (interaction.mode === 'move') {
-        const x = start.position[0] + (dx * 2) / width;
-        const z = start.position[2] - (dy * 2) / height;
+        const session = screenAlignment.current;
+        const delta = [dx, dy], guides: typeof screenGuides = [];
+        if (session) for (let axis = 0; axis < 2; axis++) {
+          const snap = snapAlignment(session.center[axis] + delta[axis], session.targets[axis], 1, session.held[axis], event.altKey);
+          session.held[axis] = snap.match;
+          delta[axis] = snap.value - session.center[axis];
+          if (snap.match) guides.push({ axis, label: snap.match.label, coordinate: (snap.match.targetCoordinate - (axis ? session.bounds.top : session.bounds.left)) / (axis ? session.bounds.height : session.bounds.width) });
+        }
+        setScreenGuides(guides);
+        const x = start.position[0] + (delta[0] * 2) / (width * interfaceZoom());
+        const z = start.position[2] - (delta[1] * 2) / (height * interfaceZoom());
         transform = { ...start, position: [x, start.position[1], z] };
       } else if (interaction.mode === 'resize') {
         const distance = Math.max(8, Math.hypot(event.clientX - interaction.centerX, event.clientY - interaction.centerY));
@@ -1083,6 +1155,7 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
       previewRef.current = undefined;
       setPreview(undefined);
       setInteraction(undefined);
+      screenAlignment.current = undefined; setScreenGuides([]);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish, { once: true });
@@ -1097,18 +1170,38 @@ function ScreenSpaceLayers({ objects, frame, width, height }: { objects: SceneOb
     const layer = (event.currentTarget.closest('.screen-space-layer') ?? event.currentTarget) as HTMLElement;
     const rect = layer.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
+    if (mode === 'move') {
+      const frame = layer.closest('.screen-space-layers') as HTMLElement;
+      const bounds = frame.getBoundingClientRect(), centers = [centerX, centerY];
+      const movingIds = useEditor.getState().selectedIds;
+      const targets: AlignmentTarget[][] = [[], []];
+      const peers = [{ id: 'frame', label: 'Inquadratura', rect: bounds }, ...Array.from(frame.querySelectorAll<HTMLElement>('.screen-space-layer')).filter(element => {
+        const id = element.dataset.strokeScreenId; return id !== object.id && !movingIds.includes(id ?? '') && visible.some(peer => peer.id === id);
+      }).map(element => ({ id: element.dataset.strokeScreenId!, label: visible.find(peer => peer.id === element.dataset.strokeScreenId)!.name, rect: element.getBoundingClientRect() }))];
+      for (let axis = 0; axis < 2; axis++) {
+        const min = axis ? rect.top : rect.left, max = axis ? rect.bottom : rect.right;
+        for (const peer of peers) {
+          const targetMin = axis ? peer.rect.top : peer.rect.left, targetMax = axis ? peer.rect.bottom : peer.rect.right;
+          targets[axis].push(...alignmentTargets({ min: min - centers[axis], center: 0, max: max - centers[axis] }, { min: targetMin, center: (targetMin + targetMax) / 2, max: targetMax }, `${peer.id}:${axis}`, peer.label));
+        }
+      }
+      screenAlignment.current = { targets, held: [], center: centers, bounds };
+    }
     const transform = evaluateTransform(object, frame);
     previewRef.current = { id: object.id, transform };
     setPreview(previewRef.current);
     setInteraction({ id: object.id, mode, x: event.clientX, y: event.clientY, centerX, centerY, distance: Math.max(8, Math.hypot(event.clientX - centerX, event.clientY - centerY)), angle: Math.atan2(event.clientY - centerY, event.clientX - centerX), transform });
   };
   return <div className="screen-space-layers" style={{ width, height }}>
+    {screenGuides.length > 0 && <><svg className="screen-alignment-guides" aria-hidden="true">{screenGuides.map(guide => guide.axis === 0
+      ? <line key={guide.axis} x1={`${guide.coordinate * 100}%`} x2={`${guide.coordinate * 100}%`} y1="0" y2="100%" />
+      : <line key={guide.axis} x1="0" x2="100%" y1={`${guide.coordinate * 100}%`} y2={`${guide.coordinate * 100}%`} />)}</svg><span className="screen-alignment-feedback alignment-feedback" role="status">Aligned · {Array.from(new Set(screenGuides.map(guide => guide.label))).join(' · ')}</span></>}
     {visible.map((object) => {
       const transform = preview?.id === object.id ? preview.transform : evaluateTransform(object, frame);
       const crop = object.screenCrop;
       const style = { left: `${(transform.position[0] + 1) * 50}%`, top: `${(1 - transform.position[2]) * 50}%`, transform: `translate(-50%, -50%) rotate(${transform.rotation[2]}deg)`, '--layer-scale': String(Math.max(.1, transform.scale[0])) } as CSSProperties;
       const selected = selectedIds.includes(object.id) || selectedId === object.id;
-      return <div key={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
+      return <div key={object.id} data-stroke-screen-id={object.id} className={`screen-space-layer ${selected ? 'selected' : ''}`} style={style} onPointerDown={(event) => begin(event, object, 'move')}>
         <div className="screen-layer-content" style={{ clipPath: `inset(${crop[0] * 100}% ${crop[1] * 100}% ${crop[2] * 100}% ${crop[3] * 100}%)` }}>{object.kind === 'text' ? <span style={{ color: object.color, fontFamily: fontCss(object.fontFamily) }}>{evaluateProperty(object, 'text', frame) as string}</span> : isVideoFile(object.asset.sourcePath) ? <ScreenAssetVideo object={object} frame={frame} /> : <ScreenAssetImage source={object.asset.proxyPath} name={object.name} />}</div>
         {selected && <><i className="screen-rotate-stem" /><button className="screen-rotate-handle" aria-label="Rotate layer" onPointerDown={(event) => begin(event, object, 'rotate')} />{['nw', 'ne', 'se', 'sw'].map((corner) => <button key={corner} className={`screen-resize-handle ${corner}`} aria-label="Resize layer" onPointerDown={(event) => begin(event, object, 'resize')} />)}</>}
       </div>;
@@ -1131,7 +1224,7 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     const worldPerPixel = camera instanceof THREE.PerspectiveCamera
       ? (2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, size.height)
       : (camera.top - camera.bottom) / Math.max(1, size.height);
-    ref.current.scale.setScalar(worldPerPixel * (selected || hovered ? 22 : 18));
+    ref.current.scale.setScalar(worldPerPixel * (selected || hovered ? 12 : 8));
   });
   const startDrag = (event: ThreeEvent<PointerEvent>) => {
     if (event.button !== 0 || !ref.current) return;
@@ -1183,7 +1276,7 @@ function MotionPointHandle({ objectId, keyframe, selected, color, selectedColor,
     window.addEventListener('blur', finish, { once: true });
   };
   return <>
-    <group ref={ref} position={position} renderOrder={24} onPointerDown={startDrag} onClick={(event) => { event.stopPropagation(); }} onDoubleClick={(event) => { event.stopPropagation(); }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
+    <group ref={ref} position={position} renderOrder={24} userData={{ motionControl: true, motionKeyId: keyframe.id }} onPointerDown={startDrag} onClick={(event) => { event.stopPropagation(); }} onDoubleClick={(event) => { event.stopPropagation(); }} onPointerOver={(event) => { event.stopPropagation(); setHovered(true); document.body.style.cursor = 'grab'; }} onPointerOut={() => { setHovered(false); if (!drag.current) document.body.style.cursor = 'default'; }}>
       <Billboard follow>
         {(hovered || selected) && <mesh rotation={[0, 0, Math.PI / 4]} scale={1.42} renderOrder={24}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff2a6' : selectedColor} transparent opacity={.46} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>}
         <mesh rotation={[0, 0, Math.PI / 4]} renderOrder={25}><planeGeometry args={[1, 1]} /><meshBasicMaterial color={hovered ? '#fff7c9' : selected ? selectedColor : color} depthTest={false} depthWrite={false} side={THREE.DoubleSide} /></mesh>
@@ -1202,20 +1295,16 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   const setFrame = useEditor((state) => state.setFrame);
   const setPlaying = useEditor((state) => state.setPlaying);
   const isCameraMotion = useEditor((state) => state.project.objects.find((object) => object.id === objectId)?.kind === 'camera');
-  const directionMarkers = useMemo(() => {
-    if (points.length < 3) return [];
-    const interval = Math.max(2, Math.floor(points.length / 5));
-    const markers: Array<{ position: Vec3; quaternion: [number, number, number, number] }> = [];
-    for (let index = interval; index < points.length; index += interval) {
-      const from = new THREE.Vector3(...points[Math.max(0, index - 1)]);
-      const to = new THREE.Vector3(...points[index]);
-      const direction = to.clone().sub(from);
-      if (direction.lengthSq() < .0001) continue;
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-      markers.push({ position: from.lerp(to, .5).toArray() as Vec3, quaternion: quaternion.toArray() as [number, number, number, number] });
-    }
-    return markers;
-  }, [points]);
+  const selectedKey = useEditor(state => state.selectedMotion?.objectId === objectId ? state.selectedMotion.keyframeId : undefined);
+  const { camera: pathCamera, size: pathSize } = useThree();
+  const linePoints = useMemo(() => compactSurfacePath(points), [points]);
+  const visibleKeys = useMemo(() => {
+    const depth = Math.max(.5, pathCamera.position.distanceTo(new THREE.Vector3(...(points[0] ?? [0, 0, 0]))));
+    const worldPerPixel = pathCamera instanceof THREE.PerspectiveCamera
+      ? 2 * depth * Math.tan(THREE.MathUtils.degToRad(pathCamera.fov / 2)) / Math.max(1, pathSize.height)
+      : (pathCamera.top - pathCamera.bottom) / Math.max(1, pathSize.height);
+    return motionHandleKeys(keyframes, worldPerPixel * 42, [selectedPointId, selectedKey].filter((id): id is string => Boolean(id)), editable && Boolean(selectedPointId || selectedKey));
+  }, [keyframes, points, pathCamera, pathSize.height, selectedPointId, selectedKey, editable]);
   useEffect(() => {
     if (selectedPointId && !keyframes.some((key) => key.id === selectedPointId)) setSelectedPointId(undefined);
   }, [keyframes, selectedPointId]);
@@ -1235,12 +1324,13 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
     if (event.button !== 0 || !points.length) return;
     event.stopPropagation(); setPlaying(false); if (!isCameraMotion) select(objectId); selectMotion({ objectId, sceneId });
     const clicked = event.point;
-    let nearestIndex = 0, nearestDistance = Number.POSITIVE_INFINITY;
-    points.forEach((point, index) => {
-      const distance = clicked.distanceToSquared(new THREE.Vector3(...point));
-      if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
-    });
-    const frame = pointFrames[nearestIndex] ?? pointFrames[0];
+    let frame = pointFrames[0], nearestDistance = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < points.length; i++) {
+      const a = new THREE.Vector3(...points[i - 1]), b = new THREE.Vector3(...points[i]), delta = b.clone().sub(a);
+      const t = delta.lengthSq() ? Math.max(0, Math.min(1, clicked.clone().sub(a).dot(delta) / delta.lengthSq())) : 0;
+      const distance = clicked.distanceToSquared(a.addScaledVector(delta, t));
+      if (distance < nearestDistance) { nearestDistance = distance; frame = pointFrames[i - 1] + (pointFrames[i] - pointFrames[i - 1]) * t; }
+    }
     if (frame === undefined) return;
     const existingPoint = keyframes.reduce<Keyframe | undefined>((nearest, keyframe) => !nearest || Math.abs(keyframe.frame - frame) < Math.abs(nearest.frame - frame) ? keyframe : nearest, undefined);
     const sampledRange = Math.max(1, (pointFrames.at(-1) ?? frame) - (pointFrames[0] ?? frame));
@@ -1256,10 +1346,9 @@ function MotionPath({ objectId, sceneId, keyframes, points, pointFrames, color =
   };
   if (points.length < 2) return null;
   return <group renderOrder={20}>
-    <Line points={points} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} raycast={() => null} />
-    <Line points={points} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
-    {directionMarkers.map((marker, index) => <mesh key={`direction-${index}`} position={marker.position} quaternion={marker.quaternion} renderOrder={23}><coneGeometry args={[.09, .28, 3]} /><meshBasicMaterial color={color} depthTest={false} transparent opacity={editable ? 1 : .78} /></mesh>)}
-    {keyframes.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(isCameraMotion ? undefined : objectId); selectMotion({ objectId, sceneId, keyframeId: keyframe.id }); setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
+    <Line points={linePoints} color={color} lineWidth={editable ? 3.4 : 2.8} depthTest={false} transparent opacity={editable ? .98 : .8} raycast={() => null} />
+    <Line points={linePoints} color={color} lineWidth={12} depthTest={false} transparent opacity={.001} onClick={selectPathPoint} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'copy'; }} onPointerOut={() => { document.body.style.cursor = 'default'; }} />
+    {visibleKeys.map((keyframe) => <MotionPointHandle key={keyframe.id} objectId={objectId} keyframe={keyframe} selected={editable && selectedPointId === keyframe.id} color={color} selectedColor={selectedColor} onSelect={() => { setSelectedPointId(keyframe.id); select(isCameraMotion ? undefined : objectId); selectMotion({ objectId, sceneId, keyframeId: keyframe.id }); setFrame(keyframe.frame); }} onDragChange={onDragChange} />)}
   </group>;
 }
 
@@ -1273,50 +1362,16 @@ function CharacterMotionPath({ points, keyPoints }: { points: Vec3[]; keyPoints:
   </group>;
 }
 
-function SelectionAiAnchor() {
-  const selectedId = useEditor((state) => state.selectedId);
-  const frame = useEditor((state) => state.currentFrame);
-  const object = useEditor((state) => state.project.objects.find((candidate) => candidate.id === state.selectedId
-    && candidate.kind !== 'audio'
-    && !candidate.kind.includes('light')
-    && !candidate.screenSpace));
-  const previous = useRef('');
-
-  useEffect(() => () => { window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: undefined })); }, []);
-  useFrame(({ camera, size }) => {
-    if (!selectedId || !object) {
-      if (previous.current !== 'hidden') {
-        previous.current = 'hidden';
-        window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: undefined }));
-      }
-      return;
-    }
-    const transform = evaluateTransform(object, frame);
-    const scale = Math.max(...transform.scale.map(Math.abs), .5);
-    const point = new THREE.Vector3(...transform.position);
-    point.z += object.kind === 'camera' ? .55 : THREE.MathUtils.clamp(scale * .65, .45, 2.5);
-    point.project(camera);
-    const projectsIntoView = Number.isFinite(point.x) && Number.isFinite(point.y) && point.z >= -1 && point.z <= 1;
-    const rawX = projectsIntoView ? (point.x * .5 + .5) * size.width : size.width * .5;
-    const rawY = projectsIntoView ? (-point.y * .5 + .5) * size.height : size.height - 62;
-    const x = Math.round(THREE.MathUtils.clamp(rawX, 18, size.width - 18));
-    const y = Math.round(THREE.MathUtils.clamp(rawY, 28, size.height - 28));
-    const side = x > size.width * .62 ? 'left' : 'right';
-    const signature = `${selectedId}:${x}:${y}:${side}`;
-    if (signature === previous.current) return;
-    previous.current = signature;
-    window.dispatchEvent(new CustomEvent('scene:ai-anchor', { detail: { x, y, side } }));
-  });
-  return null;
-}
-
-export default function Viewport({ dark = false }: { dark?: boolean }) {
+function Viewport({ dark = false }: { dark?: boolean }) {
+  const previewCapture = useEditor(state => state.previewCapture);
+  const drawingMode = useStrokeDrawing(state => state.active);
   const projectId = useEditor((state) => state.project.id);
   const objects = useEditor((state) => state.project.objects);
   const cuts = useEditor((state) => state.project.cameraCuts);
   const settings = useEditor((state) => state.project.settings);
   const frame = useEditor((state) => state.currentFrame);
   const playing = useEditor((state) => state.isPlaying);
+  const legacyDrawing = useEditor(state => state.jevStroke.active);
   const selectedMotion = useEditor((state) => state.selectedMotion);
   const selectedCaption = useEditor((state) => state.selectedCaption);
   const selectCaption = useEditor((state) => state.selectCaption);
@@ -1352,6 +1407,24 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const subtitleSizeCleanup = useRef<(() => void) | undefined>(undefined);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const objectControls = useRef<TransformControlsImpl | null>(null);
+  const onObjectDragChange = useCallback((value: boolean) => {
+    setDraggingObject(value);
+    if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView;
+  }, [cameraView]);
+  const renderObjects = useMemo(() => {
+    const batches = new Map<string, { kind: PrimitiveKind; color: string; objects: SceneObject[] }>();
+    const individual: SceneObject[] = [];
+    const batch = objects.length >= 100 && !drawingMode && !legacyDrawing && !recordingSession && !previewCapture;
+    for (const object of objects) {
+      if (object.screenSpace || object.kind === 'audio' || object.kind === 'camera' || object.kind.includes('light')) continue;
+      const compatible = batch && !selectedIds.includes(object.id) && ['cube', 'sphere', 'cone', 'cylinder', 'plane'].includes(object.kind) && !(object.kind === 'plane' && (object.asset.proxyPath || object.asset.sourcePath));
+      if (!compatible) { individual.push(object); continue; }
+      const key = `${object.kind}:${object.color}`;
+      const group = batches.get(key) ?? { kind: object.kind as PrimitiveKind, color: object.color, objects: [] };
+      group.objects.push(object); batches.set(key, group);
+    }
+    return { individual, batches: [...batches.entries()] };
+  }, [objects, selectedIds, playing, drawingMode, legacyDrawing, recordingSession, previewCapture]);
   const shotOrbitRef = useRef<OrbitControlsImpl | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -1365,12 +1438,12 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0, left: 0 });
   useEffect(() => () => { subtitleDragCleanup.current?.(); subtitleSizeCleanup.current?.(); }, []);
-  useEffect(() => { window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
+  useEffect(() => { if (!performanceReview) window.localStorage.setItem('scene-show-motion-paths', String(showMotionPaths)); }, [showMotionPaths]);
   const hasContent = objects.some((object) => object.kind !== 'audio' && object.kind !== 'camera' && !object.kind.includes('light'));
   const activeCut = cuts.slice().sort((a, b) => b.frame - a.frame).find((cut) => cut.frame <= frame);
   const videoScene = activeCut?.background.kind === 'video' && Boolean(activeCut.background.path);
   const activeCamera = objects.find((object) => object.id === activeCut?.cameraId && object.kind === 'camera');
-  const activeCameraTransform = activeCamera ? evaluateTransform(activeCamera, frame) : undefined;
+  const activeCameraTransform = activeCamera ? evaluateTransform(activeCamera, renderAnimationFrame(activeCamera, frame)) : undefined;
   const activeCameraTarget = activeCameraTransform && activeCut
     ? new THREE.Vector3(...activeCameraTransform.position).addScaledVector(
       new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(...activeCameraTransform.rotation.map(THREE.MathUtils.degToRad) as [number, number, number])),
@@ -1392,6 +1465,19 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       const samples: Array<{ point: Vec3; frame: number }> = [];
       for (let sample = first; sample <= last; sample += step) samples.push({ point: evaluateTransform(object, sample).position, frame: sample });
       if ((last - first) % step) samples.push({ point: evaluateTransform(object, last).position, frame: last });
+      if (keys.some(key => key.positionPath)) {
+        samples.length = 0;
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i], next = keys[i + 1], path = next && validPositionPath(key, next);
+          samples.push({ point: key.value as Vec3, frame: key.frame });
+          if (path) {
+            const lengths = pathLengths(path), start = Math.min(next.frame, key.frame + (key.holdFrames ?? 0));
+            for (let j = 1; j < path.length - 1; j++) samples.push({ point: path[j], frame: start + (next.frame - start) * lengths[j] / lengths.at(-1)! });
+          } else if (next) {
+            for (let f = key.frame + step; f < next.frame; f += step) samples.push({ point: evaluateTransform(object, f).position, frame: f });
+          }
+        }
+      }
       const filtered = samples.filter((sample, index) => index === 0 || sample.point.some((value, axis) => Math.abs(value - samples[index - 1]!.point[axis]) > .0001));
       if (filtered.length < 2) return [];
       return [{ object, keyframes: handles, points: filtered.map((sample) => sample.point), pointFrames: filtered.map((sample) => sample.frame), sceneId: activeCut.id }];
@@ -1416,8 +1502,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const bounds = viewportRef.current?.getBoundingClientRect();
     if (!bounds) return;
     setSelectionMenu({
-      x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 210)),
-      y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 240)),
+      x: Math.max(8, Math.min((event.clientX - bounds.left) / interfaceZoom(), bounds.width / interfaceZoom() - 210)),
+      y: Math.max(8, Math.min((event.clientY - bounds.top) / interfaceZoom(), bounds.height / interfaceZoom() - 240)),
     });
   };
   useEffect(() => {
@@ -1469,7 +1555,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     let moved = false;
     const move = (pointer: PointerEvent) => {
       if (pointer.pointerId !== pointerId) return;
-      target = clampSubtitlePosition([position[0] + (pointer.clientX - initialX) / cameraFrame.width, position[1] + (pointer.clientY - initialY) / cameraFrame.height]);
+      target = clampSubtitlePosition([position[0] + (pointer.clientX - initialX) / (cameraFrame.width * interfaceZoom()), position[1] + (pointer.clientY - initialY) / (cameraFrame.height * interfaceZoom())]);
       moved = target[0] !== position[0] || target[1] !== position[1];
       setSubtitleDragPreview({ audioId, captionId, target });
     };
@@ -1503,7 +1589,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     let size = initialSize;
     const move = (pointer: PointerEvent) => {
       if (pointer.pointerId !== pointerId) return;
-      const distance = ((pointer.clientX - initialX) + (pointer.clientY - initialY)) / 2;
+      const distance = ((pointer.clientX - initialX) + (pointer.clientY - initialY)) / (2 * interfaceZoom());
       size = clampSubtitleSize(initialSize * Math.exp(distance / Math.max(80, cameraFrame.width * .3)));
       setSubtitleSizePreview({ audioId, captionId, size });
     };
@@ -1669,6 +1755,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   };
 
   const panViewFromTrackpad = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (useStrokeDrawing.getState().active) { event.preventDefault(); event.stopPropagation(); return; }
     // Trackpad wheel events can accompany a Shift selection gesture. They must
     // not pan the view or move the active shot while the pointer is selecting.
     if (marqueeStart.current || performance.now() < suppressSelectionWheelUntil.current) {
@@ -1743,7 +1830,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
   useEffect(() => {
     const releaseViewportDrag = () => {
       setDraggingObject(false);
-      if (orbitRef.current) orbitRef.current.enabled = !cameraView && !marqueeStart.current;
+      if (orbitRef.current) orbitRef.current.enabled = !cameraView && !marqueeStart.current && !useStrokeDrawing.getState().active;
       document.body.style.cursor = 'default';
     };
     window.addEventListener('pointerup', releaseViewportDrag, true);
@@ -1795,7 +1882,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const tick = (time: number) => {
       const deltaSeconds = Math.min(.05, Math.max(0, (time - previousTime) / 1000));
       previousTime = time;
-      if ([...held].some((code) => movementCodes.has(code))) {
+      if (!useStrokeDrawing.getState().active && [...held].some((code) => movementCodes.has(code))) {
         const editor = useEditor.getState();
         const selected = editor.project.objects.find((object) => object.id === editor.selectedId
           && object.kind !== 'audio'
@@ -1923,10 +2010,18 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
 
   const marqueePoint = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = stageRef.current!.getBoundingClientRect();
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    return { x: (event.clientX - bounds.left) / interfaceZoom(), y: (event.clientY - bounds.top) / interfaceZoom() };
   };
+  useEffect(() => {
+    if (!drawingMode) return;
+    for (const buffer of [cameraPanBuffer.current, cameraRotateBuffer.current]) {
+      if (buffer.timer) window.clearTimeout(buffer.timer);
+      buffer.timer = undefined; buffer.x = 0; buffer.y = 0;
+    }
+  }, [drawingMode]);
+
   const beginMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !(event.shiftKey || shiftPressed.current) || !stageRef.current || useEditor.getState().jevStroke.active) return;
+    if (event.button !== 0 || !(event.shiftKey || shiftPressed.current) || !stageRef.current || useEditor.getState().jevStroke.active || useStrokeDrawing.getState().active) return;
     const point = marqueePoint(event);
     marqueeStart.current = { ...point, ids: [...selectedIds], pointerId: event.pointerId };
     // React's capture handler runs before OrbitControls' canvas listener.
@@ -1959,7 +2054,8 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     setMarquee(null);
     if (Math.hypot(point.x - start.x, point.y - start.y) < 5) return;
     const box = { left: Math.min(start.x, point.x), right: Math.max(start.x, point.x), top: Math.min(start.y, point.y), bottom: Math.max(start.y, point.y) };
-    const bounds = stageRef.current!.getBoundingClientRect();
+    const physicalBounds = stageRef.current!.getBoundingClientRect(), zoom = interfaceZoom();
+    const bounds = { width: physicalBounds.width / zoom, height: physicalBounds.height / zoom };
     const camera = cameraView ? shotOrbitRef.current?.object : orbitRef.current?.object;
     if (!camera) return;
     camera.updateMatrixWorld(); camera.updateProjectionMatrix();
@@ -1985,33 +2081,38 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     const target = event.target as HTMLElement;
     if (selectionMenu && !target.closest('.viewport-selection-menu')) setSelectionMenu(null);
     if (!target.closest('button, input, textarea, select')) event.currentTarget.focus({ preventScroll: true });
-  }} className={`viewport ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
+  }} className={`viewport ${drawingMode ? 'stroke-drawing-mode' : ''} ${cameraView ? 'camera-mode' : ''} ${recordingMotion || recordingSession ? 'recording-motion' : ''}`} style={cameraFrame ? { '--camera-frame-width': `${cameraFrame.width}px`, '--camera-frame-height': `${cameraFrame.height}px` } as CSSProperties : undefined} data-testid="viewport">
+    <StrokeDrawingFeedback />
+    <CircleMotionCursor />
     <div ref={stageRef} className="canvas-stage" style={videoScene ? { display: 'none' } : undefined} onWheelCapture={panViewFromTrackpad} onPointerDownCapture={beginMarquee} onPointerMoveCapture={moveMarquee} onPointerUpCapture={finishMarquee} onPointerCancelCapture={finishMarquee}>
-    {!videoScene && <Canvas key={rendererGeneration} shadows={!playing} dpr={playing ? 1 : cameraView ? [1, 1.5] : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
+    {!videoScene && <Canvas events={zoomAwareEvents} resize={{ offsetSize: true }} key={rendererGeneration} frameloop={playing || drawingMode || legacyDrawing || recordingSession || draggingObject ? 'always' : 'demand'} shadows={!playing} dpr={playing ? 1 : cameraView ? [1, 1.5] : [1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [8, -10, 7], fov: 45, near: .01, far: 1000 }}
       onCreated={({ gl, camera }) => { viewportCanvas = gl.domElement; camera.up.set(0, 0, 1); }} onPointerMissed={(event) => { if (event.button === 0 && !multiSelectMode && !shiftPressed.current && !marqueeStart.current) select(undefined); }}>
       <WebGLContextGuard primary onLost={recoverRenderer} />
-      <SelectionAiAnchor />
+      {performanceReview && <PerformanceProbe />}
+      {!previewCapture && <StrokeDrawing />}
+      {!previewCapture && <CircleMotionDrawing />}
       <PerspectiveCamera makeDefault={!cameraView} position={[8, -10, 7]} up={[0, 0, 1]} fov={45} near={.01} far={1000} />
       <color attach="background" args={[dark ? '#3d3d3d' : '#f1f1ef']} />
       <SceneBackground kind={activeCut?.isGap ? 'none' : activeCut?.background?.kind ?? 'none'} path={activeCut?.isGap ? '' : activeCut?.background?.path ?? ''} />
       <ambientLight intensity={lightingStyle.ambient * Math.max(.2, lighting.intensity)} />
       <directionalLight color={lighting.color} position={lightPosition} intensity={lightingStyle.key * lighting.intensity} castShadow={!playing} />
-      {!activeCut?.isGap && <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />}
-      <Line name="abaco-x-axis" points={[[-20, 0, .012], [20, 0, .012]]} color="#c64d4d" lineWidth={1.2} transparent opacity={.94} />
-      <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />
-      {!activeCut?.isGap && objects.filter((object) => object.kind !== 'audio' && !object.screenSpace && object.kind !== 'camera' && !object.kind.includes('light') && evaluateProperty(object, 'visibility', frame)).map((object) => <SceneItem key={object.id} object={object} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
-      {!cameraView && activeCamera && <SceneItem object={activeCamera} frame={frame} cameraView={cameraView} objectControls={objectControls} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value; }} />}
-      {showMotionPaths && !playing && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
-      {showMotionPaths && !playing && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
+      {!previewCapture && !activeCut?.isGap && <Grid name="abaco-ground-grid" args={[40, 40]} rotation={[Math.PI / 2, 0, 0]} cellSize={1} cellThickness={0.55} cellColor={dark ? '#535353' : '#d7d7d3'} sectionSize={5} sectionThickness={0.9} sectionColor={dark ? '#606060' : '#bdbdb7'} fadeDistance={45} infiniteGrid />}
+      {!previewCapture && <Line name="abaco-x-axis" points={[[-20, 0, .012], [20, 0, .012]]} color="#c64d4d" lineWidth={1.2} transparent opacity={.94} />}
+      {!previewCapture && <Line name="abaco-y-axis" points={[[0, -20, .012], [0, 20, .012]]} color="#5cab1a" lineWidth={1.2} transparent opacity={.94} />}
+      {!activeCut?.isGap && renderObjects.batches.map(([key, batch]) => <PrimitiveBatch key={key} {...batch} />)}
+      {!activeCut?.isGap && renderObjects.individual.filter(object => evaluateProperty(object, 'visibility', frame)).map(object => <MemoSceneItem key={object.id} object={object} frame={renderAnimationFrame(object, frame)} cameraView={cameraView} objectControls={objectControls} interactionEnabled={!drawingMode} onDragChange={onObjectDragChange} />)}
+      {!cameraView && activeCamera && <MemoSceneItem object={activeCamera} frame={renderAnimationFrame(activeCamera, frame)} cameraView={cameraView} objectControls={objectControls} interactionEnabled={!drawingMode} onDragChange={onObjectDragChange} />}
+      {showMotionPaths && !previewCapture && !playing && visibleMotionPaths.filter(({ object }) => !cameraView || object.kind !== 'camera').map(({ object, keyframes, points, pointFrames, sceneId }) => <MotionPath key={`${sceneId}:${object.id}`} objectId={object.id} sceneId={sceneId} keyframes={keyframes} points={points} pointFrames={pointFrames} color={object.kind === 'camera' ? '#39b6e6' : '#ef3f3f'} selectedColor={object.kind === 'camera' ? '#0b6f99' : '#b41622'} editable={selectedMotion?.objectId === object.id && selectedMotion.sceneId === sceneId} onDragChange={(value) => { setDraggingObject(value); if (orbitRef.current) orbitRef.current.enabled = !value && !cameraView; }} />)}
+      {showMotionPaths && !previewCapture && !playing && visibleCharacterPaths.map(({ objectId, controllerName, points, keyPoints }) => <CharacterMotionPath key={`${objectId}:${controllerName}`} points={points} keyPoints={keyPoints} />)}
       {cameraView && activeCamera && activeCut && <ShotCamera key={activeCut.id} object={activeCamera} aspect={aspect} frame={recordingSession?.startFrame} frameHeightRatio={cameraFrame?.heightRatio} lockTransform={Boolean(recordingSession)} />}
       {cameraView && activeCamera && activeCut && activeCameraTransform && activeCameraTarget && <CameraViewControls controls={shotOrbitRef} target={activeCameraTarget} syncKey={recordingSession ? activeCut.id : `${activeCut.id}:${JSON.stringify(activeCameraTarget)}:${JSON.stringify(activeCameraTransform)}`} />}
-      {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject} target={[0, 0, 1]} />}
+      {!cameraView && <OrbitControls ref={orbitRef} makeDefault enableDamping enabled={!draggingObject && !drawingMode} target={[0, 0, 1]} />}
     </Canvas>}
     {marquee && <div className="viewport-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     </div>
     {videoScene && activeCut && <SyncedVideo className="scene-video" sourcePath={activeCut.background.path} frame={frame} startFrame={activeCut.frame} fps={settings.fps} duration={(cuts.slice().sort((a, b) => a.frame - b.frame).find((cut) => cut.frame > activeCut.frame)?.frame ?? settings.frameEnd + 1) / settings.fps - activeCut.frame / settings.fps} muted={activeCut.background.audioManaged === true || objects.some((item) => item.kind === 'audio' && item.asset.sourcePath === activeCut.background.path)} />}
     {cameraView && cameraFrame && <div className="camera-frame-guide" style={{ width: cameraFrame.width, height: cameraFrame.height }} aria-hidden="true" />}
-    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `${32 * cameraFrame.width / 1280 * caption.style.size}px`, textShadow: `0 ${2 * cameraFrame.width / 1280}px ${4 * cameraFrame.width / 1280}px #000, 0 0 ${12 * cameraFrame.width / 1280}px #000` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
+    {cameraView && cameraFrame && visibleCaptions.map((caption) => <div key={`${caption.audioId}:${caption.id}`} data-stroke-screen-id={`caption:${caption.audioId}:${caption.id}`} data-stroke-caption="true" className={`viewport-subtitle ${selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id ? 'selected' : ''} ${subtitleDragPreview?.captionId === caption.id ? 'dragging' : ''}`} aria-label={`Subtitle in frame: ${caption.text}`} style={{ left: `calc(50% - ${cameraFrame.width / 2}px + ${caption.position[0] * cameraFrame.width}px)`, bottom: `calc(50% - ${cameraFrame.height / 2}px + ${(1 - caption.position[1]) * cameraFrame.height}px)`, maxWidth: cameraFrame.width * .86, color: caption.style.color, fontFamily: fontCss(caption.style.fontFamily), fontSize: `${32 * cameraFrame.width / 1280 * caption.style.size}px`, textShadow: `0 ${2 * cameraFrame.width / 1280}px ${4 * cameraFrame.width / 1280}px #000, 0 0 ${12 * cameraFrame.width / 1280}px #000` }} onPointerDown={(event) => beginSubtitleDrag(event, caption.audioId, caption.id, caption.position)}>{caption.text}{selectedCaption?.audioId === caption.audioId && selectedCaption.captionId === caption.id && <span className="viewport-subtitle-resize-handle" role="separator" aria-label="Resize subtitle" title="Drag to resize subtitle" onPointerDown={(event) => beginSubtitleResize(event, caption.audioId, caption.id, caption.style.size)} />}</div>)}
     {cameraView && cameraFrame && <ScreenSpaceLayers objects={activeCut?.isGap ? [] : objects} frame={frame} width={cameraFrame.width} height={cameraFrame.height} />}
     {cameraView && cameraFrame && <JevStrokeOverlay width={cameraFrame.width} height={cameraFrame.height} viewMode="camera" getViewContext={() => {
       const camera = shotOrbitRef.current?.object;
@@ -2023,7 +2124,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     }} />}
     {!recordingSession && !playing && <MemoSceneThumbnailQueue projectId={projectId} scenes={cuts} objects={objects} aspect={aspect} dark={dark} paused={cameraView} />}
     {cameraView && <button className="view-toggle active" title="Return to free view" aria-label="Back to free view" onClick={() => setCameraView(false)}><ArrowLeft size={15} /><span>Back</span></button>}
-    {cameraHintVisible && <div className="camera-instructions-anchor">
+    {cameraHintVisible && !drawingMode && <div className="camera-instructions-anchor">
       <div className="camera-drone-hint" aria-label="Blender-style camera controls">
         <button className="camera-hint-close" title="Hide instructions" aria-label="Hide instructions" onClick={() => setCameraHintVisible(false)}>×</button>
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {selectedTransformable ? `moves ${selectedTransformable.name}` : cameraView ? 'moves the camera' : 'moves the view'}</span>
@@ -2059,7 +2160,7 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
       controls.update();
       select(activeCamera.id);
     }} />}
-    {!hasContent && !cameraView && <div className="start-card">
+    {!hasContent && !cameraView && !drawingMode && <div className="start-card">
       <div className="start-icon"><Box size={26} /></div>
       <strong>Create your first scene</strong>
       <p>Add a shape or text, then drag it directly in the workspace.</p>
@@ -2068,3 +2169,4 @@ export default function Viewport({ dark = false }: { dark?: boolean }) {
     {cameraView && activeCamera && framingSubject && <div className="viewport-bottom-left"><button className="center-shot center-subject" aria-label="Center" title={`Center the frame on ${framingSubject.name}`} onClick={centerFramingOnSubject}><Focus size={15} /><span>Center</span></button>{selectedSubject && <button className="center-shot restore-subject" aria-label="Restore starting position" title={`Return ${selectedSubject.name} to its position at the start of the scene`} onClick={restoreSelectedPosition}><RotateCcw size={15} /></button>}</div>}
   </div>;
 }
+export default memo(Viewport);

@@ -1,0 +1,9 @@
+Scene 0.59.18 — movimento disegnato e REC
+
+Base: copia completa di Scene 0.59.17, che include le modifiche locali provenienti dalla 0.59.16.
+Nuova modalità Movimento dell’oggetto nel disegno 3D: anteprima della traslazione, percorso a durata impostata, registrazione del tempo del gesto tramite la sessione REC esistente. Conserva gli altri canali di animazione. Esc ripristina solo il gesto attuale; la sessione REC mantiene una sola operazione di undo.
+Stessa guida spaziale con massimo 50 vicini complessivi e raggio automatico; esclude l’oggetto mosso e aggiorna la geometria dei vicini durante la registrazione. Jev resta asincrono, una richiesta in corso e massimo una al secondo.
+Matita nell’header, solo icona; opzioni in un pannello a comparsa. I percorsi densi mostrano maniglie distanziate: tutti i punti salvati restano disponibili cliccando la linea del percorso o nella timeline.
+
+Sviluppo: installare le dipendenze del package.json con pnpm; npm run build; npm test. Nella copia locale node_modules è un collegamento alle dipendenze già installate nella 0.59.17. Il collegamento è escluso dall’archivio dei sorgenti.
+Esempio portatile: examples/Movimento-3D-Jev.abaco.json con superficie.blend e superficie.glb. scripts/create-motion-demo.ts genera un nuovo esempio; scripts/create-imported-surface.py genera l’asset con Blender. scripts/verify-motion-electron.cjs e scripts/verify-packaged-motion.mjs esercitano il renderer e l’app macOS con un profilo di test. scripts/benchmark-motion.ts misura query spaziale, posizionamento e aggiornamento REC.

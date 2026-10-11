@@ -39,7 +39,7 @@ describe('Portable AI folder',()=>{
  it('never overwrites previous exports and removes an incomplete staging directory on missing assets',async()=>{
   const root=await temp(),p=createProject();const first=await writeAiBundle(p,root);const second=await writeAiBundle(p,root);expect(second.directory).not.toBe(first.directory);
   const o=createSceneObject('audio',1);o.asset.sourcePath='/missing/audio.wav';p.objects.push(o);
-  await expect(writeAiBundle(p,root)).rejects.toThrow('File mancante');expect((await fs.readdir(root)).some(n=>n.endsWith('.tmp'))).toBe(false);expect(await fs.stat(first.directory)).toBeTruthy();
+  await expect(writeAiBundle(p,root)).rejects.toThrow('Missing file');expect((await fs.readdir(root)).some(n=>n.endsWith('.tmp'))).toBe(false);expect(await fs.stat(first.directory)).toBeTruthy();
  });
  it('exports a video audio track as a portable source and timing without decoding the movie',async()=>{
   const root=await temp(),p=createProject();p.settings.frameEnd=24;p.settings.fps=24;
@@ -84,6 +84,6 @@ describe('Portable AI folder',()=>{
   const texture=path.resolve(path.dirname(mtl),(await fs.readFile(mtl,'utf8')).split('\n')[1].slice(7));expect(await fs.readFile(texture,'utf8')).toBe('texture');expect(texture.startsWith(dest)).toBe(true);
  });
  it('rejects stale media and does not claim original audio is mounted',async()=>{
-  const root=await temp(),p=createProject();const media:EditedMedia={projectId:p.id,updatedAt:'old',audioClips:[],overlays:[],croppedImages:[]};await expect(writeAiBundle(p,root,undefined,undefined,media)).rejects.toThrow('revisioni diverse');
+  const root=await temp(),p=createProject();const media:EditedMedia={projectId:p.id,updatedAt:'old',audioClips:[],overlays:[],croppedImages:[]};await expect(writeAiBundle(p,root,undefined,undefined,media)).rejects.toThrow('different revisions');
  });
 });

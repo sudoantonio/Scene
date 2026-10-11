@@ -25,13 +25,13 @@ export async function collectPortableAssets(project: AbacoProject, root: string,
     let value = source ? resolve(source) : '';
     if (!value.startsWith('data:') && (!value || !await exists(value))) {
       value = fallback ? resolve(fallback) : '';
-      if (!value || (!value.startsWith('data:') && !await exists(value))) throw new Error(`File mancante: ${label}${source ? ` (${source})` : ''}. Ricollegalo al progetto prima di esportare.`);
-      warnings.push(`${label}: usata la copia incorporata perché l’originale non è disponibile.`);
+      if (!value || (!value.startsWith('data:') && !await exists(value))) throw new Error(`Missing file: ${label}${source ? ` (${source})` : ''}. Relink it to the project before exporting.`);
+      warnings.push(`${label}: using the embedded copy because the original is unavailable.`);
     }
     const cached = copied.get(value);
     if (cached) return cached;
     const match = value.match(/^data:([^;,]+)(;base64)?,([\s\S]*)$/);
-    if (value.startsWith('data:') && (!match || !dataExtensions[match[1]])) throw new Error(`Formato incorporato non supportato: ${label}`);
+    if (value.startsWith('data:') && (!match || !dataExtensions[match[1]])) throw new Error(`Unsupported embedded format: ${label}`);
     const digest = createHash('sha256').update(value).digest('hex').slice(0, 16);
     const name = match ? safeName(label) + dataExtensions[match[1]] : safeName(path.basename(value));
     const relative = `assets/${category}/${digest}/${name}`;
@@ -69,7 +69,7 @@ export async function collectPortableAssets(project: AbacoProject, root: string,
       if (path.extname(value).toLowerCase() === '.blend' && packBlend) await packBlend(value, destination);
       else {
         await fs.copyFile(value, destination);
-        if (path.extname(value).toLowerCase() === '.blend') warnings.push(`${name}: modello originale incluso; le sue eventuali risorse esterne non sono state verificate da Blender.`);
+        if (path.extname(value).toLowerCase() === '.blend') warnings.push(`${name}: original model included; Blender did not verify any external resources.`);
       }
     }
     copied.set(value, relative);
@@ -87,7 +87,7 @@ export async function collectPortableAssets(project: AbacoProject, root: string,
       const video = /\.(mp4|m4v|mov|webm)$/i.test(asset.sourcePath);
       const relative = await copyAsset(asset.sourcePath, video ? 'video' : 'immagini', object.name, asset.proxyPath);
       const preview = video ? relative : asset.proxyPath ? await copyAsset(asset.proxyPath, 'anteprime', `${object.name}-preview`, asset.sourcePath) : relative;
-      if (video && object.screenSpace) warnings.push(`${object.name}: video 2D originale incluso; i suoi fotogrammi non sono stati convertiti in PNG montati.`);
+      if (video && object.screenSpace) warnings.push(`${object.name}: original 2D video included; its frames were not converted to edited PNGs.`);
       asset.sourcePath = relative; asset.proxyPath = preview;
     }
   }

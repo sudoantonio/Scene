@@ -1,7 +1,7 @@
 export async function inspectAudio(source: string): Promise<{ duration: number; waveform: number[] }> {
   const bytes = await (await fetch(source)).arrayBuffer();
   const Context = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Context) throw new Error('Analisi audio non disponibile.');
+  if (!Context) throw new Error('Audio analysis unavailable.');
   const context = new Context();
   try {
     const buffer = await context.decodeAudioData(bytes.slice(0));

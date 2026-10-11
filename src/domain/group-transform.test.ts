@@ -39,3 +39,15 @@ describe('Element groups', () => {
     expect(ProjectSchema.parse(older).groups).toEqual([]);
   });
 });
+
+it('moves a saved surface curve together with its animation keys', async () => {
+  const { createSceneObject } = await import('./schema');
+  const { moveGroupMembers } = await import('./group-transform');
+  const object = createSceneObject('cube',1);
+  object.keyframes = [{id:crypto.randomUUID(),frame:1,property:'position',value:[0,0,0],interpolation:'linear',source:'user',commentIds:[],positionPath:[[0,0,0],[1,0,1],[1,3,4]]},{id:crypto.randomUUID(),frame:3,property:'position',value:[1,3,4],interpolation:'linear',source:'user',commentIds:[]}];
+  const before=evaluateTransform(object,1.3).position;
+  moveGroupMembers([object],{position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},{position:[2,3,4],rotation:[0,0,0],scale:[1,1,1]});
+  const after=evaluateTransform(object,1.3).position;
+  after.forEach((v,i)=>expect(v).toBeCloseTo(before[i]+[2,3,4][i],5));
+  expect(object.keyframes[0].positionPath?.[1]).toEqual([3,3,5]);
+});

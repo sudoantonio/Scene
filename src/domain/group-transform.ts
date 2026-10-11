@@ -26,7 +26,10 @@ export function moveGroupMembers(objects: SceneObject[], previous: Transform, ne
       scale: moveScale(object.transform.scale),
     };
     for (const key of object.keyframes) {
-      if (key.property === 'position') key.value = movePosition(key.value as Vec3);
+      if (key.property === 'position') {
+        key.value = movePosition(key.value as Vec3);
+        if (key.positionPath) key.positionPath = key.positionPath.map(movePosition);
+      }
       else if (key.property === 'rotation') key.value = moveRotation(key.value as Vec3);
       else if (key.property === 'scale') key.value = moveScale(key.value as Vec3);
     }

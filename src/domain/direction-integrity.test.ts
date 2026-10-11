@@ -52,6 +52,6 @@ describe('Animation handoff integrity', () => {
     expect(useEditor.getState().project.directionPlans![0].actions[0].startFrame).toBe(22);
   });
   it('reports unresolved missing subjects instead of exporting an apparently valid plan',()=>{
-    const {p,o}=fixture();p.objects=p.objects.filter(x=>x.id!==o.id);expect(()=>assertAnimationHandoff(prepareAnimationProject(p))).toThrow('oggetto');
+    const {p,o}=fixture();p.objects=p.objects.filter(x=>x.id!==o.id);expect(()=>assertAnimationHandoff(prepareAnimationProject(p))).toThrow('object');
   });
 });

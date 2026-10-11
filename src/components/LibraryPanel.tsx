@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Plus } from './icons';
 import { evaluateProperty, evaluateTransform } from '../domain/animation';
 import { useEditor } from '../store/editor';
 

@@ -8,16 +8,16 @@ import { evaluateProperty, evaluateTransform } from '../src/domain/animation';
 
 export async function writeEditedMedia(root: string, project: AbacoProject, media?: EditedMedia) {
   const expected = project.objects.some(o => o.kind === 'audio' || (o.screenSpace && ['text', 'plane'].includes(o.kind)));
-  if (!media && expected) throw new Error('Mancano i media montati. Esporta la cartella dall’app Scene per applicare tagli audio, ritagli e testi.');
-  if (media && (media.projectId !== project.id || media.updatedAt !== project.updatedAt)) throw new Error('Il progetto e i media montati appartengono a revisioni diverse. Ripeti l’esportazione.');
+  if (!media && expected) throw new Error('Edited media is missing. Export the folder from Scene to apply audio cuts, crops, and text.');
+  if (media && (media.projectId !== project.id || media.updatedAt !== project.updatedAt)) throw new Error('The project and edited media have different revisions. Export again.');
   const objectIds = new Set(project.objects.map(o => o.id));
-  const safeId = (id: string) => { if (!objectIds.has(id)) throw new Error('Media riferito a un elemento non presente nel progetto.'); return id; };
+  const safeId = (id: string) => { if (!objectIds.has(id)) throw new Error('Media refers to an object missing from the project.'); return id; };
   const save = async (relative: string, bytes: Uint8Array | string) => { const destination = path.join(root, relative); await fs.mkdir(path.dirname(destination), { recursive: true }); await fs.writeFile(destination, bytes); return relative; };
-  const png = (value: string) => { if (!value.startsWith('data:image/png;base64,')) throw new Error('Livello immagine non valido.'); return Buffer.from(value.slice(22), 'base64'); };
+  const png = (value: string) => { if (!value.startsWith('data:image/png;base64,')) throw new Error('Invalid image layer.'); return Buffer.from(value.slice(22), 'base64'); };
   const wav = (value: Uint8Array, expectedSamples?: number) => {
     const b = Buffer.from(value);
-    if (b.length < 44 || b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WAVE' || b.readUInt32LE(24) !== 48000 || b.readUInt16LE(22) !== 2 || b.readUInt16LE(34) !== 16) throw new Error('Audio montato non valido.');
-    if (expectedSamples !== undefined && b.length !== 44 + expectedSamples * 4) throw new Error('La durata dell’audio montato non corrisponde alla timeline.');
+    if (b.length < 44 || b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WAVE' || b.readUInt32LE(24) !== 48000 || b.readUInt16LE(22) !== 2 || b.readUInt16LE(34) !== 16) throw new Error('Invalid edited audio.');
+    if (expectedSamples !== undefined && b.length !== 44 + expectedSamples * 4) throw new Error('Edited audio duration does not match the timeline.');
     return b;
   };
   if (project.objects.some(o => o.kind === 'audio') && !media?.audioMix) throw new Error('Manca la traccia audio montata.');
@@ -31,7 +31,7 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
   }
   const videoAudioClips = (media?.videoAudioClips ?? []).map(({ clip, objectId }) => {
     const object = project.objects.find(o => o.id === safeId(objectId) && o.kind === 'audio');
-    if (!object?.asset.sourcePath) throw new Error('Sorgente della traccia audio video non disponibile.');
+    if (!object?.asset.sourcePath) throw new Error('Video audio track source unavailable.');
     return { ...clip, source: object.asset.sourcePath, editsAlreadyApplied: false };
   });
   const cropped = [];
@@ -44,7 +44,7 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
     safeId(entry.objectId);
     const images: string[] = [];
     for (let i = 0; i < entry.images.length; i++) images.push(await save(`media/livelli/${entry.objectId}/${String(i + 1).padStart(5, '0')}.png`, png(entry.images[i])));
-    for (const state of entry.states) if (!images[state.image] || state.startFrame < project.settings.frameStart || state.endFrameExclusive > project.settings.frameEnd + 1 || state.startFrame >= state.endFrameExclusive) throw new Error('Intervallo di un livello montato non valido.');
+    for (const state of entry.states) if (!images[state.image] || state.startFrame < project.settings.frameStart || state.endFrameExclusive > project.settings.frameEnd + 1 || state.startFrame >= state.endFrameExclusive) throw new Error('Invalid edited layer interval.');
     overlays.push({ objectId: entry.objectId, order: project.objects.find(entryObject => entryObject.id === entry.objectId)?.kind === 'audio' ? project.objects.length + project.objects.findIndex(o => o.id === entry.objectId) : project.objects.findIndex(o => o.id === entry.objectId), frames: entry.states.map(s => ({ ...s, file: images[s.image] })) });
   }
   const screenLayers = exportScreenLayers(project);
@@ -68,4 +68,5 @@ export async function writeEditedMedia(root: string, project: AbacoProject, medi
     subtitlesTimeline: 'SOTTOTITOLI_TIMELINE.json',
     subtitleStyles: project.objects.filter(o => o.kind === 'audio').map(o => ({ objectId: o.id, showCaptions: o.audio.showCaptions, applyCaptionPositionToAll: o.audio.applyCaptionPositionToAll, ...o.audio.captionStyle, positions: o.audio.captions.map(caption => ({ captionId: caption.id, position: caption.position ?? o.audio.captionStyle.position, size: caption.size ?? o.audio.captionStyle.size })) })),
   }, null, 2));
+  return { audioClips: clips };
 }
